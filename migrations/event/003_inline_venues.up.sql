@@ -1,0 +1,5 @@
+ALTER TABLE events ADD COLUMN venue_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE events ADD COLUMN venue_address TEXT NOT NULL DEFAULT '';
+ALTER TABLE events ADD COLUMN venue_capacity INT NOT NULL DEFAULT 0 CHECK (venue_capacity >= 0);
+ALTER TABLE events DROP COLUMN venue_id;
+DROP TABLE IF EXISTS venues;

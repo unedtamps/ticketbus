@@ -1,0 +1,18 @@
+# Traefik static configuration
+api:
+  dashboard: true
+  debug: false
+
+entryPoints:
+  web:
+    address: ":8000"
+  dashboard:
+    address: ":8085"
+
+providers:
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+log:
+  level: INFO

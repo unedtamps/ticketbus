@@ -1,0 +1,55 @@
+# Binaries built locally
+bin/
+
+# Auto-generated JWT keys (dev mode)
+cmd/auth-service/keys/
+
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+.pnpm-store/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Next.js
+.next/
+out/
+dist/
+build/
+
+# Coverage
+coverage/
+*.lcov
+
+# Local data volumes
+volumes/
+
+#key
+jwt_private.pem
+jwt_public.pem

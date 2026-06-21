@@ -1,0 +1,106 @@
+# Traefik dynamic configuration — routers, services, middlewares
+
+http:
+  middlewares:
+    cors:
+      headers:
+        accessControlAllowOriginList:
+          - http://localhost:3000
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - PATCH
+        accessControlAllowHeaders:
+          - Content-Type
+          - Authorization
+        accessControlAllowCredentials: true
+        accessControlMaxAge: 86400
+
+    ratelimit:
+      rateLimit:
+        average: 120
+        period: 1m
+        burst: 30
+
+    forward-auth:
+      forwardAuth:
+        address: http://host.docker.internal:8081/api/auth/verify
+        authResponseHeaders:
+          - X-Authenticated-User-ID
+          - X-Authenticated-User-Role
+          - X-Authenticated-User-Email
+
+  services:
+    auth:
+      loadBalancer:
+        servers:
+          - url: http://host.docker.internal:8081
+
+    event:
+      loadBalancer:
+        servers:
+          - url: http://host.docker.internal:8082
+
+    inventory:
+      loadBalancer:
+        servers:
+          - url: http://host.docker.internal:8083
+
+    payment:
+      loadBalancer:
+        servers:
+          - url: http://host.docker.internal:8084
+
+  routers:
+    auth:
+      rule: PathPrefix(`/api/auth`)
+      service: auth
+      middlewares:
+        - cors
+        - ratelimit
+      priority: 20
+
+    event-protected:
+      rule: PathPrefix(`/api/events`)
+      service: event
+      middlewares:
+        - cors
+        - ratelimit
+        - forward-auth
+      priority: 10
+
+    event-public:
+      rule: PathPrefix(`/api/events`) && Method(`GET`) && !Path(`/api/events/mine`) && !Path(`/api/events/pending`) && !Path(`/api/events/organizers`) && !Path(`/api/events/organizers/me`)
+      service: event
+      middlewares:
+        - cors
+        - ratelimit
+      priority: 20
+
+    bookings:
+      rule: PathPrefix(`/api/bookings`) || PathPrefix(`/api/inventory`)
+      service: inventory
+      middlewares:
+        - cors
+        - ratelimit
+        - forward-auth
+      priority: 20
+
+    payment-webhook:
+      rule: PathPrefix(`/api/payments/webhook`)
+      service: payment
+      middlewares:
+        - cors
+        - ratelimit
+      priority: 30
+
+    payments:
+      rule: PathPrefix(`/api/payments`)
+      service: payment
+      middlewares:
+        - cors
+        - ratelimit
+        - forward-auth
+      priority: 20

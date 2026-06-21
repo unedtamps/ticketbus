@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS ticket_types;
+DROP TABLE IF EXISTS events;
+DROP TABLE IF EXISTS venues;
+DROP TABLE IF EXISTS organizers;

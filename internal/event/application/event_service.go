@@ -8,24 +8,25 @@ import (
 	"github.com/google/uuid"
 	"github.com/nedo/TicketSaas/internal/event/domain"
 	sdomain "github.com/nedo/TicketSaas/internal/shared/domain"
+	"github.com/nedo/TicketSaas/internal/shared/outbox"
 )
 
 // EventService orchestrates event management operations.
 type EventService struct {
 	repo              domain.EventRepository
-	publisher         domain.EventPublisher
 	organizerConsumer domain.OrganizerConsumer
 	seatReader        domain.SeatReader
+	outbox            outbox.StoreInterface
 }
 
 // NewEventService creates a new EventService.
 func NewEventService(
 	repo domain.EventRepository,
-	publisher domain.EventPublisher,
 	organizerConsumer domain.OrganizerConsumer,
 	seatReader domain.SeatReader,
+	ob outbox.StoreInterface,
 ) *EventService {
-	return &EventService{repo: repo, publisher: publisher, organizerConsumer: organizerConsumer, seatReader: seatReader}
+	return &EventService{repo: repo, organizerConsumer: organizerConsumer, seatReader: seatReader, outbox: ob}
 }
 
 // CreateOrganizer registers a new organizer linked to a user.
@@ -101,7 +102,11 @@ func (s *EventService) CreateEvent(
 		return nil, err
 	}
 
-	_ = s.publisher.PublishEventCreated(ctx, event)
+	_ = s.outbox.Insert(ctx, "event.created", event.ID, sdomain.EventCreated{
+		EventID: event.ID,
+		Status:  string(event.Status),
+		At:      time.Now(),
+	})
 	return event, nil
 }
 
@@ -129,7 +134,10 @@ func (s *EventService) UpdateEvent(
 	if err := s.repo.UpdateEvent(ctx, event); err != nil {
 		return nil, err
 	}
-	_ = s.publisher.PublishEventUpdated(ctx, event)
+	_ = s.outbox.Insert(ctx, "event.updated", event.ID, sdomain.EventUpdated{
+		EventID: event.ID,
+		At:      time.Now(),
+	})
 	return event, nil
 }
 
@@ -153,8 +161,24 @@ func (s *EventService) ApproveEvent(
 	if err := s.repo.UpdateEvent(ctx, event); err != nil {
 		return nil, err
 	}
-	types, _ := s.repo.ListTicketTypesByEvent(ctx, eventID)
-	_ = s.publisher.PublishEventApproved(ctx, event, types)
+	types, err := s.repo.ListTicketTypesByEvent(ctx, eventID)
+	if err != nil {
+		return nil, err
+	}
+	ttInfos := make([]sdomain.TicketTypeInfo, len(types))
+	for i, tt := range types {
+		ttInfos[i] = sdomain.TicketTypeInfo{
+			TicketTypeID: tt.ID,
+			Name:         tt.Name,
+			Quantity:     tt.Quantity,
+			PriceCents:   tt.PriceCents,
+		}
+	}
+	_ = s.outbox.Insert(ctx, "event.approved", event.ID, sdomain.EventApproved{
+		EventID:     event.ID,
+		TicketTypes: ttInfos,
+		At:          time.Now(),
+	})
 	return event, nil
 }
 
@@ -178,7 +202,11 @@ func (s *EventService) RejectEvent(
 	if err := s.repo.UpdateEvent(ctx, event); err != nil {
 		return nil, err
 	}
-	_ = s.publisher.PublishEventRejected(ctx, event, reason)
+	_ = s.outbox.Insert(ctx, "event.rejected", event.ID, sdomain.EventRejected{
+		EventID: event.ID,
+		Reason:  reason,
+		At:      time.Now(),
+	})
 	return event, nil
 }
 
@@ -202,7 +230,10 @@ func (s *EventService) CancelEvent(
 	if err := s.repo.UpdateEvent(ctx, event); err != nil {
 		return nil, err
 	}
-	_ = s.publisher.PublishEventCancelled(ctx, event)
+	_ = s.outbox.Insert(ctx, "event.cancelled", event.ID, sdomain.EventCancelled{
+		EventID: event.ID,
+		At:      time.Now(),
+	})
 	return event, nil
 }
 

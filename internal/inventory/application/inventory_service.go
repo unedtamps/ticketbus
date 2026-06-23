@@ -8,17 +8,19 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nedo/TicketSaas/internal/inventory/domain"
+	sdomain "github.com/nedo/TicketSaas/internal/shared/domain"
+	"github.com/nedo/TicketSaas/internal/shared/outbox"
 )
 
 // InventoryService orchestrates reservation and booking operations.
 type InventoryService struct {
-	bookingRepo    domain.BookingRepository
+	bookingRepo      domain.BookingRepository
 	reservationCache domain.ReservationCache
-	seatCounter    domain.SeatCounter
-	publisher      domain.EventPublisher
-	consumer       domain.EventConsumer
-	logger         *slog.Logger
-	reservationTTL int
+	seatCounter      domain.SeatCounter
+	consumer         domain.EventConsumer
+	outbox           outbox.StoreInterface
+	logger           *slog.Logger
+	reservationTTL   int
 }
 
 // NewInventoryService creates a new InventoryService.
@@ -26,8 +28,8 @@ func NewInventoryService(
 	bookingRepo domain.BookingRepository,
 	reservationCache domain.ReservationCache,
 	seatCounter domain.SeatCounter,
-	publisher domain.EventPublisher,
 	consumer domain.EventConsumer,
+	ob outbox.StoreInterface,
 	logger *slog.Logger,
 	reservationTTL int,
 ) *InventoryService {
@@ -35,8 +37,8 @@ func NewInventoryService(
 		bookingRepo:      bookingRepo,
 		reservationCache: reservationCache,
 		seatCounter:       seatCounter,
-		publisher:         publisher,
 		consumer:          consumer,
+		outbox:            ob,
 		logger:            logger,
 		reservationTTL:    reservationTTL,
 	}
@@ -79,7 +81,7 @@ func (s *InventoryService) Reserve(ctx context.Context, userID, eventID string, 
 		return nil, err
 	}
 
-	_ = s.publisher.PublishReservationCreated(ctx, res)
+	_ = s.outbox.Insert(ctx, "reservation.created", res.BookingID, reservationToPayload(res))
 	return res, nil
 }
 
@@ -112,7 +114,15 @@ func (s *InventoryService) Confirm(ctx context.Context, bookingID, paymentID str
 	}
 
 	_ = s.reservationCache.Delete(ctx, bookingID)
-	_ = s.publisher.PublishTicketIssued(ctx, booking)
+	for _, item := range booking.Items {
+		_ = s.outbox.Insert(ctx, "ticket.issued", booking.ID+"-"+item.ID, sdomain.TicketIssued{
+			TicketID:     item.ID,
+			BookingID:    booking.ID,
+			UserID:       booking.UserID,
+			EventID:      booking.EventID,
+			TicketTypeID: item.TicketTypeID,
+		})
+	}
 	return nil
 }
 
@@ -139,7 +149,13 @@ func (s *InventoryService) HandleExpiry(ctx context.Context, res *domain.Reserva
 		_ = s.seatCounter.Release(ctx, res.EventID, item.TicketTypeID, item.Quantity)
 	}
 	_ = s.reservationCache.Delete(ctx, bookingID)
-	_ = s.publisher.PublishReservationExpired(ctx, bookingID, res.EventID)
+	if err := s.outbox.Insert(ctx, "reservation.expired", bookingID, sdomain.ReservationExpired{
+		BookingID: bookingID,
+		EventID:   res.EventID,
+		At:        time.Now(),
+	}); err != nil {
+		s.logger.Error("failed to insert expiry to outbox", "booking_id", bookingID, "error", err)
+	}
 	s.logger.Info("reservation expired", "booking_id", bookingID)
 }
 
@@ -227,4 +243,23 @@ func calculateTotal(items []domain.BookingItem) int {
 		total += item.UnitPriceCents * item.Quantity
 	}
 	return total
+}
+
+func reservationToPayload(res *domain.Reservation) sdomain.ReservationCreated {
+	items := make([]sdomain.BookingItem, len(res.Items))
+	for i, item := range res.Items {
+		items[i] = sdomain.BookingItem{
+			TicketTypeID:   item.TicketTypeID,
+			Quantity:       item.Quantity,
+			UnitPriceCents: item.UnitPriceCents,
+		}
+	}
+	return sdomain.ReservationCreated{
+		BookingID:  res.BookingID,
+		UserID:     res.UserID,
+		EventID:    res.EventID,
+		Items:      items,
+		TotalCents: res.TotalCents,
+		At:         time.Now(),
+	}
 }

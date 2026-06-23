@@ -21,15 +21,6 @@ type EventRepository interface {
 	ListTicketTypesByEvent(ctx context.Context, eventID string) ([]TicketType, error)
 }
 
-// EventPublisher defines the contract for publishing event domain events.
-type EventPublisher interface {
-	PublishEventCreated(ctx context.Context, event *Event) error
-	PublishEventApproved(ctx context.Context, event *Event, ticketTypes []TicketType) error
-	PublishEventRejected(ctx context.Context, event *Event, reason string) error
-	PublishEventUpdated(ctx context.Context, event *Event) error
-	PublishEventCancelled(ctx context.Context, event *Event) error
-}
-
 // OrganizerConsumer consumes organizer creation events (from auth service).
 type OrganizerConsumer interface {
 	OnOrganizerCreated(

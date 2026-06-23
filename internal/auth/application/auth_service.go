@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nedo/TicketSaas/internal/auth/domain"
 	sdomain "github.com/nedo/TicketSaas/internal/shared/domain"
+	"github.com/nedo/TicketSaas/internal/shared/outbox"
 )
 
 // TokensConfig holds token TTL values.
@@ -17,12 +18,12 @@ type TokensConfig struct {
 
 // AuthService orchestrates authentication and authorization operations.
 type AuthService struct {
-	userRepo           domain.UserRepository
-	tokenRepo          domain.RefreshTokenRepository
-	hasher             domain.PasswordHasher
-	tokenSvc           domain.TokenService
-	tokenConfig        TokensConfig
-	organizerPublisher domain.OrganizerPublisher
+	userRepo    domain.UserRepository
+	tokenRepo   domain.RefreshTokenRepository
+	hasher      domain.PasswordHasher
+	tokenSvc    domain.TokenService
+	tokenConfig TokensConfig
+	outbox      outbox.StoreInterface
 }
 
 // NewAuthService creates a new AuthService.
@@ -32,7 +33,7 @@ func NewAuthService(
 	hasher domain.PasswordHasher,
 	tokenSvc domain.TokenService,
 	tokenConfig TokensConfig,
-	organizerPublisher domain.OrganizerPublisher,
+	ob outbox.StoreInterface,
 ) *AuthService {
 	return &AuthService{
 		userRepo:           userRepo,
@@ -40,7 +41,7 @@ func NewAuthService(
 		hasher:             hasher,
 		tokenSvc:           tokenSvc,
 		tokenConfig:        tokenConfig,
-		organizerPublisher: organizerPublisher,
+		outbox:             ob,
 	}
 }
 
@@ -78,7 +79,14 @@ func (s *AuthService) RegisterOrganizer(ctx context.Context, email, password, na
 		return nil, err
 	}
 
-	_ = s.organizerPublisher.PublishOrganizerCreated(ctx, user.ID, organizerName, description, profileLink, contactEmail)
+	_ = s.outbox.Insert(ctx, "organizer.created", user.ID, sdomain.OrganizerCreated{
+		UserID:       user.ID,
+		Name:         organizerName,
+		Description:  description,
+		ProfileLink:  profileLink,
+		ContactEmail: contactEmail,
+		At:           time.Now(),
+	})
 
 	return user, nil
 }
@@ -140,8 +148,10 @@ func (s *AuthService) RefreshToken(ctx context.Context, rawRefreshToken string) 
 		return nil, domain.ErrUserNotFound
 	}
 
-	// Delete old refresh token
-	_ = s.tokenRepo.DeleteByUserID(ctx, user.ID)
+	// Delete the consumed refresh token (rotation: one-time use)
+	if err := s.tokenRepo.DeleteByHash(ctx, hash); err != nil {
+		return nil, err
+	}
 
 	accessToken, ttl, err := s.tokenSvc.GenerateAccessToken(user.ID, user.Email, user.Role)
 	if err != nil {

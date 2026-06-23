@@ -21,7 +21,9 @@ import (
 	invredis "github.com/nedo/TicketSaas/internal/inventory/redis"
 	shareddb "github.com/nedo/TicketSaas/internal/shared/db"
 	sharedhttp "github.com/nedo/TicketSaas/internal/shared/http"
+	sharedkafka "github.com/nedo/TicketSaas/internal/shared/kafka"
 	"github.com/nedo/TicketSaas/internal/shared/log"
+	"github.com/nedo/TicketSaas/internal/shared/outbox"
 )
 
 func main() {
@@ -55,18 +57,29 @@ func main() {
 	seatCounter := invredis.NewSeatCounter(rdb)
 
 	kafkaBrokers := strings.Split(cfg.KafkaBrokers, ",")
-	producer := invkafka.NewInventoryProducer(kafkaBrokers)
-	defer producer.Close()
-
 	consumer := invkafka.NewInventoryConsumer(kafkaBrokers, "inventory-service")
 	defer consumer.Close()
 
-	// Application
-	svc := application.NewInventoryService(bookingRepo, reservationCache, seatCounter, producer, consumer, logger, cfg.ReservationTTL)
+	outboxStore := outbox.NewStore(pool)
+	kafkaProducer := sharedkafka.NewProducer(kafkaBrokers)
+	if err := sharedkafka.EnsureTopics(kafkaBrokers, []string{
+		"organizer.created",
+		"event.created", "event.approved", "event.rejected", "event.updated", "event.cancelled",
+		"reservation.created", "reservation.expired", "ticket.issued",
+		"payment.initiated", "payment.completed", "payment.failed",
+	}, 4, 3); err != nil {
+		logger.Error("failed to ensure kafka topics", "error", err)
+		os.Exit(1)
+	}
+	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger)
 
-	// Start Kafka consumers + Redis expiry listener
+	// Application
+	svc := application.NewInventoryService(bookingRepo, reservationCache, seatCounter, consumer, outboxStore, logger, cfg.ReservationTTL)
+
+	// Start Kafka consumers + Redis expiry listener + outbox worker
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	go outboxWorker.Run(ctx)
 	_ = svc.StartConsumers(ctx)
 	svc.StartExpiryListener(ctx)
 

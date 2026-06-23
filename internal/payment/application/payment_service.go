@@ -10,14 +10,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nedo/TicketSaas/internal/payment/domain"
+	sdomain "github.com/nedo/TicketSaas/internal/shared/domain"
+	"github.com/nedo/TicketSaas/internal/shared/outbox"
 )
 
 // PaymentService orchestrates payment operations.
 type PaymentService struct {
 	txnRepo    domain.TransactionRepository
 	processor  domain.PaymentProcessor
-	publisher  domain.EventPublisher
 	consumer   domain.EventConsumer
+	outbox     outbox.StoreInterface
 	logger     *slog.Logger
 	webhookURL string
 	httpClient *http.Client
@@ -27,16 +29,16 @@ type PaymentService struct {
 func NewPaymentService(
 	txnRepo domain.TransactionRepository,
 	processor domain.PaymentProcessor,
-	publisher domain.EventPublisher,
 	consumer domain.EventConsumer,
+	ob outbox.StoreInterface,
 	logger *slog.Logger,
 	webhookURL string,
 ) *PaymentService {
 	return &PaymentService{
 		txnRepo:    txnRepo,
 		processor:  processor,
-		publisher:  publisher,
 		consumer:   consumer,
+		outbox:     ob,
 		logger:     logger,
 		webhookURL: webhookURL,
 		httpClient: &http.Client{Timeout: 10 * time.Second},
@@ -62,7 +64,13 @@ func (s *PaymentService) InitiatePayment(
 	if err := s.txnRepo.Create(ctx, txn); err != nil {
 		return nil, err
 	}
-	_ = s.publisher.PublishPaymentInitiated(ctx, txn)
+	_ = s.outbox.Insert(ctx, "payment.initiated", txn.ID, sdomain.PaymentInitiated{
+		TransactionID: txn.ID,
+		BookingID:     txn.BookingID,
+		UserID:        txn.UserID,
+		AmountCents:   txn.AmountCents,
+		At:            time.Now(),
+	})
 	return txn, nil
 }
 
@@ -80,7 +88,13 @@ func (s *PaymentService) Checkout(ctx context.Context, txnID string) (*domain.Tr
 	if err != nil {
 		txn.Status = domain.StatusFailed
 		_ = s.txnRepo.UpdateStatus(ctx, txn.ID, domain.StatusFailed, "")
-		_ = s.publisher.PublishPaymentFailed(ctx, txn, err.Error())
+		_ = s.outbox.Insert(ctx, "payment.failed", txn.ID, sdomain.PaymentFailed{
+			TransactionID: txn.ID,
+			BookingID:     txn.BookingID,
+			UserID:        txn.UserID,
+			Reason:        err.Error(),
+			At:            time.Now(),
+		})
 		return txn, err
 	}
 
@@ -134,7 +148,12 @@ func (s *PaymentService) ConfirmPayment(ctx context.Context, txnID string) error
 	); err != nil {
 		return err
 	}
-	_ = s.publisher.PublishPaymentCompleted(ctx, txn)
+	_ = s.outbox.Insert(ctx, "payment.completed", txn.ID, sdomain.PaymentCompleted{
+		TransactionID: txn.ID,
+		BookingID:     txn.BookingID,
+		UserID:        txn.UserID,
+		At:            time.Now(),
+	})
 	s.logger.Info("payment confirmed", "txn_id", txnID)
 	return nil
 }
@@ -194,7 +213,13 @@ func (s *PaymentService) HandleReservationExpired(ctx context.Context, bookingID
 	); err != nil {
 		return err
 	}
-	_ = s.publisher.PublishPaymentFailed(ctx, txn, "reservation expired")
+	_ = s.outbox.Insert(ctx, "payment.failed", txn.ID, sdomain.PaymentFailed{
+		TransactionID: txn.ID,
+		BookingID:     txn.BookingID,
+		UserID:        txn.UserID,
+		Reason:        "reservation expired",
+		At:            time.Now(),
+	})
 	s.logger.Info(
 		"cancelled transaction for expired reservation",
 		"booking_id",

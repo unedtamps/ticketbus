@@ -19,6 +19,7 @@ type UserRepository interface {
 type RefreshTokenRepository interface {
 	Create(ctx context.Context, token *RefreshToken) error
 	FindByHash(ctx context.Context, hash string) (*RefreshToken, error)
+	DeleteByHash(ctx context.Context, hash string) error
 	DeleteByUserID(ctx context.Context, userID string) error
 }
 
@@ -43,7 +44,4 @@ type Claims struct {
 	Role   domain.Role `json:"role"`
 }
 
-// OrganizerPublisher publishes organizer-related events.
-type OrganizerPublisher interface {
-	PublishOrganizerCreated(ctx context.Context, userID, name, description, profileLink, contactEmail string) error
-}
+

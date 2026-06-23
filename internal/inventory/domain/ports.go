@@ -26,13 +26,6 @@ type SeatCounter interface {
 	Available(ctx context.Context, eventID, ticketTypeID string) (int, error)
 }
 
-// EventPublisher defines the contract for publishing inventory events.
-type EventPublisher interface {
-	PublishReservationCreated(ctx context.Context, res *Reservation) error
-	PublishReservationExpired(ctx context.Context, bookingID, eventID string) error
-	PublishTicketIssued(ctx context.Context, booking *Booking) error
-}
-
 // EventConsumer defines the contract for consuming events from other services.
 type EventConsumer interface {
 	OnPaymentCompleted(ctx context.Context, fn func(ctx context.Context, bookingID, transactionID string) error)

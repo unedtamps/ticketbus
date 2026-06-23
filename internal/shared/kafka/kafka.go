@@ -20,6 +20,7 @@ func NewProducer(brokers []string) *Producer {
 		writer: &kafkago.Writer{
 			Addr:         kafkago.TCP(brokers...),
 			Balancer:     &kafkago.LeastBytes{},
+			MaxAttempts:  3,
 			WriteTimeout: 10 * time.Second,
 			ReadTimeout:  10 * time.Second,
 		},
@@ -27,7 +28,12 @@ func NewProducer(brokers []string) *Producer {
 }
 
 // Produce sends a message to the specified topic.
-func (p *Producer) Produce(ctx context.Context, topic string, key string, payload interface{}) error {
+func (p *Producer) Produce(
+	ctx context.Context,
+	topic string,
+	key string,
+	payload interface{},
+) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal kafka message: %w", err)
@@ -71,10 +77,10 @@ func NewConsumer(brokers []string, topic, groupID string) *Consumer {
 
 // Message represents a consumed Kafka message.
 type Message struct {
-	Topic   string
-	Key     string
-	Value   []byte
-	Offset  int64
+	Topic  string
+	Key    string
+	Value  []byte
+	Offset int64
 }
 
 // Handler is a function that processes a Kafka message.
@@ -121,7 +127,10 @@ func EnsureTopics(brokers []string, topics []string, partitions, replicas int) e
 		return fmt.Errorf("failed to get controller: %w", err)
 	}
 
-	controllerConn, err := kafkago.Dial("tcp", fmt.Sprintf("%s:%d", controller.Host, controller.Port))
+	controllerConn, err := kafkago.Dial(
+		"tcp",
+		fmt.Sprintf("%s:%d", controller.Host, controller.Port),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to dial controller: %w", err)
 	}

@@ -5,8 +5,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// DBTx is the interface that both *pgxpool.Pool and pgx.Tx satisfy.
+// Repos accept this so they can participate in transactions.
+type DBTx interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
 
 // NewPool creates a new PostgreSQL connection pool.
 func NewPool(dsn string) (*pgxpool.Pool, error) {

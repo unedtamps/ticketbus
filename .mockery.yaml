@@ -1,0 +1,41 @@
+template: testify
+filename: "mock_{{.InterfaceName}}.go"
+packages:
+  github.com/nedo/TicketSaas/internal/auth/domain:
+    config:
+      structname: Mock{{.InterfaceName}}
+      dir: "{{.InterfaceDir}}/mocks"
+      pkgname: mocks
+    interfaces:
+      UserRepository:
+      RefreshTokenRepository:
+      PasswordHasher:
+      TokenService:
+  github.com/nedo/TicketSaas/internal/event/domain:
+    config:
+      structname: Mock{{.InterfaceName}}
+      dir: "{{.InterfaceDir}}/mocks"
+      pkgname: mocks
+    interfaces:
+      EventRepository:
+      OrganizerConsumer:
+      SeatReader:
+  github.com/nedo/TicketSaas/internal/inventory/domain:
+    config:
+      structname: Mock{{.InterfaceName}}
+      dir: "{{.InterfaceDir}}/mocks"
+      pkgname: mocks
+    interfaces:
+      BookingRepository:
+      ReservationCache:
+      SeatCounter:
+      EventConsumer:
+  github.com/nedo/TicketSaas/internal/payment/domain:
+    config:
+      structname: Mock{{.InterfaceName}}
+      dir: "{{.InterfaceDir}}/mocks"
+      pkgname: mocks
+    interfaces:
+      TransactionRepository:
+      PaymentProcessor:
+      EventConsumer:

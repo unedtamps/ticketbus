@@ -46,6 +46,8 @@ build/
 # Coverage
 coverage/
 *.lcov
+coverage.out
+coverage.html
 
 # Local data volumes
 volumes/

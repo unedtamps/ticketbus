@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	shareddb "github.com/nedo/TicketSaas/internal/shared/db"
 	"github.com/nedo/TicketSaas/internal/auth/domain"
 )
 
 // RefreshTokenRepo implements domain.RefreshTokenRepository using PostgreSQL.
 type RefreshTokenRepo struct {
-	pool *pgxpool.Pool
+	db shareddb.DBTx
 }
 
 // NewRefreshTokenRepo creates a new RefreshTokenRepo.
-func NewRefreshTokenRepo(pool *pgxpool.Pool) *RefreshTokenRepo {
-	return &RefreshTokenRepo{pool: pool}
+func NewRefreshTokenRepo(db shareddb.DBTx) *RefreshTokenRepo {
+	return &RefreshTokenRepo{db: db}
 }
 
 // Create inserts a new refresh token.
@@ -24,7 +24,7 @@ func (r *RefreshTokenRepo) Create(ctx context.Context, token *domain.RefreshToke
 		INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3, $4)
 	`
-	_, err := r.pool.Exec(ctx, query, token.ID, token.UserID, token.TokenHash, token.ExpiresAt)
+	_, err := r.db.Exec(ctx, query, token.ID, token.UserID, token.TokenHash, token.ExpiresAt)
 	return err
 }
 
@@ -33,7 +33,7 @@ func (r *RefreshTokenRepo) FindByHash(ctx context.Context, hash string) (*domain
 	query := `SELECT id, user_id, token_hash, expires_at, created_at FROM refresh_tokens WHERE token_hash = $1`
 
 	var token domain.RefreshToken
-	err := r.pool.QueryRow(ctx, query, hash).Scan(
+	err := r.db.QueryRow(ctx, query, hash).Scan(
 		&token.ID, &token.UserID, &token.TokenHash, &token.ExpiresAt, &token.CreatedAt,
 	)
 	if err != nil {
@@ -42,8 +42,14 @@ func (r *RefreshTokenRepo) FindByHash(ctx context.Context, hash string) (*domain
 	return &token, nil
 }
 
+// DeleteByHash removes a specific refresh token by its hash.
+func (r *RefreshTokenRepo) DeleteByHash(ctx context.Context, hash string) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM refresh_tokens WHERE token_hash = $1`, hash)
+	return err
+}
+
 // DeleteByUserID removes all refresh tokens for a user.
 func (r *RefreshTokenRepo) DeleteByUserID(ctx context.Context, userID string) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM refresh_tokens WHERE user_id = $1`, userID)
+	_, err := r.db.Exec(ctx, `DELETE FROM refresh_tokens WHERE user_id = $1`, userID)
 	return err
 }

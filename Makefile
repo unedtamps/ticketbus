@@ -25,6 +25,10 @@ help:
 	@echo ""
 	@echo "  make migrate               Run all migrations"
 	@echo "  make test                  Run all tests"
+	@echo "  make test-fast             Run tests without race detector"
+	@echo "  make test-coverage         Run tests with coverage report"
+	@echo "  make test-race             Run concurrency tests x10"
+	@echo "  make mocks                 Regenerate mockery mocks"
 	@echo "  make lint                  Run Go linter"
 	@echo "  make format                Format Go code"
 
@@ -116,7 +120,26 @@ migrate: migrate-auth-up migrate-event-up migrate-inventory-up migrate-payment-u
 
 # Testing
 test:
-	go test ./...
+	go test -race -count=1 ./...
+
+test-fast:
+	go test -count=1 ./...
+
+test-verbose:
+	go test -race -count=1 -v ./...
+
+test-coverage:
+	go test -race -short -count=1 -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out
+	@echo "✅ HTML report: open coverage.html"
+	go tool cover -html=coverage.out -o coverage.html
+
+test-race:
+	go test -race -count=10 ./internal/inventory/application/ ./internal/payment/application/
+
+# Mock generation
+mocks:
+	mockery
 
 # Linting
 lint:

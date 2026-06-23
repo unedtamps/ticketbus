@@ -20,7 +20,9 @@ import (
 	eventredis "github.com/nedo/TicketSaas/internal/event/redis"
 	shareddb "github.com/nedo/TicketSaas/internal/shared/db"
 	sharedhttp "github.com/nedo/TicketSaas/internal/shared/http"
+	sharedkafka "github.com/nedo/TicketSaas/internal/shared/kafka"
 	"github.com/nedo/TicketSaas/internal/shared/log"
+	"github.com/nedo/TicketSaas/internal/shared/outbox"
 )
 
 func main() {
@@ -49,18 +51,29 @@ func main() {
 	repo := postgres.NewEventRepo(pool)
 
 	kafkaBrokers := strings.Split(cfg.KafkaBrokers, ",")
-	publisher := kafka.NewEventPublisher(kafkaBrokers)
-	defer publisher.Close()
-
 	consumer := kafka.NewOrganizerConsumer(kafkaBrokers, "event-service")
-
 	seatReader := eventredis.NewSeatReader(rdb)
-	svc := application.NewEventService(repo, publisher, consumer, seatReader)
+
+	outboxStore := outbox.NewStore(pool)
+	kafkaProducer := sharedkafka.NewProducer(kafkaBrokers)
+	if err := sharedkafka.EnsureTopics(kafkaBrokers, []string{
+		"organizer.created",
+		"event.created", "event.approved", "event.rejected", "event.updated", "event.cancelled",
+		"reservation.created", "reservation.expired", "ticket.issued",
+		"payment.initiated", "payment.completed", "payment.failed",
+	}, 4, 3); err != nil {
+		logger.Error("failed to ensure kafka topics", "error", err)
+		os.Exit(1)
+	}
+	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger)
+
+	svc := application.NewEventService(repo, consumer, seatReader, outboxStore)
 	h := handler.NewEventHandler(svc)
 
-	// Start Kafka consumers
+	// Start consumers and outbox worker
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	go outboxWorker.Run(ctx)
 	go svc.StartOrganizerConsumer(ctx)
 
 	r := chi.NewRouter()

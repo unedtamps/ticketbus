@@ -19,7 +19,9 @@ import (
 	"github.com/nedo/TicketSaas/internal/payment/processor"
 	shareddb "github.com/nedo/TicketSaas/internal/shared/db"
 	sharedhttp "github.com/nedo/TicketSaas/internal/shared/http"
+	sharedkafka "github.com/nedo/TicketSaas/internal/shared/kafka"
 	"github.com/nedo/TicketSaas/internal/shared/log"
+	"github.com/nedo/TicketSaas/internal/shared/outbox"
 )
 
 func main() {
@@ -42,16 +44,27 @@ func main() {
 	mockProcessor := processor.NewMockProcessor()
 
 	kafkaBrokers := strings.Split(cfg.KafkaBrokers, ",")
-	producer := paykafka.NewPaymentProducer(kafkaBrokers)
-	defer producer.Close()
-
 	consumer := paykafka.NewPaymentConsumer(kafkaBrokers, "payment-service")
 	defer consumer.Close()
 
-	svc := application.NewPaymentService(txnRepo, mockProcessor, producer, consumer, logger, cfg.WebhookBaseURL)
+	outboxStore := outbox.NewStore(pool)
+	kafkaProducer := sharedkafka.NewProducer(kafkaBrokers)
+	if err := sharedkafka.EnsureTopics(kafkaBrokers, []string{
+		"organizer.created",
+		"event.created", "event.approved", "event.rejected", "event.updated", "event.cancelled",
+		"reservation.created", "reservation.expired", "ticket.issued",
+		"payment.initiated", "payment.completed", "payment.failed",
+	}, 4, 3); err != nil {
+		logger.Error("failed to ensure kafka topics", "error", err)
+		os.Exit(1)
+	}
+	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger)
+
+	svc := application.NewPaymentService(txnRepo, mockProcessor, consumer, outboxStore, logger, cfg.WebhookBaseURL)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	go outboxWorker.Run(ctx)
 	_ = svc.StartConsumer(ctx)
 
 	h := handler.NewPaymentHandler(svc)

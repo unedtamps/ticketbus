@@ -103,7 +103,6 @@ func (c *Consumer) Consume(ctx context.Context, handler Handler) error {
 			Value:  m.Value,
 			Offset: m.Offset,
 		}); err != nil {
-			// In production, send to DLQ. For now, log and continue.
 			fmt.Printf("handler error for topic %s: %v\n", m.Topic, err)
 		}
 	}

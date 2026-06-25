@@ -103,6 +103,9 @@ func (s *PaymentService) Checkout(ctx context.Context, txnID string) (*domain.Tr
 	_ = s.txnRepo.UpdateStatus(ctx, txn.ID, domain.StatusProcessing, providerRef)
 
 	go func() {
+		if s.webhookURL == "" {
+			return
+		}
 		delay := 15 * time.Second
 		time.Sleep(delay)
 		if rand.Intn(4) == 0 {

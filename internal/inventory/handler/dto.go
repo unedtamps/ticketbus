@@ -28,14 +28,15 @@ type ReservationResponse struct {
 
 // BookingResponse is the public booking data.
 type BookingResponse struct {
-	ID         string              `json:"id"`
-	UserID     string              `json:"user_id"`
-	EventID    string              `json:"event_id"`
-	Status     string              `json:"status"`
-	TotalCents int                 `json:"total_cents"`
-	PaymentID  string              `json:"payment_id"`
-	Items      []BookingItemResp   `json:"items"`
-	CreatedAt  string              `json:"created_at"`
+	ID           string            `json:"id"`
+	UserID       string            `json:"user_id"`
+	EventID      string            `json:"event_id"`
+	Status       string            `json:"status"`
+	TotalCents   int               `json:"total_cents"`
+	PaymentID    string            `json:"payment_id"`
+	RefundStatus string            `json:"refund_status,omitempty"`
+	Items        []BookingItemResp `json:"items"`
+	CreatedAt    string            `json:"created_at"`
 }
 
 // BookingItemResp is a public booking item.
@@ -57,6 +58,7 @@ func bookingToResponse(b *domain.Booking) BookingResponse {
 	return BookingResponse{
 		ID: b.ID, UserID: b.UserID, EventID: b.EventID,
 		Status: b.Status, TotalCents: b.TotalCents, PaymentID: b.PaymentID,
+		RefundStatus: b.RefundStatus,
 		Items: items, CreatedAt: b.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	}
 }

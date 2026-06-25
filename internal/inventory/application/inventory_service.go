@@ -18,6 +18,7 @@ type InventoryService struct {
 	reservationCache domain.ReservationCache
 	seatCounter      domain.SeatCounter
 	consumer         domain.EventConsumer
+	eventStatus      domain.EventStatusRepository
 	outbox           outbox.StoreInterface
 	logger           *slog.Logger
 	reservationTTL   int
@@ -29,6 +30,7 @@ func NewInventoryService(
 	reservationCache domain.ReservationCache,
 	seatCounter domain.SeatCounter,
 	consumer domain.EventConsumer,
+	eventStatus domain.EventStatusRepository,
 	ob outbox.StoreInterface,
 	logger *slog.Logger,
 	reservationTTL int,
@@ -38,6 +40,7 @@ func NewInventoryService(
 		reservationCache: reservationCache,
 		seatCounter:       seatCounter,
 		consumer:          consumer,
+		eventStatus:       eventStatus,
 		outbox:            ob,
 		logger:            logger,
 		reservationTTL:    reservationTTL,
@@ -89,19 +92,33 @@ func (s *InventoryService) Reserve(ctx context.Context, userID, eventID string, 
 func (s *InventoryService) Confirm(ctx context.Context, bookingID, paymentID string) error {
 	res, err := s.reservationCache.Find(ctx, bookingID)
 	if err != nil {
-		// Reservation already expired or confirmed — not an error
 		s.logger.Info("confirm skipped, reservation already removed", "booking_id", bookingID)
 		return nil
+	}
+
+	published, err := s.eventStatus.IsPublished(ctx, res.EventID)
+	if err != nil {
+		return err
 	}
 
 	booking := &domain.Booking{
 		ID:         bookingID,
 		UserID:     res.UserID,
 		EventID:    res.EventID,
-		Status:     "confirmed",
 		TotalCents: res.TotalCents,
 		PaymentID:  paymentID,
 		Items:      res.Items,
+	}
+
+	if published {
+		booking.Status = "confirmed"
+		booking.RefundStatus = "none"
+	} else {
+		booking.Status = "cancelled"
+		booking.RefundStatus = "pending"
+		for _, item := range res.Items {
+			_ = s.seatCounter.Release(ctx, res.EventID, item.TicketTypeID, item.Quantity)
+		}
 	}
 
 	for i := range booking.Items {
@@ -170,10 +187,25 @@ func (s *InventoryService) InitSeats(ctx context.Context, eventID string, ticket
 	return nil
 }
 
-// CancelBookings marks all bookings for an event as cancelled.
+// CancelBookings marks all confirmed bookings for an event as cancelled with refund pending.
 func (s *InventoryService) CancelBookings(ctx context.Context, eventID string) error {
 	s.logger.Info("cancelling bookings for event", "event_id", eventID)
-	return nil
+
+	bookings, err := s.bookingRepo.ListByEventID(ctx, eventID)
+	if err != nil {
+		return err
+	}
+
+	for _, b := range bookings {
+		if b.Status != "confirmed" {
+			continue
+		}
+		for _, item := range b.Items {
+			_ = s.seatCounter.Release(ctx, eventID, item.TicketTypeID, item.Quantity)
+		}
+	}
+
+	return s.bookingRepo.CancelByEventID(ctx, eventID)
 }
 
 // GetBooking returns a booking by ID.
@@ -200,11 +232,17 @@ func (s *InventoryService) StartConsumers(ctx context.Context) error {
 
 	s.consumer.OnEventApproved(ctx, func(ctx context.Context, eventID string, ticketTypes []domain.TicketTypeInfo) error {
 		s.logger.Info("event approved received", "event_id", eventID)
+		if err := s.eventStatus.Upsert(ctx, eventID, "published"); err != nil {
+			return err
+		}
 		return s.InitSeats(ctx, eventID, ticketTypes)
 	})
 
 	s.consumer.OnEventCancelled(ctx, func(ctx context.Context, eventID string) error {
 		s.logger.Info("event cancelled received", "event_id", eventID)
+		if err := s.eventStatus.Upsert(ctx, eventID, "cancelled"); err != nil {
+			return err
+		}
 		return s.CancelBookings(ctx, eventID)
 	})
 

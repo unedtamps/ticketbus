@@ -2,7 +2,7 @@
         dev dev-auth dev-event dev-inventory dev-payment dev-web \
         build build-auth build-event build-inventory build-payment clean \
         migrate migrate-auth-up migrate-event-up migrate-inventory-up migrate-payment-up \
-        test lint format direnv-allow
+        test lint format direnv-allow integration-test integration-test-race
 
 # Default target
 help:
@@ -28,6 +28,8 @@ help:
 	@echo "  make test-fast             Run tests without race detector"
 	@echo "  make test-coverage         Run tests with coverage report"
 	@echo "  make test-race             Run concurrency tests x10"
+	@echo "  make integration-test      Run integration tests (needs Docker)"
+	@echo "  make integration-test-race Run integration tests with race detector"
 	@echo "  make mocks                 Regenerate mockery mocks"
 	@echo "  make lint                  Run Go linter"
 	@echo "  make format                Format Go code"
@@ -132,7 +134,7 @@ test-coverage:
 	go test -race -short -count=1 -coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out
 	@echo "✅ HTML report: open coverage.html"
-	go tool cover -html=coverage.out -o coverage.html
+	go tool cover -html=coverage.out -o bin/coverage.html
 
 test-race:
 	go test -race -count=10 ./internal/inventory/application/ ./internal/payment/application/
@@ -140,6 +142,13 @@ test-race:
 # Mock generation
 mocks:
 	mockery
+
+# Integration tests (testcontainers-go — needs Docker daemon)
+integration-test:
+	go test -tags=integration -count=1 -v ./tests/integration/...
+
+integration-test-race:
+	go test -tags=integration -race -count=1 -v ./tests/integration/...
 
 # Linting
 lint:

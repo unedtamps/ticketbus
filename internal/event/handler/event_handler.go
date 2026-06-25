@@ -180,7 +180,12 @@ func (h *EventHandler) RejectEvent(w http.ResponseWriter, r *http.Request) {
 func (h *EventHandler) CancelEvent(w http.ResponseWriter, r *http.Request) {
 	eventID := chi.URLParam(r, "id")
 	userID := sharedhttp.UserIDFromContext(r.Context())
-	event, err := h.svc.CancelEvent(r.Context(), eventID, userID)
+	org, err := h.svc.GetOrganizer(r.Context(), userID)
+	if err != nil {
+		sharedhttp.BadRequest(w, "organizer not found")
+		return
+	}
+	event, err := h.svc.CancelEvent(r.Context(), eventID, org.ID)
 	if err != nil {
 		if errors.Is(err, domain.ErrEventNotFound) {
 			sharedhttp.NotFound(w, err.Error())

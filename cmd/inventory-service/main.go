@@ -55,6 +55,7 @@ func main() {
 	bookingRepo := postgres.NewBookingRepo(pool)
 	reservationCache := invredis.NewReservationCache(rdb)
 	seatCounter := invredis.NewSeatCounter(rdb)
+	eventStatusRepo := postgres.NewEventStatusRepo(pool)
 
 	kafkaBrokers := strings.Split(cfg.KafkaBrokers, ",")
 	consumer := invkafka.NewInventoryConsumer(kafkaBrokers, "inventory-service")
@@ -74,7 +75,7 @@ func main() {
 	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger)
 
 	// Application
-	svc := application.NewInventoryService(bookingRepo, reservationCache, seatCounter, consumer, outboxStore, logger, cfg.ReservationTTL)
+	svc := application.NewInventoryService(bookingRepo, reservationCache, seatCounter, consumer, eventStatusRepo, outboxStore, logger, cfg.ReservationTTL)
 
 	// Start Kafka consumers + Redis expiry listener + outbox worker
 	ctx, cancel := context.WithCancel(context.Background())

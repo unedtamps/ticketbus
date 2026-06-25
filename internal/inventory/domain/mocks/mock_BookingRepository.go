@@ -38,6 +38,63 @@ func (_m *MockBookingRepository) EXPECT() *MockBookingRepository_Expecter {
 	return &MockBookingRepository_Expecter{mock: &_m.Mock}
 }
 
+// CancelByEventID provides a mock function for the type MockBookingRepository
+func (_mock *MockBookingRepository) CancelByEventID(ctx context.Context, eventID string) error {
+	ret := _mock.Called(ctx, eventID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CancelByEventID")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = returnFunc(ctx, eventID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockBookingRepository_CancelByEventID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CancelByEventID'
+type MockBookingRepository_CancelByEventID_Call struct {
+	*mock.Call
+}
+
+// CancelByEventID is a helper method to define mock.On call
+//   - ctx context.Context
+//   - eventID string
+func (_e *MockBookingRepository_Expecter) CancelByEventID(ctx any, eventID any) *MockBookingRepository_CancelByEventID_Call {
+	return &MockBookingRepository_CancelByEventID_Call{Call: _e.mock.On("CancelByEventID", ctx, eventID)}
+}
+
+func (_c *MockBookingRepository_CancelByEventID_Call) Run(run func(ctx context.Context, eventID string)) *MockBookingRepository_CancelByEventID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockBookingRepository_CancelByEventID_Call) Return(err error) *MockBookingRepository_CancelByEventID_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockBookingRepository_CancelByEventID_Call) RunAndReturn(run func(ctx context.Context, eventID string) error) *MockBookingRepository_CancelByEventID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Create provides a mock function for the type MockBookingRepository
 func (_mock *MockBookingRepository) Create(ctx context.Context, booking *domain.Booking) error {
 	ret := _mock.Called(ctx, booking)
@@ -159,6 +216,74 @@ func (_c *MockBookingRepository_FindByID_Call) Return(booking *domain.Booking, e
 }
 
 func (_c *MockBookingRepository_FindByID_Call) RunAndReturn(run func(ctx context.Context, id string) (*domain.Booking, error)) *MockBookingRepository_FindByID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListByEventID provides a mock function for the type MockBookingRepository
+func (_mock *MockBookingRepository) ListByEventID(ctx context.Context, eventID string) ([]domain.Booking, error) {
+	ret := _mock.Called(ctx, eventID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListByEventID")
+	}
+
+	var r0 []domain.Booking
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]domain.Booking, error)); ok {
+		return returnFunc(ctx, eventID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []domain.Booking); ok {
+		r0 = returnFunc(ctx, eventID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]domain.Booking)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, eventID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockBookingRepository_ListByEventID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByEventID'
+type MockBookingRepository_ListByEventID_Call struct {
+	*mock.Call
+}
+
+// ListByEventID is a helper method to define mock.On call
+//   - ctx context.Context
+//   - eventID string
+func (_e *MockBookingRepository_Expecter) ListByEventID(ctx any, eventID any) *MockBookingRepository_ListByEventID_Call {
+	return &MockBookingRepository_ListByEventID_Call{Call: _e.mock.On("ListByEventID", ctx, eventID)}
+}
+
+func (_c *MockBookingRepository_ListByEventID_Call) Run(run func(ctx context.Context, eventID string)) *MockBookingRepository_ListByEventID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockBookingRepository_ListByEventID_Call) Return(bookings []domain.Booking, err error) *MockBookingRepository_ListByEventID_Call {
+	_c.Call.Return(bookings, err)
+	return _c
+}
+
+func (_c *MockBookingRepository_ListByEventID_Call) RunAndReturn(run func(ctx context.Context, eventID string) ([]domain.Booking, error)) *MockBookingRepository_ListByEventID_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -5,7 +5,14 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/components/ui/toast";
-import { CreditCard, ArrowRight, Loader2, AlertTriangle, Ticket, RotateCw } from "lucide-react";
+import {
+  CreditCard,
+  ArrowRight,
+  Loader2,
+  AlertTriangle,
+  Ticket,
+  RotateCw,
+} from "lucide-react";
 import type { TransactionResponse } from "@/types";
 
 type Phase = "checkout" | "status" | "completed" | "failed";
@@ -56,7 +63,9 @@ function CheckoutForm() {
       }
 
       try {
-        const t = await api.post<TransactionResponse>(`/api/payments/by-booking/${bookingId}/checkout`);
+        const t = await api.post<TransactionResponse>(
+          `/api/payments/by-booking/${bookingId}/checkout`,
+        );
         if (cancelled) return;
         stopPolling();
         setTxn(t);
@@ -71,7 +80,9 @@ function CheckoutForm() {
           pollRef.current = setInterval(async () => {
             if (cancelled) return;
             try {
-              const latest = await api.get<TransactionResponse>(`/api/payments/${t.id}/status`);
+              const latest = await api.get<TransactionResponse>(
+                `/api/payments/${t.id}/status`,
+              );
               if (cancelled) return;
               // Stop on first success — update phase from actual status
               stopPolling();
@@ -93,14 +104,18 @@ function CheckoutForm() {
       }
     }, 5000);
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [bookingId, user, stopPolling]);
 
   async function refreshStatus() {
     if (!txn) return;
     setRefreshing(true);
     try {
-      const latest = await api.get<TransactionResponse>(`/api/payments/${txn.id}/status`);
+      const latest = await api.get<TransactionResponse>(
+        `/api/payments/${txn.id}/status`,
+      );
       setTxn(latest);
       if (latest.status === "completed") {
         setPhase("completed");
@@ -120,7 +135,9 @@ function CheckoutForm() {
     return (
       <div className="card text-center py-12 max-w-md mx-auto">
         <AlertTriangle className="w-8 h-8 text-[#D4CEC4] mx-auto mb-3" />
-        <p className="text-[#8B8580] text-sm">No booking found. Start from an event page.</p>
+        <p className="text-[#8B8580] text-sm">
+          No booking found. Start from an event page.
+        </p>
       </div>
     );
   }
@@ -131,14 +148,23 @@ function CheckoutForm() {
         <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#D9381E]/6 mb-4">
           <CreditCard className="w-6 h-6 text-[#D9381E]" />
         </div>
-        <p className="font-[family-name:var(--font-display)] text-3xl text-[#1A1817] mb-2">Checkout</p>
-        <p className="text-[#8B8580] text-sm font-mono">Booking: {bookingId.slice(0, 12)}&hellip;</p>
+        <p className="font-[family-name:var(--font-display)] text-3xl text-[#1A1817] mb-2">
+          Checkout
+        </p>
+        <p className="text-[#8B8580] text-sm font-mono">
+          Booking: {bookingId.slice(0, 12)}&hellip;
+        </p>
       </div>
 
       {error && (
         <div className="card text-center border-[#FECACA] bg-[#FFF5F5] space-y-3">
           <p className="text-[#D9381E] text-sm">{error}</p>
-          <button onClick={() => router.push("/")} className="btn-outline text-sm">Back to Events</button>
+          <button
+            onClick={() => router.push("/")}
+            className="btn-outline text-sm"
+          >
+            Back to Events
+          </button>
         </div>
       )}
 
@@ -146,7 +172,9 @@ function CheckoutForm() {
       {phase === "checkout" && !error && (
         <div className="card text-center py-8">
           <Loader2 className="w-6 h-6 text-[#D9381E] animate-spin mx-auto" />
-          <p className="text-sm text-[#4A4541] mt-3">Starting payment&hellip;</p>
+          <p className="text-sm text-[#4A4541] mt-3">
+            Starting payment&hellip;
+          </p>
         </div>
       )}
 
@@ -161,18 +189,31 @@ function CheckoutForm() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-[#8B8580]">Status</span>
-              <span className={`badge ${
-                txn.status === "completed" ? "badge-green" :
-                txn.status === "failed" ? "badge-red" : "badge-yellow"
-              }`}>{txn.status}</span>
+              <span
+                className={`badge ${
+                  txn.status === "completed"
+                    ? "badge-green"
+                    : txn.status === "failed"
+                      ? "badge-red"
+                      : "badge-yellow"
+                }`}
+              >
+                {txn.status}
+              </span>
             </div>
           </div>
 
           {/* Status — polling stopped, manual refresh */}
           {phase === "status" && (
             <div className="card flex items-center justify-between text-sm">
-              <span className="text-[#B85C1A]">Payment in progress&hellip;</span>
-              <button onClick={refreshStatus} disabled={refreshing} className="btn-outline text-sm flex items-center gap-1.5">
+              <span className="text-[#B85C1A]">
+                Payment in progress&hellip;
+              </span>
+              <button
+                onClick={refreshStatus}
+                disabled={refreshing}
+                className="btn-outline text-sm flex items-center gap-1.5"
+              >
                 {refreshing ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
@@ -189,7 +230,10 @@ function CheckoutForm() {
                 <CreditCard className="w-4 h-4" />
                 <span>Payment successful</span>
               </div>
-              <button onClick={() => router.push("/dashboard")} className="btn-accent w-full">
+              <button
+                onClick={() => router.push("/dashboard")}
+                className="btn-accent w-full"
+              >
                 View Dashboard <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -202,7 +246,10 @@ function CheckoutForm() {
                 <span>Payment failed. Your reservation may have expired.</span>
               </div>
               <div className="flex gap-3">
-                <button onClick={() => router.push("/")} className="btn-outline flex-1">
+                <button
+                  onClick={() => router.push("/")}
+                  className="btn-outline flex-1"
+                >
                   Back to Events
                 </button>
               </div>
@@ -216,11 +263,13 @@ function CheckoutForm() {
 
 export default function CheckoutPage() {
   return (
-    <Suspense fallback={
-      <div className="max-w-md mx-auto card text-center py-10">
-        <Loader2 className="w-6 h-6 text-[#D9381E] animate-spin mx-auto" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="max-w-md mx-auto card text-center py-10">
+          <Loader2 className="w-6 h-6 text-[#D9381E] animate-spin mx-auto" />
+        </div>
+      }
+    >
       <CheckoutForm />
     </Suspense>
   );

@@ -30,6 +30,7 @@ packages:
       ReservationCache:
       SeatCounter:
       EventConsumer:
+      EventStatusRepository:
   github.com/nedo/TicketSaas/internal/payment/domain:
     config:
       structname: Mock{{.InterfaceName}}

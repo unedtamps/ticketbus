@@ -7,7 +7,9 @@ type BookingRepository interface {
 	Create(ctx context.Context, booking *Booking) error
 	FindByID(ctx context.Context, id string) (*Booking, error)
 	ListByUser(ctx context.Context, userID string) ([]Booking, error)
+	ListByEventID(ctx context.Context, eventID string) ([]Booking, error)
 	UpdateStatus(ctx context.Context, bookingID, status string) error
+	CancelByEventID(ctx context.Context, eventID string) error
 }
 
 // ReservationCache defines the contract for temporary reservation storage (Redis).
@@ -42,4 +44,10 @@ type TicketTypeInfo struct {
 	Name         string `json:"name"`
 	Quantity     int    `json:"quantity"`
 	PriceCents   int    `json:"price_cents"`
+}
+
+// EventStatusRepository provides event status for guard checks.
+type EventStatusRepository interface {
+	Upsert(ctx context.Context, eventID, status string) error
+	IsPublished(ctx context.Context, eventID string) (bool, error)
 }

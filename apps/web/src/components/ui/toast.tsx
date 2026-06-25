@@ -63,7 +63,7 @@ function ToastBar({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) 
 
   return (
     <div
-      className={`pointer-events-auto flex items-start gap-3 w-full max-w-sm bg-white border border-[#E8E3DC] border-l-4 ${borderMap[toast.type]} rounded-md shadow-lg p-4 animate-slide-down`}
+      className={`pointer-events-auto flex items-start gap-3 w-full max-w-sm bg-white border border-[#E8E3DC] border-l-4 ${borderMap[toast.type]} rounded-md shadow-lg p-4 animate-toast-in`}
       role="alert"
     >
       <div className="flex-shrink-0 mt-0.5">{iconMap[toast.type]}</div>
@@ -87,7 +87,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const show = useCallback((message: string, type: ToastType) => {
     const id = String(++counter);
-    setToasts(prev => [...prev, { id, message, type }]);
+    setToasts([{ id, message, type }]);
   }, []);
 
   useEffect(() => {
@@ -107,7 +107,18 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       <div
         aria-live="polite"
-        className="fixed bottom-0 left-1/2 -translate-x-1/2 z-[100] pb-4 flex flex-col items-center gap-2 pointer-events-none"
+        style={{
+          position: "fixed",
+          top: "1rem",
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 100,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "0.5rem",
+          pointerEvents: "none",
+        }}
       >
         {toasts.map(t => (
           <ToastBar key={t.id} toast={t} onDismiss={dismiss} />

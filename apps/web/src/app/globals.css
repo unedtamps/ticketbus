@@ -269,13 +269,13 @@ textarea.input-field { resize: vertical; min-height: 80px; }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ─── Toast slide-up ─── */
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(16px); }
+/* ─── Toast slide-down from top ─── */
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-16px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.animate-slide-down {
-  animation: slideUp 0.25s ease-out;
+.animate-toast-in {
+  animation: slideDown 0.25s ease-out;
 }
 
 /* ─── Focus ring ─── */

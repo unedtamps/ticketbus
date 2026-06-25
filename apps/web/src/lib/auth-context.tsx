@@ -6,6 +6,16 @@ import { api } from "./api-client";
 import { toast } from "@/components/ui/toast";
 import type { User } from "@/types";
 
+function setCookie(key: string, value: string, maxAge = 900) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${key}=${value}; path=/; max-age=${maxAge}; SameSite=Lax`;
+}
+
+function clearCookie(key: string) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${key}=; path=/; max-age=0; SameSite=Lax`;
+}
+
 interface OrganizerFields {
   organizer_name: string;
   description?: string;
@@ -44,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
+    clearCookie("access_token");
     setUser(null);
     setToken(null);
     router.push("/login");
@@ -80,6 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       "/api/auth/login", { email, password }
     );
     localStorage.setItem("access_token", data.access_token);
+    setCookie("access_token", data.access_token);
     if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
     setToken(data.access_token);
     if (data.user) {

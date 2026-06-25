@@ -15,6 +15,7 @@ type EventRepository interface {
 	ListPublished(ctx context.Context, limit, offset int) ([]Event, int, error)
 	ListByOrganizer(ctx context.Context, organizerID string) ([]Event, error)
 	ListPending(ctx context.Context, limit, offset int) ([]Event, int, error)
+	FindAll(ctx context.Context, status string, limit, offset int) ([]Event, int, error)
 
 	// Ticket types
 	CreateTicketTypes(ctx context.Context, types []TicketType) error

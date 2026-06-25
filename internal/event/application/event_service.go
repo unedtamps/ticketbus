@@ -274,6 +274,11 @@ func (s *EventService) ListPending(ctx context.Context, limit, offset int) ([]do
 	return s.repo.ListPending(ctx, limit, offset)
 }
 
+// ListAll returns events with optional status filter (admin).
+func (s *EventService) ListAll(ctx context.Context, status string, limit, offset int) ([]domain.Event, int, error) {
+	return s.repo.FindAll(ctx, status, limit, offset)
+}
+
 // StartOrganizerConsumer listens for organizer.created events and creates organizers.
 func (s *EventService) StartOrganizerConsumer(ctx context.Context) {
 	s.organizerConsumer.OnOrganizerCreated(

@@ -96,6 +96,15 @@ http:
         - ratelimit
       priority: 30
 
+    admin-events:
+      rule: PathPrefix(`/api/admin/events`)
+      service: event
+      middlewares:
+        - cors
+        - ratelimit
+        - forward-auth
+      priority: 20
+
     payments:
       rule: PathPrefix(`/api/payments`)
       service: payment

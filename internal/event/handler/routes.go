@@ -31,6 +31,7 @@ func (h *EventHandler) Routes() chi.Router {
 	// Admin routes
 	r.Group(func(r chi.Router) {
 		r.Use(sharedhttp.WithUserContext)
+		r.With(sharedhttp.RequireRole(sdomain.RoleAdmin)).Get("/api/admin/events", h.ListAll)
 		r.With(sharedhttp.RequireRole(sdomain.RoleAdmin)).Get("/api/events/pending", h.ListPending)
 		r.With(sharedhttp.RequireRole(sdomain.RoleAdmin)).Post("/api/events/{id}/approve", h.ApproveEvent)
 		r.With(sharedhttp.RequireRole(sdomain.RoleAdmin)).Post("/api/events/{id}/reject", h.RejectEvent)

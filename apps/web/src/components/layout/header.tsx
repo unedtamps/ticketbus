@@ -49,13 +49,8 @@ export function Header() {
 
           {hydrated && user ? (
             <>
-              <NavLink href="/dashboard" icon={LayoutDashboard}>Dashboard</NavLink>
-              {(isEO || isAdmin) && (
-                <NavLink href="/events" icon={CalendarPlus}>Create</NavLink>
-              )}
-              {isAdmin && (
-                <NavLink href="/admin" icon={Shield}>Admin</NavLink>
-              )}
+              <NavLink href="/dashboard" icon={isAdmin ? Shield : LayoutDashboard}>Dashboard</NavLink>
+              {isEO && <NavLink href="/events" icon={CalendarPlus}>Create</NavLink>}
               <span className="w-px h-5 bg-[#E8E3DC] mx-1" />
               <span className="text-xs text-[#8B8580] px-2 font-medium">{user.name}</span>
               <button

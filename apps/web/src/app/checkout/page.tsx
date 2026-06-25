@@ -99,7 +99,16 @@ function CheckoutForm() {
             }
           }, 2000);
         }
-      } catch {
+      } catch (err) {
+        // 409 — already paid, redirect to confirmation
+        const msg = err instanceof Error ? err.message : "";
+        if (msg.includes("already processed")) {
+          if (cancelled) return;
+          cancelled = true;
+          stopPolling();
+          router.push(`/confirmation/${bookingId}`);
+          return;
+        }
         // 404 or network — retry POST next interval tick
       }
     }, 5000);
@@ -231,10 +240,10 @@ function CheckoutForm() {
                 <span>Payment successful</span>
               </div>
               <button
-                onClick={() => router.push("/dashboard")}
+                onClick={() => router.push(`/confirmation/${bookingId}`)}
                 className="btn-accent w-full"
               >
-                View Dashboard <ArrowRight className="w-4 h-4" />
+                View Confirmation <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           )}

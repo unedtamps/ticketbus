@@ -143,6 +143,31 @@ func (r *EventRepo) ListPending(ctx context.Context, limit, offset int) ([]domai
 	return events, total, nil
 }
 
+// FindAll returns events filtered by status (admin). If status is empty, returns all events.
+func (r *EventRepo) FindAll(ctx context.Context, status string, limit, offset int) ([]domain.Event, int, error) {
+	var total int
+	r.db.QueryRow(ctx, `SELECT COUNT(*) FROM events WHERE ($1 = '' OR status = $1)`, status).Scan(&total)
+
+	rows, err := r.db.Query(ctx, `
+		SELECT id, organizer_id, title, description, venue_name, venue_address, venue_capacity, start_at, end_at, status, created_at, updated_at
+		FROM events WHERE ($1 = '' OR status = $1) ORDER BY created_at DESC LIMIT $2 OFFSET $3`, status, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var events []domain.Event
+	for rows.Next() {
+		var e domain.Event
+		var st string
+		if err := rows.Scan(&e.ID, &e.OrganizerID, &e.Title, &e.Description, &e.VenueName, &e.VenueAddress, &e.VenueCapacity, &e.StartAt, &e.EndAt, &st, &e.CreatedAt, &e.UpdatedAt); err != nil {
+			return nil, 0, err
+		}
+		e.Status = sdomain.EventStatus(st)
+		events = append(events, e)
+	}
+	return events, total, nil
+}
+
 // CreateTicketTypes inserts multiple ticket types.
 func (r *EventRepo) CreateTicketTypes(ctx context.Context, types []domain.TicketType) error {
 	for _, tt := range types {

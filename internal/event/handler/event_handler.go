@@ -278,3 +278,23 @@ func (h *EventHandler) ListPending(w http.ResponseWriter, r *http.Request) {
 	}
 	sharedhttp.OK(w, EventListResponse{Events: resp, Total: total})
 }
+
+// ListAll handles GET /admin/events (all events with optional status filter).
+func (h *EventHandler) ListAll(w http.ResponseWriter, r *http.Request) {
+	status := r.URL.Query().Get("status")
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		limit = 20
+	}
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	events, total, err := h.svc.ListAll(r.Context(), status, limit, offset)
+	if err != nil {
+		sharedhttp.InternalServerError(w, "failed to list events")
+		return
+	}
+	resp := make([]EventResponse, 0, len(events))
+	for _, e := range events {
+		resp = append(resp, EventResponse{ID: e.ID, OrganizerID: e.OrganizerID, VenueName: e.VenueName, VenueAddress: e.VenueAddress, VenueCapacity: e.VenueCapacity, Title: e.Title, Description: e.Description, StartAt: e.StartAt, EndAt: e.EndAt, Status: e.Status, CreatedAt: e.CreatedAt, UpdatedAt: e.UpdatedAt})
+	}
+	sharedhttp.OK(w, EventListResponse{Events: resp, Total: total})
+}

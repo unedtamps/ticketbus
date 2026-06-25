@@ -2,6 +2,16 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 import { toast } from "@/components/ui/toast";
 
+function setAccessTokenCookie(token: string) {
+  if (typeof document === "undefined") return;
+  document.cookie = `access_token=${token}; path=/; max-age=900; SameSite=Lax`;
+}
+
+function clearAccessTokenCookie() {
+  if (typeof document === "undefined") return;
+  document.cookie = "access_token=; path=/; max-age=0; SameSite=Lax";
+}
+
 class ApiClient {
   private refreshPromise: Promise<boolean> | null = null;
 
@@ -39,6 +49,7 @@ class ApiClient {
       const data = (json.data as Record<string, unknown>) || json;
       if (data.access_token) {
         localStorage.setItem("access_token", data.access_token as string);
+        setAccessTokenCookie(data.access_token as string);
         if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token as string);
         return true;
       }
@@ -51,6 +62,7 @@ class ApiClient {
   private clearSession() {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
+    clearAccessTokenCookie();
     window.dispatchEvent(new CustomEvent("auth:expired"));
   }
 

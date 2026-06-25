@@ -15,6 +15,12 @@ export const adminApi = {
     return api.get<PendingListResponse>(`/api/events/pending?limit=${limit}&offset=${offset}`);
   },
 
+  listAll(status = "", limit = 20, offset = 0) {
+    const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (status) qs.set("status", status);
+    return api.get<{ events: EventItem[]; total: number }>(`/api/admin/events?${qs.toString()}`);
+  },
+
   approveEvent(id: string) {
     return api.post<void>(`/api/events/${id}/approve`);
   },

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
@@ -22,7 +23,6 @@ export default function CreateEventPage() {
   const { user, loading: authLoading, hydrated, isEO } = useAuth();
   const router = useRouter();
 
-  const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
   const [title, setTitle] = useState("");
@@ -32,14 +32,15 @@ export default function CreateEventPage() {
   const [venueCapacity, setVenueCapacity] = useState("");
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
-  const [ticketTypes, setTicketTypes] = useState<TicketTypeInput[]>([emptyTicketType()]);
+  const [ticketTypes, setTicketTypes] = useState<TicketTypeInput[]>(() => [emptyTicketType()]);
 
-  useEffect(() => {
-    if (!authLoading && !user) router.push("/login");
-  }, [authLoading, user, router]);
+  const createMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => api.post("/api/events", payload),
+    onSuccess: () => setSuccess(true),
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   if (!hydrated) return null;
-  if (!user) return null;
   if (!isEO) {
     return (
       <div className="card text-center py-16 max-w-md mx-auto">
@@ -55,30 +56,22 @@ export default function CreateEventPage() {
     setTicketTypes(p => p.map((tt, j) => j === i ? { ...tt, [f]: v } : tt));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSubmitting(true);
     const tt = ticketTypes.map(t => ({
       name: t.name,
       price_cents: Math.round(parseFloat(t.price_dollars || "0") * 100),
       quantity: parseInt(t.quantity, 10) || 0,
       max_per_order: parseInt(t.max_per_order, 10) || 5,
     }));
-    try {
-      await api.post("/api/events", {
-        title, description,
-        venue_name: venueName, venue_address: venueAddress,
-        venue_capacity: parseInt(venueCapacity, 10) || 0,
-        start_at: new Date(startAt).toISOString(),
-        end_at: new Date(endAt).toISOString(),
-        ticket_types: tt,
-      });
-      setSuccess(true);
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to create event");
-    } finally {
-      setSubmitting(false);
-    }
+    createMutation.mutate({
+      title, description,
+      venue_name: venueName, venue_address: venueAddress,
+      venue_capacity: parseInt(venueCapacity, 10) || 0,
+      start_at: new Date(startAt).toISOString(),
+      end_at: new Date(endAt).toISOString(),
+      ticket_types: tt,
+    });
   }
 
   if (success) {
@@ -204,8 +197,8 @@ export default function CreateEventPage() {
           </div>
         </div>
 
-        <button type="submit" disabled={submitting} className="btn-accent w-full py-3 text-base">
-          {submitting ? "Creating..." : "Create Event"}
+        <button type="submit" disabled={createMutation.isPending} className="btn-accent w-full py-3 text-base">
+          {createMutation.isPending ? "Creating..." : "Create Event"}
         </button>
       </form>
     </div>

@@ -16,11 +16,11 @@ Traefik (:8000) — CORS, rate-limit, forward-auth (→ auth:8081/api/auth/verif
   ├─ /api/bookings/*   ┘→ inventory-service :8083 (reservations, bookings, seat counters)
   └─ /api/payments/*   → payment-service :8084  (checkout, mock webhook)
 
-Services communicate asynchronously via Kafka:
+Services communicate asynchronously via Kafka (4 brokers, RF=3, 4 partitions per topic):
   ├─ Kafka produces: organizer.created · event.{created,approved,rejected,updated,cancelled}
   │                  reservation.{created,expired} · ticket.issued
   │                  payment.{initiated,completed,failed}
-  └─ Kafka consumes: inventory listens to event.approved / payment.{completed,failed} / event.cancelled
+  └─ Kafka consumes: inventory listens to event.{approved,cancelled} / payment.{completed,failed}
                      payment listens to reservation.{created,expired}
                      event listens to organizer.created
 
@@ -36,17 +36,37 @@ Redis:
 |------|-------------|
 | `customer` | Browse published events, reserve tickets, checkout, view bookings |
 | `eo` (organizer) | Create events (pending), view own events, update/cancel own events |
-| `admin` | Approve/reject pending events, auto-seeded in dev mode |
+| `admin` | Approve/reject pending events, view all events, auto-seeded in dev mode |
+
+## Transactional Outbox
+
+All inter-service communication flows through the **transactional outbox pattern** — each service writes domain events to an outbox table in its own database within the same transaction as the business data. A background worker polls every 1s, publishes undelivered messages to Kafka, and marks them `delivered=true`.
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────┐
+│  Business Tx │────▶│ Outbox Table │────▶│  Worker  │──▶ Kafka
+│ (atomic)     │     │ (same DB)    │     │ (1s poll)│
+└──────────────┘     └──────────────┘     └──────────┘
+```
+
+| Service | Produces via Outbox | Consumes |
+|---------|-------------------|----------|
+| Auth | `organizer.created` | — |
+| Event | `event.{created,approved,rejected,updated,cancelled}` | `organizer.created` |
+| Inventory | `reservation.{created,expired}` | `event.{approved,cancelled}`, `payment.{completed,failed}` |
+| Payment | `payment.{initiated,completed,failed}` | `reservation.{created,expired}` |
+
+This guarantees **at-least-once delivery** and eliminates the dual-write problem (no DB write that can succeed while the Kafka write fails). Consumers are idempotent via `ON CONFLICT DO NOTHING` and cache-miss-safe handlers.
 
 ## Services
 
 | Service | Language | Port | Database | Responsibilities |
 |---------|----------|------|----------|-----------------|
-| `auth-service` | Go | 8081 | `auth_db` (5432) | User registration, login, JWT tokens, refresh, ForwardAuth verify, admin seed |
-| `event-service` | Go | 8082 | `event_db` (5433) | Event CRUD, organizer profiles, admin approval workflow, seat availability reads |
-| `inventory-service` | Go | 8083 | `inventory_db` (5434) | Reservation holds (Redis TTL), booking persistence, seat counter init/reserve/release, expiry listener |
-| `payment-service` | Go | 8084 | `payment_db` (5435) | Mock checkout, async webhook (60s delay, 75% success), transaction status |
-| `web` | Next.js 16 | 3000 | — | Light-mode UI, DM Serif Display + DM Sans, ticket-stub cards, toast notifications |
+| `auth-service` | Go | 8081 | `auth_db` (5432) | Registration, login, JWT (access 15m, refresh 7d), ForwardAuth verify, admin seed, outbox: organizer.created |
+| `event-service` | Go | 8082 | `event_db` (5433) | Event CRUD, organizer profiles, admin approval workflow, live seat availability (Redis reader), outbox: event.* |
+| `inventory-service` | Go | 8083 | `inventory_db` (5434) | Reservation holds (Redis TTL), booking persistence, seat counter init/reserve/release, expiry listener, cancel cascade with refund tracking, outbox: reservation.* |
+| `payment-service` | Go | 8084 | `payment_db` (5435) | Mock checkout, async webhook (60s delay, 75% success), transaction status, idempotency guard (409 on duplicate), outbox: payment.* |
+| `web` | Next.js 16 | 3000 | — | TanStack Query data fetching, proxy.ts route auth guards, light-mode ticket-stub UI, toast notifications, ConfirmDialog, SSR homepage |
 
 ## Event Lifecycle
 
@@ -72,11 +92,32 @@ Redis TTL expires → keyspace notification → SubscribeExpiry reads shadow key
 Race: if payment.completed/failed fires simultaneously, Confirm/Release return nil on cache miss (idempotent)
 ```
 
+### Event cancel & refund flow
+
+```
+EO cancels event → Kafka: event.cancelled
+  ↓
+Inventory receives → Upsert("cancelled") in event_status_cache
+  ↓
+CancelByEventID: all bookings → status=cancelled, refund_status=pending
+Seats released back to Redis counters
+  ↓
+Payment already processing? → Confirm() checks IsPublished()
+  ├─ false (cancelled) → booking created with status=cancelled, refund_status=pending
+  └─ true (published)  → booking confirmed normally, refund_status=none
+```
+
+| refund_status | Meaning |
+|---------------|---------|
+| `none` | No refund needed (confirmed booking, event published) |
+| `pending` | Refund owed (event cancelled after payment succeeded) |
+| `refunded` | Refund processed |
+
 ## Quick Start
 
 ### Prerequisites
 
-- Go 1.24+, Node.js 22+, pnpm, Docker, [direnv](https://direnv.net/)
+- Go 1.26+, Node.js 22+, pnpm, Docker, [direnv](https://direnv.net/)
 
 ```bash
 # 1. Allow direnv (loads per-service .env files)
@@ -164,6 +205,7 @@ Each service has its own `.env` file under `cmd/<service>/.env` loaded by `diren
 | POST | `/api/events/{id}/cancel` | Bearer | EO |
 | GET | `/api/events/mine` | Bearer | EO |
 | GET | `/api/events/organizers/me` | Bearer | EO |
+| GET | `/api/admin/events` | Bearer | Admin |
 | GET | `/api/events/pending` | Bearer | Admin |
 | POST | `/api/events/{id}/approve` | Bearer | Admin |
 | POST | `/api/events/{id}/reject` | Bearer | Admin |
@@ -184,6 +226,44 @@ Each service has its own `.env` file under `cmd/<service>/.env` loaded by `diren
 | GET | `/api/payments` | Bearer | Customer |
 | POST | `/api/payments/webhook/{provider}` | No | — |
 
+## Testing
+
+### Unit tests (115 tests, 5 packages)
+
+```bash
+make test        # go test -race -count=1 ./...
+```
+
+All infrastructure is mocked via [mockery](https://github.com/vektra/mockery) (15 generated mocks). No Docker needed.
+
+| Package | Tests |
+|---------|-------|
+| `auth/application` | 22 |
+| `auth/jwt` | 10 |
+| `event/application` | 34 |
+| `inventory/application` | 26 |
+| `payment/application` | 23 |
+
+### Integration tests (25 tests)
+
+```bash
+make integration-test      # go test -tags=integration ./tests/integration/...
+make integration-test-race # with race detector
+```
+
+Uses [testcontainers-go](https://github.com/testcontainers/testcontainers-go) to spin up ephemeral PostgreSQL, Redis, and KRaft Kafka containers. Requires Docker daemon. All 4 services are wired in-process and tested end-to-end — register → login → create event → approve → reserve → checkout → webhook → confirm booking.
+
+## CI/CD
+
+GitHub Actions on push and pull request to `master` (`.github/workflows/test.yml`):
+
+| Job | Command | Timeout |
+|-----|---------|---------|
+| Unit Tests | `go test -race -count=1 ./...` | 10 min |
+| Integration Tests | `go test -tags=integration -race -count=1 -v ./tests/integration/...` | 15 min |
+
+Both jobs run in parallel and are **required status checks** before merge.
+
 ## Project Structure
 
 ```
@@ -198,14 +278,26 @@ internal/
   inventory/                  Hexagonal: handler, application, domain, postgres, redis, kafka, config
   payment/                    Hexagonal: handler, application, domain, postgres, processor, kafka, config
   shared/                     Shared: db, http (middleware, response helpers), kafka, domain (events), log
+  shared/outbox/              Transactional outbox: worker, store, migrations
+migrations/
+  auth/                       Auth DB migrations
+  event/                      Event DB migrations
+  inventory/                  Inventory DB migrations (bookings, event_status_cache)
+  payment/                    Payment DB migrations (transactions)
+  shared/outbox/              Outbox table migrations (per-service)
+tests/
+  fixtures/                   Shared test fixture generators
+  integration/                25 integration tests (testcontainers-go)
 apps/web/                     Next.js 16 App Router
   src/
-    app/                      Pages: /, /login, /register, /dashboard, /events, /admin, /checkout
+    app/                      Pages: /, /login, /register, /dashboard, /events, /checkout, /confirmation
     components/
       layout/                 Header
-      ui/                     Toast notification system
-    lib/                      api-client, auth-context, format, admin-api
+      ui/                     Toast notifications, ConfirmDialog
+    lib/                      api-client, auth-context, query-provider (TanStack), format
+    proxy.ts                  Route-level auth guards
     types/                    TypeScript interfaces
-docker/                       Docker Compose (Kafka, Redis, PostgreSQL × 4, Traefik, Kafka UI)
+docker/                       Docker Compose (Kafka ×4, Redis, PostgreSQL ×4, Traefik, Kafka UI)
 traefik/                      Traefik static + dynamic config (routers, middlewares, services)
+.github/workflows/            CI: unit + integration tests
 ```

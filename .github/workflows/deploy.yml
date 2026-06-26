@@ -1,0 +1,55 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["Test"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build & Push (${{ matrix.service }})
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [auth, event, inventory, payment]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Set image tags
+        id: tags
+        run: |
+          HEAD="${{ github.event.workflow_run.head_sha }}"
+          IMAGE="${{ secrets.DOCKER_USERNAME }}/${{ matrix.service }}-service"
+
+          TAG=$(git tag --points-at "$HEAD" --list "v*" | head -1)
+          if [[ -n "$TAG" ]]; then
+            VERSION="${TAG#v}"
+            echo "TAGS=${IMAGE}:${VERSION}" >> $GITHUB_OUTPUT
+          else
+            SHA=$(echo "$HEAD" | cut -c1-7)
+            echo "TAGS=${IMAGE}:latest,${IMAGE}:${SHA}" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          build-args: SERVICE=${{ matrix.service }}-service
+          push: true
+          tags: ${{ steps.tags.outputs.TAGS }}

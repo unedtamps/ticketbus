@@ -24,6 +24,7 @@ import (
 	sharedkafka "github.com/nedo/TicketSaas/internal/shared/kafka"
 	"github.com/nedo/TicketSaas/internal/shared/log"
 	"github.com/nedo/TicketSaas/internal/shared/outbox"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -75,7 +76,16 @@ func main() {
 	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger)
 
 	// Application
-	svc := application.NewInventoryService(bookingRepo, reservationCache, seatCounter, consumer, eventStatusRepo, outboxStore, logger, cfg.ReservationTTL)
+	svc := application.NewInventoryService(
+		bookingRepo,
+		reservationCache,
+		seatCounter,
+		consumer,
+		eventStatusRepo,
+		outboxStore,
+		logger,
+		cfg.ReservationTTL,
+	)
 
 	// Start Kafka consumers + Redis expiry listener + outbox worker
 	ctx, cancel := context.WithCancel(context.Background())
@@ -90,10 +100,13 @@ func main() {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(sharedhttp.NewMetricsMiddleware("inventory-service"))
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/api/bookings/health", func(w http.ResponseWriter, r *http.Request) {
 		sharedhttp.OK(w, map[string]string{"status": "ok", "service": "inventory-service"})
 	})
+
+	r.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	r.Mount("/", h.Routes())
 

@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/redis/go-redis/v9"
 	"github.com/nedo/TicketSaas/internal/event/application"
 	"github.com/nedo/TicketSaas/internal/event/config"
 	"github.com/nedo/TicketSaas/internal/event/handler"
@@ -23,6 +22,8 @@ import (
 	sharedkafka "github.com/nedo/TicketSaas/internal/shared/kafka"
 	"github.com/nedo/TicketSaas/internal/shared/log"
 	"github.com/nedo/TicketSaas/internal/shared/outbox"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -80,10 +81,13 @@ func main() {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(sharedhttp.NewMetricsMiddleware("event-service"))
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/api/events/health", func(w http.ResponseWriter, r *http.Request) {
 		sharedhttp.OK(w, map[string]string{"status": "ok", "service": "event-service"})
 	})
+
+	r.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	r.Mount("/", h.Routes())
 

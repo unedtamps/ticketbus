@@ -22,6 +22,7 @@ import (
 	sharedkafka "github.com/nedo/TicketSaas/internal/shared/kafka"
 	"github.com/nedo/TicketSaas/internal/shared/log"
 	"github.com/nedo/TicketSaas/internal/shared/outbox"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
@@ -91,7 +92,12 @@ func main() {
 	// Seed admin user during development (idempotent).
 	if cfg.AppEnv == "development" {
 		if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
-			created, err := authSvc.SeedAdmin(context.Background(), cfg.AdminEmail, cfg.AdminPassword, "Admin")
+			created, err := authSvc.SeedAdmin(
+				context.Background(),
+				cfg.AdminEmail,
+				cfg.AdminPassword,
+				"Admin",
+			)
 			if err != nil {
 				logger.Error("failed to seed admin", "error", err)
 				os.Exit(1)
@@ -110,10 +116,13 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(sharedhttp.WithUserContext)
+	r.Use(sharedhttp.NewMetricsMiddleware("auth-service"))
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/api/auth/health", func(w http.ResponseWriter, r *http.Request) {
 		sharedhttp.OK(w, map[string]string{"status": "ok", "service": "auth-service"})
 	})
+
+	r.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	r.Mount("/", authHandler.Routes())
 

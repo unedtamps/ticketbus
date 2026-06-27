@@ -22,6 +22,7 @@ import (
 	sharedkafka "github.com/nedo/TicketSaas/internal/shared/kafka"
 	"github.com/nedo/TicketSaas/internal/shared/log"
 	"github.com/nedo/TicketSaas/internal/shared/outbox"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -60,7 +61,14 @@ func main() {
 	}
 	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger)
 
-	svc := application.NewPaymentService(txnRepo, mockProcessor, consumer, outboxStore, logger, cfg.WebhookBaseURL)
+	svc := application.NewPaymentService(
+		txnRepo,
+		mockProcessor,
+		consumer,
+		outboxStore,
+		logger,
+		cfg.WebhookBaseURL,
+	)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -72,10 +80,13 @@ func main() {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(sharedhttp.NewMetricsMiddleware("payment-service"))
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/api/payments/health", func(w http.ResponseWriter, r *http.Request) {
 		sharedhttp.OK(w, map[string]string{"status": "ok", "service": "payment-service"})
 	})
+
+	r.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	r.Mount("/", h.Routes())
 

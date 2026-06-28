@@ -236,7 +236,7 @@ func startContainers() *TestEnv {
 		eventStatusRepo,
 		invOutbox,
 		invLogger,
-		30,
+		300,
 	)
 	invHandler := invhandler.NewInventoryHandler(invSvc)
 	invSrv := httptest.NewServer(invHandler.Routes())
@@ -263,10 +263,12 @@ func startContainers() *TestEnv {
 	payOutboxWorker := outbox.NewWorker(payPool, kafkaProducer, payLogger)
 
 	// ── Seed admin ──
-	seeded, err := authSvc.SeedAdmin(ctx, "admin@test.com", "Admin123!", "Admin")
+	n, err := authSvc.SeedAdmins(ctx, []application.AdminSeed{
+		{Email: "admin@test.com", Password: "Admin123!", Name: "Admin"},
+	})
 	if err != nil {
 		fmt.Printf("WARNING: seed admin: %v\n", err)
-	} else if seeded {
+	} else if n > 0 {
 		fmt.Println("  admin seeded")
 	}
 

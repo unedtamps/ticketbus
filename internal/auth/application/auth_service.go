@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -196,9 +197,36 @@ func (s *AuthService) DeleteUser(ctx context.Context, userID string) error {
 	return s.userRepo.DeleteByID(ctx, userID)
 }
 
-// SeedAdmin creates the initial admin user if none exists with the given email.
-// Returns (true, nil) if created, (false, nil) if already present.
-func (s *AuthService) SeedAdmin(ctx context.Context, email, password, name string) (bool, error) {
+// AdminSeed represents a single admin account to seed.
+type AdminSeed struct {
+	Email    string
+	Password string
+	Name     string // defaults to email prefix if empty
+}
+
+// SeedAdmins creates admin users for each entry. Idempotent — skips existing emails.
+// Returns count of newly created admins and the first error encountered.
+func (s *AuthService) SeedAdmins(ctx context.Context, admins []AdminSeed) (int, error) {
+	var created int
+	for _, a := range admins {
+		name := a.Name
+		if name == "" {
+			parts := strings.SplitN(a.Email, "@", 2)
+			name = parts[0]
+		}
+		ok, err := s.seedOne(ctx, a.Email, a.Password, name)
+		if err != nil {
+			return created, err
+		}
+		if ok {
+			created++
+		}
+	}
+	return created, nil
+}
+
+// seedOne creates a single admin user if none exists with the given email.
+func (s *AuthService) seedOne(ctx context.Context, email, password, name string) (bool, error) {
 	existing, _ := s.userRepo.FindByEmail(ctx, email)
 	if existing != nil {
 		return false, nil

@@ -46,6 +46,25 @@ func Test_ReserveTicketsSucceeds(t *testing.T) {
 	assert.Equal(t, "held", rr.Data.Status)
 }
 
+func Test_ReserveWithWrongPriceReturns400(t *testing.T) {
+	env := getTestEnv()
+	eventID, ttIDs := setupApprovedEvent(t, env)
+
+	cust := env.registerAndLogin("customer")
+	ch := env.authHeadersWith(cust.AccessToken)
+
+	resp, body, err := doJSON(http.MethodPost, env.invURL+"/api/inventory/reserve", map[string]interface{}{
+		"event_id": eventID,
+		"items": []map[string]interface{}{
+			{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 1},
+		},
+	}, ch)
+	require.NoError(t, err)
+	assert.Equal(t, 400, resp.StatusCode, "expected 400 for wrong price: %s", string(body))
+	assert.Contains(t, string(body), "unit_price_cents does not match",
+		"error should mention price mismatch")
+}
+
 func Test_OverReserveReturnsConflict(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
@@ -74,7 +93,7 @@ func Test_ConfirmAndListBookings(t *testing.T) {
 	_, body, err := doJSON(http.MethodPost, env.invURL+"/api/inventory/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
-			{"ticket_type_id": ttIDs[0], "quantity": 2, "unit_price_cents": 5000},
+			{"ticket_type_id": ttIDs[0], "quantity": 2, "unit_price_cents": 10000},
 		},
 	}, ch)
 	require.NoError(t, err)

@@ -2,7 +2,8 @@
         dev dev-auth dev-event dev-inventory dev-payment dev-web \
         build build-auth build-event build-inventory build-payment clean \
         migrate migrate-auth-up migrate-event-up migrate-inventory-up migrate-payment-up \
-        test lint format direnv-allow integration-test integration-test-race
+        test lint format direnv-allow integration-test integration-test-race \
+        k6-smoke k6-load k6-stress
 
 # Default target
 help:
@@ -33,6 +34,10 @@ help:
 	@echo "  make mocks                 Regenerate mockery mocks"
 	@echo "  make lint                  Run Go linter"
 	@echo "  make format                Format Go code"
+	@echo ""
+	@echo "  make k6-smoke              Run k6 smoke test (5 VUs, 1m)"
+	@echo "  make k6-load               Run k6 load test (50 VUs, 5m)"
+	@echo "  make k6-stress             Run k6 stress test (10→300 VUs, 10m)"
 
 # Infrastructure
 infra-up:
@@ -156,3 +161,16 @@ lint:
 
 format:
 	gofmt -w .
+
+# k6 load testing (requires k6: https://k6.io/docs/get-started/installation/)
+K6 ?= k6
+TARGET_HOST ?= http://localhost:8000
+
+k6-smoke:
+	TARGET_HOST=$(TARGET_HOST) $(K6) run apps/k6/smoke.js
+
+k6-load:
+	TARGET_HOST=$(TARGET_HOST) $(K6) run apps/k6/load.js
+
+k6-stress:
+	TARGET_HOST=$(TARGET_HOST) $(K6) run apps/k6/stress.js

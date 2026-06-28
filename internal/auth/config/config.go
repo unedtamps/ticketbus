@@ -14,8 +14,9 @@ type Config struct {
 	JWTPrivateKey string `env:"JWT_PRIVATE_KEY"`
 	JWTPublicKey  string `env:"JWT_PUBLIC_KEY"`
 	KafkaBrokers  string `env:"KAFKA_BROKERS"    envDefault:"localhost:9092"`
-	AdminEmail    string `env:"ADMIN_EMAIL"`
-	AdminPassword string `env:"ADMIN_PASSWORD"`
+	AdminEmails    []string `env:"ADMIN_EMAILS"    envDefault:""`
+	AdminPasswords []string `env:"ADMIN_PASSWORDS" envDefault:""`
+	SeedAdmin      bool     `env:"SEED_ADMIN"      envDefault:"false"`
 }
 
 // Load reads configuration from environment variables.

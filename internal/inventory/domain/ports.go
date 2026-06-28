@@ -26,6 +26,8 @@ type SeatCounter interface {
 	Reserve(ctx context.Context, eventID, ticketTypeID string, qty int) error
 	Release(ctx context.Context, eventID, ticketTypeID string, qty int) error
 	Available(ctx context.Context, eventID, ticketTypeID string) (int, error)
+	SetPrice(ctx context.Context, eventID, ticketTypeID string, price int) error
+	GetPrice(ctx context.Context, eventID, ticketTypeID string) (int, error)
 }
 
 // EventConsumer defines the contract for consuming events from other services.

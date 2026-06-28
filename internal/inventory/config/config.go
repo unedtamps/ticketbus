@@ -13,7 +13,7 @@ type Config struct {
 	DatabaseURL    string `env:"DATABASE_URL" envDefault:"postgres://ticketsaas:ticketsaas@localhost:5434/inventory_db?sslmode=disable"`
 	RedisAddr      string `env:"REDIS_ADDR" envDefault:"localhost:6379"`
 	KafkaBrokers   string `env:"KAFKA_BROKERS" envDefault:"localhost:9092"`
-	ReservationTTL int    `env:"RESERVATION_TTL" envDefault:"300"`
+	ReservationTTL int    `env:"RESERVATION_TTL" envDefault:"3600"`
 }
 
 // Load reads configuration from environment variables.

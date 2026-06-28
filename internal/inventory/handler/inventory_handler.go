@@ -56,6 +56,10 @@ func (h *InventoryHandler) Reserve(w http.ResponseWriter, r *http.Request) {
 			sharedhttp.Error(w, http.StatusConflict, "not enough seats available")
 			return
 		}
+		if errors.Is(err, domain.ErrPriceMismatch) {
+			sharedhttp.BadRequest(w, err.Error())
+			return
+		}
 		sharedhttp.InternalServerError(w, "reservation failed")
 		return
 	}

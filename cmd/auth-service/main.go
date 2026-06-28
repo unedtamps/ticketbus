@@ -89,24 +89,26 @@ func main() {
 	// Primary adapter (HTTP)
 	authHandler := handler.NewAuthHandler(authSvc)
 
-	// Seed admin user during development (idempotent).
-	if cfg.AppEnv == "development" {
-		if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
-			created, err := authSvc.SeedAdmin(
-				context.Background(),
-				cfg.AdminEmail,
-				cfg.AdminPassword,
-				"Admin",
-			)
-			if err != nil {
-				logger.Error("failed to seed admin", "error", err)
-				os.Exit(1)
+	// Seed admin users (idempotent).
+	if cfg.SeedAdmin && len(cfg.AdminEmails) > 0 {
+		if len(cfg.AdminEmails) != len(cfg.AdminPasswords) {
+			logger.Error("ADMIN_EMAILS and ADMIN_PASSWORDS must have the same length")
+			os.Exit(1)
+		}
+		admins := make([]application.AdminSeed, len(cfg.AdminEmails))
+		for i := range cfg.AdminEmails {
+			admins[i] = application.AdminSeed{
+				Email:    cfg.AdminEmails[i],
+				Password: cfg.AdminPasswords[i],
 			}
-			if created {
-				logger.Info("admin user created", "email", cfg.AdminEmail)
-			}
-		} else {
-			logger.Warn("ADMIN_EMAIL/ADMIN_PASSWORD not set, skipping admin seed")
+		}
+		created, err := authSvc.SeedAdmins(context.Background(), admins)
+		if err != nil {
+			logger.Error("failed to seed admins", "error", err)
+			os.Exit(1)
+		}
+		if created > 0 {
+			logger.Info("admin users created", "count", created)
 		}
 	}
 

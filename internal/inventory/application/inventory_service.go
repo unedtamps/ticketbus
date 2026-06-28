@@ -54,6 +54,15 @@ func (s *InventoryService) Reserve(ctx context.Context, userID, eventID string, 
 	}
 
 	for _, item := range items {
+		// Validate price against stored authoritative price
+		realPrice, err := s.seatCounter.GetPrice(ctx, eventID, item.TicketTypeID)
+		if err != nil {
+			return nil, err
+		}
+		if item.UnitPriceCents != realPrice {
+			return nil, fmt.Errorf("%w: expected %d, got %d", domain.ErrPriceMismatch, realPrice, item.UnitPriceCents)
+		}
+
 		if err := s.seatCounter.Reserve(ctx, eventID, item.TicketTypeID, item.Quantity); err != nil {
 			// Rollback already reserved
 			for _, rb := range items {
@@ -176,14 +185,17 @@ func (s *InventoryService) HandleExpiry(ctx context.Context, res *domain.Reserva
 	s.logger.Info("reservation expired", "booking_id", bookingID)
 }
 
-// InitSeats initializes seat counters when an event is approved.
+// InitSeats initializes seat counters and stores ticket prices when an event is approved.
 func (s *InventoryService) InitSeats(ctx context.Context, eventID string, ticketTypes []domain.TicketTypeInfo) error {
 	for _, tt := range ticketTypes {
 		if err := s.seatCounter.Init(ctx, eventID, tt.TicketTypeID, tt.Quantity); err != nil {
 			return err
 		}
+		if err := s.seatCounter.SetPrice(ctx, eventID, tt.TicketTypeID, tt.PriceCents); err != nil {
+			return err
+		}
 	}
-	s.logger.Info("seat counters initialized", "event_id", eventID, "types", len(ticketTypes))
+	s.logger.Info("seat counters and prices initialized", "event_id", eventID, "types", len(ticketTypes))
 	return nil
 }
 

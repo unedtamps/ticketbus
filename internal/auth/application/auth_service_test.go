@@ -354,7 +354,7 @@ func TestRefreshToken_DeleteFails_AbortsRotation(t *testing.T) {
 	assert.ErrorIs(t, err, deleteErr)
 }
 
-func TestSeedAdmin_CreatesAdmin(t *testing.T) {
+func TestSeedAdmins_CreatesAdmin(t *testing.T) {
 	userRepo := mocks.NewMockUserRepository(t)
 	tokenRepo := mocks.NewMockRefreshTokenRepository(t)
 	hasher := mocks.NewMockPasswordHasher(t)
@@ -370,12 +370,14 @@ func TestSeedAdmin_CreatesAdmin(t *testing.T) {
 
 	svc := newAuthService(t, userRepo, tokenRepo, hasher, tokenSvc)
 
-	created, err := svc.SeedAdmin(ctx, "admin@ticketsaas.com", "admin123", "Admin")
+	n, err := svc.SeedAdmins(ctx, []application.AdminSeed{
+		{Email: "admin@ticketsaas.com", Password: "admin123", Name: "Admin"},
+	})
 	require.NoError(t, err)
-	assert.True(t, created)
+	assert.Equal(t, 1, n)
 }
 
-func TestSeedAdmin_AlreadyExists(t *testing.T) {
+func TestSeedAdmins_AlreadyExists(t *testing.T) {
 	userRepo := mocks.NewMockUserRepository(t)
 	tokenRepo := mocks.NewMockRefreshTokenRepository(t)
 	hasher := mocks.NewMockPasswordHasher(t)
@@ -391,9 +393,11 @@ func TestSeedAdmin_AlreadyExists(t *testing.T) {
 
 	svc := newAuthService(t, userRepo, tokenRepo, hasher, tokenSvc)
 
-	created, err := svc.SeedAdmin(ctx, "admin@ticketsaas.com", "admin123", "Admin")
+	n, err := svc.SeedAdmins(ctx, []application.AdminSeed{
+		{Email: "admin@ticketsaas.com", Password: "admin123", Name: "Admin"},
+	})
 	require.NoError(t, err)
-	assert.False(t, created)
+	assert.Equal(t, 0, n)
 }
 
 func TestGetMe_Found(t *testing.T) {

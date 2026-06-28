@@ -20,9 +20,9 @@ http:
 
     ratelimit:
       rateLimit:
-        average: 120
+        average: 30000
         period: 1m
-        burst: 30
+        burst: 6000
 
     forward-auth:
       forwardAuth:

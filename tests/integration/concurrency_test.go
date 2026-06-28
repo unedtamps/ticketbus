@@ -178,6 +178,18 @@ func TestConcurrentBookingConsistency(t *testing.T) {
 		reservesFail,
 	)
 
+	// Extend reservation TTLs in Redis so they don't expire during settle
+	if keys, err := env.rdb.Keys(ctx, "reservation:*").Result(); err == nil {
+		for _, k := range keys {
+			env.rdb.Expire(ctx, k, 3600*time.Second)
+		}
+	}
+	if keys, err := env.rdb.Keys(ctx, "rsvn-data:*").Result(); err == nil {
+		for _, k := range keys {
+			env.rdb.Expire(ctx, k, 3600*time.Second)
+		}
+	}
+
 	// ── 4. Settle async pipeline ──
 	pools := map[string]*pgxpool.Pool{
 		"auth": env.authPool, "event": env.eventPool,

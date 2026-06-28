@@ -109,6 +109,78 @@ func (_c *MockSeatCounter_Available_Call) RunAndReturn(run func(ctx context.Cont
 	return _c
 }
 
+// GetPrice provides a mock function for the type MockSeatCounter
+func (_mock *MockSeatCounter) GetPrice(ctx context.Context, eventID string, ticketTypeID string) (int, error) {
+	ret := _mock.Called(ctx, eventID, ticketTypeID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetPrice")
+	}
+
+	var r0 int
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (int, error)); ok {
+		return returnFunc(ctx, eventID, ticketTypeID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) int); ok {
+		r0 = returnFunc(ctx, eventID, ticketTypeID)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, eventID, ticketTypeID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockSeatCounter_GetPrice_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetPrice'
+type MockSeatCounter_GetPrice_Call struct {
+	*mock.Call
+}
+
+// GetPrice is a helper method to define mock.On call
+//   - ctx context.Context
+//   - eventID string
+//   - ticketTypeID string
+func (_e *MockSeatCounter_Expecter) GetPrice(ctx any, eventID any, ticketTypeID any) *MockSeatCounter_GetPrice_Call {
+	return &MockSeatCounter_GetPrice_Call{Call: _e.mock.On("GetPrice", ctx, eventID, ticketTypeID)}
+}
+
+func (_c *MockSeatCounter_GetPrice_Call) Run(run func(ctx context.Context, eventID string, ticketTypeID string)) *MockSeatCounter_GetPrice_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockSeatCounter_GetPrice_Call) Return(n int, err error) *MockSeatCounter_GetPrice_Call {
+	_c.Call.Return(n, err)
+	return _c
+}
+
+func (_c *MockSeatCounter_GetPrice_Call) RunAndReturn(run func(ctx context.Context, eventID string, ticketTypeID string) (int, error)) *MockSeatCounter_GetPrice_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Init provides a mock function for the type MockSeatCounter
 func (_mock *MockSeatCounter) Init(ctx context.Context, eventID string, ticketTypeID string, total int) error {
 	ret := _mock.Called(ctx, eventID, ticketTypeID, total)
@@ -312,6 +384,75 @@ func (_c *MockSeatCounter_Reserve_Call) Return(err error) *MockSeatCounter_Reser
 }
 
 func (_c *MockSeatCounter_Reserve_Call) RunAndReturn(run func(ctx context.Context, eventID string, ticketTypeID string, qty int) error) *MockSeatCounter_Reserve_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetPrice provides a mock function for the type MockSeatCounter
+func (_mock *MockSeatCounter) SetPrice(ctx context.Context, eventID string, ticketTypeID string, price int) error {
+	ret := _mock.Called(ctx, eventID, ticketTypeID, price)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetPrice")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int) error); ok {
+		r0 = returnFunc(ctx, eventID, ticketTypeID, price)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockSeatCounter_SetPrice_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetPrice'
+type MockSeatCounter_SetPrice_Call struct {
+	*mock.Call
+}
+
+// SetPrice is a helper method to define mock.On call
+//   - ctx context.Context
+//   - eventID string
+//   - ticketTypeID string
+//   - price int
+func (_e *MockSeatCounter_Expecter) SetPrice(ctx any, eventID any, ticketTypeID any, price any) *MockSeatCounter_SetPrice_Call {
+	return &MockSeatCounter_SetPrice_Call{Call: _e.mock.On("SetPrice", ctx, eventID, ticketTypeID, price)}
+}
+
+func (_c *MockSeatCounter_SetPrice_Call) Run(run func(ctx context.Context, eventID string, ticketTypeID string, price int)) *MockSeatCounter_SetPrice_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 int
+		if args[3] != nil {
+			arg3 = args[3].(int)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockSeatCounter_SetPrice_Call) Return(err error) *MockSeatCounter_SetPrice_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockSeatCounter_SetPrice_Call) RunAndReturn(run func(ctx context.Context, eventID string, ticketTypeID string, price int) error) *MockSeatCounter_SetPrice_Call {
 	_c.Call.Return(run)
 	return _c
 }

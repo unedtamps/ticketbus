@@ -41,6 +41,7 @@ func TestReserve_Success_SingleItem(t *testing.T) {
 	consumer := mocks.NewMockEventConsumer(t)
 	ctx := context.Background()
 	items := []domain.BookingItem{*fixtures.NewTestBookingItem(fixtures.WithBookingItemTicketTypeID("vip"), fixtures.WithBookingItemQuantity(2), fixtures.WithBookingItemUnitPrice(10000))}
+	seatCounter.EXPECT().GetPrice(ctx, "event-1", "vip").Return(10000, nil)
 	seatCounter.EXPECT().Reserve(ctx, "event-1", "vip", 2).Return(nil)
 	cache.EXPECT().Save(ctx, mock.AnythingOfType("*domain.Reservation"), 300).Return(nil)
 	svc, _ := newInventoryService(t, bookingRepo, cache, seatCounter, consumer)
@@ -61,6 +62,8 @@ func TestReserve_Success_MultiItem(t *testing.T) {
 		*fixtures.NewTestBookingItem(fixtures.WithBookingItemTicketTypeID("vip"), fixtures.WithBookingItemQuantity(2), fixtures.WithBookingItemUnitPrice(10000)),
 		*fixtures.NewTestBookingItem(fixtures.WithBookingItemTicketTypeID("ga"), fixtures.WithBookingItemQuantity(3), fixtures.WithBookingItemUnitPrice(5000)),
 	}
+	seatCounter.EXPECT().GetPrice(ctx, "event-1", "vip").Return(10000, nil)
+	seatCounter.EXPECT().GetPrice(ctx, "event-1", "ga").Return(5000, nil)
 	seatCounter.EXPECT().Reserve(ctx, "event-1", "vip", 2).Return(nil)
 	seatCounter.EXPECT().Reserve(ctx, "event-1", "ga", 3).Return(nil)
 	cache.EXPECT().Save(ctx, mock.AnythingOfType("*domain.Reservation"), 300).Return(nil)
@@ -88,6 +91,7 @@ func TestReserve_FirstItemNoSeats(t *testing.T) {
 	consumer := mocks.NewMockEventConsumer(t)
 	ctx := context.Background()
 	items := []domain.BookingItem{*fixtures.NewTestBookingItem(fixtures.WithBookingItemTicketTypeID("vip"), fixtures.WithBookingItemQuantity(5))}
+	seatCounter.EXPECT().GetPrice(ctx, "event-1", "vip").Return(5000, nil)
 	seatCounter.EXPECT().Reserve(ctx, "event-1", "vip", 5).Return(domain.ErrNoSeatsAvailable)
 	svc, _ := newInventoryService(t, bookingRepo, cache, seatCounter, consumer)
 	_, err := svc.Reserve(ctx, "user-1", "event-1", items)
@@ -104,6 +108,8 @@ func TestReserve_SecondItemNoSeats_RollbackFirst(t *testing.T) {
 		*fixtures.NewTestBookingItem(fixtures.WithBookingItemTicketTypeID("vip"), fixtures.WithBookingItemQuantity(2), fixtures.WithBookingItemUnitPrice(10000)),
 		*fixtures.NewTestBookingItem(fixtures.WithBookingItemTicketTypeID("ga"), fixtures.WithBookingItemQuantity(10), fixtures.WithBookingItemUnitPrice(5000)),
 	}
+	seatCounter.EXPECT().GetPrice(ctx, "event-1", "vip").Return(10000, nil)
+	seatCounter.EXPECT().GetPrice(ctx, "event-1", "ga").Return(5000, nil)
 	seatCounter.EXPECT().Reserve(ctx, "event-1", "vip", 2).Return(nil)
 	seatCounter.EXPECT().Reserve(ctx, "event-1", "ga", 10).Return(domain.ErrNoSeatsAvailable)
 	seatCounter.EXPECT().Release(ctx, "event-1", "vip", 2).Return(nil)
@@ -123,6 +129,8 @@ func TestReserve_CacheSaveFails_RollbackAll(t *testing.T) {
 		*fixtures.NewTestBookingItem(fixtures.WithBookingItemTicketTypeID("ga"), fixtures.WithBookingItemQuantity(3)),
 	}
 	saveErr := errors.New("redis connection lost")
+	seatCounter.EXPECT().GetPrice(ctx, "event-1", "vip").Return(5000, nil)
+	seatCounter.EXPECT().GetPrice(ctx, "event-1", "ga").Return(5000, nil)
 	seatCounter.EXPECT().Reserve(ctx, "event-1", "vip", 2).Return(nil)
 	seatCounter.EXPECT().Reserve(ctx, "event-1", "ga", 3).Return(nil)
 	cache.EXPECT().Save(ctx, mock.AnythingOfType("*domain.Reservation"), 300).Return(saveErr)
@@ -285,6 +293,7 @@ func TestInitSeats_Single(t *testing.T) {
 	ctx := context.Background()
 	types := []domain.TicketTypeInfo{{TicketTypeID: "tt-vip", Name: "VIP", Quantity: 50}}
 	seatCounter.EXPECT().Init(ctx, "event-1", "tt-vip", 50).Return(nil)
+	seatCounter.EXPECT().SetPrice(ctx, "event-1", "tt-vip", 0).Return(nil)
 	svc, _ := newInventoryService(t, bookingRepo, cache, seatCounter, consumer)
 	err := svc.InitSeats(ctx, "event-1", types)
 	require.NoError(t, err)
@@ -301,7 +310,9 @@ func TestInitSeats_Multiple(t *testing.T) {
 		{TicketTypeID: "tt-ga", Name: "GA", Quantity: 100},
 	}
 	seatCounter.EXPECT().Init(ctx, "event-1", "tt-vip", 10).Return(nil)
+	seatCounter.EXPECT().SetPrice(ctx, "event-1", "tt-vip", 0).Return(nil)
 	seatCounter.EXPECT().Init(ctx, "event-1", "tt-ga", 100).Return(nil)
+	seatCounter.EXPECT().SetPrice(ctx, "event-1", "tt-ga", 0).Return(nil)
 	svc, _ := newInventoryService(t, bookingRepo, cache, seatCounter, consumer)
 	err := svc.InitSeats(ctx, "event-1", types)
 	require.NoError(t, err)
@@ -318,6 +329,7 @@ func TestInitSeats_InitFails(t *testing.T) {
 		{TicketTypeID: "tt-ga", Name: "GA", Quantity: 100},
 	}
 	seatCounter.EXPECT().Init(ctx, "event-1", "tt-vip", 50).Return(nil)
+	seatCounter.EXPECT().SetPrice(ctx, "event-1", "tt-vip", 0).Return(nil)
 	seatCounter.EXPECT().Init(ctx, "event-1", "tt-ga", 100).Return(errors.New("redis error"))
 	svc, _ := newInventoryService(t, bookingRepo, cache, seatCounter, consumer)
 	err := svc.InitSeats(ctx, "event-1", types)

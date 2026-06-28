@@ -236,7 +236,7 @@ func startContainers() *TestEnv {
 		eventStatusRepo,
 		invOutbox,
 		invLogger,
-		300,
+		30,
 	)
 	invHandler := invhandler.NewInventoryHandler(invSvc)
 	invSrv := httptest.NewServer(invHandler.Routes())

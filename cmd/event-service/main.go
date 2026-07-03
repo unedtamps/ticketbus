@@ -52,7 +52,7 @@ func main() {
 	repo := postgres.NewEventRepo(pool)
 
 	kafkaBrokers := strings.Split(cfg.KafkaBrokers, ",")
-	consumer := kafka.NewOrganizerConsumer(kafkaBrokers, "event-service")
+	consumer := kafka.NewOrganizerConsumer(kafkaBrokers, "event-service", cfg.ConsumerConcurrency)
 	seatReader := eventredis.NewSeatReader(rdb)
 
 	outboxStore := outbox.NewStore(pool)
@@ -66,7 +66,7 @@ func main() {
 		logger.Error("failed to ensure kafka topics", "error", err)
 		os.Exit(1)
 	}
-	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger)
+	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger, cfg.OutboxConcurrency, cfg.OutboxPollMs)
 
 	svc := application.NewEventService(repo, consumer, seatReader, outboxStore)
 	h := handler.NewEventHandler(svc)

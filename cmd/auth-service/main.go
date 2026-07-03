@@ -71,7 +71,7 @@ func main() {
 		logger.Error("failed to ensure kafka topics", "error", err)
 		os.Exit(1)
 	}
-	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger)
+	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger, cfg.OutboxConcurrency, cfg.OutboxPollMs)
 
 	// Application
 	authSvc := application.NewAuthService(

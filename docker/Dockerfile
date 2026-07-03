@@ -14,7 +14,7 @@ ARG SERVICE
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/${SERVICE}
 
 # Runtime stage
-FROM alpine:3.19
+FROM alpine:latest
 
 WORKDIR /app
 

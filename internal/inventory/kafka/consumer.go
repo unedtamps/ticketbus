@@ -12,8 +12,9 @@ import (
 
 // InventoryConsumer implements domain.EventConsumer using Kafka.
 type InventoryConsumer struct {
-	brokers []string
-	groupID string
+	brokers     []string
+	groupID     string
+	concurrency int
 
 	paymentCompletedFn func(context.Context, string, string) error
 	paymentFailedFn    func(context.Context, string) error
@@ -22,10 +23,11 @@ type InventoryConsumer struct {
 }
 
 // NewInventoryConsumer creates a new Kafka consumer for inventory events.
-func NewInventoryConsumer(brokers []string, groupID string) *InventoryConsumer {
+func NewInventoryConsumer(brokers []string, groupID string, concurrency int) *InventoryConsumer {
 	return &InventoryConsumer{
-		brokers: brokers,
-		groupID: groupID,
+		brokers:     brokers,
+		groupID:     groupID,
+		concurrency: concurrency,
 	}
 }
 
@@ -47,7 +49,7 @@ func (c *InventoryConsumer) OnEventCancelled(ctx context.Context, fn func(contex
 
 // Start begins consuming from all relevant topics.
 func (c *InventoryConsumer) Start(ctx context.Context) error {
-	startConsumer(ctx, c.brokers, c.groupID, "payment.completed", func(ctx context.Context, msg sharedkafka.Message) error {
+	startConsumer(ctx, c.brokers, c.groupID, c.concurrency, "payment.completed", func(ctx context.Context, msg sharedkafka.Message) error {
 		var event sdomain.PaymentCompleted
 		if err := json.Unmarshal(msg.Value, &event); err != nil {
 			return err
@@ -58,7 +60,7 @@ func (c *InventoryConsumer) Start(ctx context.Context) error {
 		return nil
 	})
 
-	startConsumer(ctx, c.brokers, c.groupID, "payment.failed", func(ctx context.Context, msg sharedkafka.Message) error {
+	startConsumer(ctx, c.brokers, c.groupID, c.concurrency, "payment.failed", func(ctx context.Context, msg sharedkafka.Message) error {
 		var event sdomain.PaymentFailed
 		if err := json.Unmarshal(msg.Value, &event); err != nil {
 			return err
@@ -69,7 +71,7 @@ func (c *InventoryConsumer) Start(ctx context.Context) error {
 		return nil
 	})
 
-	startConsumer(ctx, c.brokers, c.groupID, "event.approved", func(ctx context.Context, msg sharedkafka.Message) error {
+	startConsumer(ctx, c.brokers, c.groupID, c.concurrency, "event.approved", func(ctx context.Context, msg sharedkafka.Message) error {
 		var event sdomain.EventApproved
 		if err := json.Unmarshal(msg.Value, &event); err != nil {
 			return err
@@ -89,7 +91,7 @@ func (c *InventoryConsumer) Start(ctx context.Context) error {
 		return nil
 	})
 
-	startConsumer(ctx, c.brokers, c.groupID, "event.cancelled", func(ctx context.Context, msg sharedkafka.Message) error {
+	startConsumer(ctx, c.brokers, c.groupID, c.concurrency, "event.cancelled", func(ctx context.Context, msg sharedkafka.Message) error {
 		var event sdomain.EventCancelled
 		if err := json.Unmarshal(msg.Value, &event); err != nil {
 			return err
@@ -107,9 +109,9 @@ func (c *InventoryConsumer) Start(ctx context.Context) error {
 // Close is a no-op; consumers shut down when context is cancelled.
 func (c *InventoryConsumer) Close() error { return nil }
 
-func startConsumer(ctx context.Context, brokers []string, groupID, topic string, handler sharedkafka.Handler) {
+func startConsumer(ctx context.Context, brokers []string, groupID string, concurrency int, topic string, handler sharedkafka.Handler) {
 	time.Sleep(500 * time.Millisecond)
-	consumer := sharedkafka.NewConsumer(brokers, topic, groupID)
+	consumer := sharedkafka.NewConsumer(brokers, topic, groupID, sharedkafka.WithConcurrency(concurrency))
 	go func() {
 		defer consumer.Close()
 		_ = consumer.Consume(ctx, handler)

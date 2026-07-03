@@ -45,7 +45,7 @@ func main() {
 	mockProcessor := processor.NewMockProcessor()
 
 	kafkaBrokers := strings.Split(cfg.KafkaBrokers, ",")
-	consumer := paykafka.NewPaymentConsumer(kafkaBrokers, "payment-service")
+	consumer := paykafka.NewPaymentConsumer(kafkaBrokers, "payment-service", cfg.ConsumerConcurrency)
 	defer consumer.Close()
 
 	outboxStore := outbox.NewStore(pool)
@@ -59,7 +59,7 @@ func main() {
 		logger.Error("failed to ensure kafka topics", "error", err)
 		os.Exit(1)
 	}
-	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger)
+	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger, cfg.OutboxConcurrency, cfg.OutboxPollMs)
 
 	svc := application.NewPaymentService(
 		txnRepo,

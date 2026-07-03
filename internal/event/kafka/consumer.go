@@ -11,17 +11,19 @@ import (
 
 // OrganizerConsumer implements domain.OrganizerConsumer using Kafka.
 type OrganizerConsumer struct {
-	brokers []string
-	groupID string
+	brokers     []string
+	groupID     string
+	concurrency int
 
 	organizerCreatedFn func(context.Context, string, string, string, string, string) error
 }
 
 // NewOrganizerConsumer creates a new Kafka consumer for organizer events.
-func NewOrganizerConsumer(brokers []string, groupID string) *OrganizerConsumer {
+func NewOrganizerConsumer(brokers []string, groupID string, concurrency int) *OrganizerConsumer {
 	return &OrganizerConsumer{
-		brokers: brokers,
-		groupID: groupID,
+		brokers:     brokers,
+		groupID:     groupID,
+		concurrency: concurrency,
 	}
 }
 
@@ -32,7 +34,9 @@ func (c *OrganizerConsumer) OnOrganizerCreated(ctx context.Context, fn func(cont
 // Start begins consuming from the organizer.created topic.
 func (c *OrganizerConsumer) Start(ctx context.Context) error {
 	time.Sleep(500 * time.Millisecond)
-	consumer := sharedkafka.NewConsumer(c.brokers, "organizer.created", c.groupID)
+	consumer := sharedkafka.NewConsumer(c.brokers, "organizer.created", c.groupID,
+		sharedkafka.WithConcurrency(c.concurrency),
+	)
 	go func() {
 		defer consumer.Close()
 		_ = consumer.Consume(ctx, func(ctx context.Context, msg sharedkafka.Message) error {

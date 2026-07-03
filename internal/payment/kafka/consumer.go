@@ -11,16 +11,17 @@ import (
 
 // PaymentConsumer implements domain.EventConsumer for payment events.
 type PaymentConsumer struct {
-	brokers []string
-	groupID string
+	brokers     []string
+	groupID     string
+	concurrency int
 
 	reservationCreatedFn func(context.Context, string, int, string) error
 	reservationExpiredFn func(context.Context, string) error
 }
 
 // NewPaymentConsumer creates a new Kafka consumer for payment events.
-func NewPaymentConsumer(brokers []string, groupID string) *PaymentConsumer {
-	return &PaymentConsumer{brokers: brokers, groupID: groupID}
+func NewPaymentConsumer(brokers []string, groupID string, concurrency int) *PaymentConsumer {
+	return &PaymentConsumer{brokers: brokers, groupID: groupID, concurrency: concurrency}
 }
 
 func (c *PaymentConsumer) OnReservationCreated(ctx context.Context, fn func(context.Context, string, int, string) error) {
@@ -35,7 +36,7 @@ func (c *PaymentConsumer) OnReservationExpired(ctx context.Context, fn func(cont
 func (c *PaymentConsumer) Start(ctx context.Context) error {
 	time.Sleep(500 * time.Millisecond)
 
-	startConsumer(ctx, c.brokers, c.groupID, "reservation.created", func(ctx context.Context, msg sharedkafka.Message) error {
+	startConsumer(ctx, c.brokers, c.groupID, c.concurrency, "reservation.created", func(ctx context.Context, msg sharedkafka.Message) error {
 		var event sdomain.ReservationCreated
 		if err := json.Unmarshal(msg.Value, &event); err != nil {
 			return err
@@ -46,7 +47,7 @@ func (c *PaymentConsumer) Start(ctx context.Context) error {
 		return nil
 	})
 
-	startConsumer(ctx, c.brokers, c.groupID, "reservation.expired", func(ctx context.Context, msg sharedkafka.Message) error {
+	startConsumer(ctx, c.brokers, c.groupID, c.concurrency, "reservation.expired", func(ctx context.Context, msg sharedkafka.Message) error {
 		var event sdomain.ReservationExpired
 		if err := json.Unmarshal(msg.Value, &event); err != nil {
 			return err
@@ -61,9 +62,9 @@ func (c *PaymentConsumer) Start(ctx context.Context) error {
 	return nil
 }
 
-func startConsumer(ctx context.Context, brokers []string, groupID, topic string, handler sharedkafka.Handler) {
+func startConsumer(ctx context.Context, brokers []string, groupID string, concurrency int, topic string, handler sharedkafka.Handler) {
 	time.Sleep(500 * time.Millisecond)
-	consumer := sharedkafka.NewConsumer(brokers, topic, groupID)
+	consumer := sharedkafka.NewConsumer(brokers, topic, groupID, sharedkafka.WithConcurrency(concurrency))
 	go func() {
 		defer consumer.Close()
 		_ = consumer.Consume(ctx, handler)

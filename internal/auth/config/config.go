@@ -14,9 +14,11 @@ type Config struct {
 	JWTPrivateKey string `env:"JWT_PRIVATE_KEY"`
 	JWTPublicKey  string `env:"JWT_PUBLIC_KEY"`
 	KafkaBrokers  string `env:"KAFKA_BROKERS"    envDefault:"localhost:9092"`
-	AdminEmails    []string `env:"ADMIN_EMAILS"    envDefault:""`
-	AdminPasswords []string `env:"ADMIN_PASSWORDS" envDefault:""`
-	SeedAdmin      bool     `env:"SEED_ADMIN"      envDefault:"false"`
+	AdminEmails          []string `env:"ADMIN_EMAILS"          envDefault:""`
+	AdminPasswords       []string `env:"ADMIN_PASSWORDS"       envDefault:""`
+	SeedAdmin            bool     `env:"SEED_ADMIN"            envDefault:"false"`
+	OutboxConcurrency    int      `env:"OUTBOX_CONCURRENCY"    envDefault:"4"`
+	OutboxPollMs         int      `env:"OUTBOX_POLL_MS"        envDefault:"200"`
 }
 
 // Load reads configuration from environment variables.

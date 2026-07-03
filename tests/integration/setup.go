@@ -206,19 +206,19 @@ func startContainers() *TestEnv {
 	authHandler := authhandler.NewAuthHandler(authSvc)
 	authSrv := httptest.NewServer(authHandler.Routes())
 
-	authOutboxWorker := outbox.NewWorker(authPool, kafkaProducer, authLogger)
+	authOutboxWorker := outbox.NewWorker(authPool, kafkaProducer, authLogger, 1, 200)
 
 	// ── Event Service ──
 	eventLogger := log.New("event", "warn")
 	eventRepo := eventpostgres.NewEventRepo(eventPool)
 	seatReader := eventredis.NewSeatReader(rdb)
-	orgConsumer := eventkafka.NewOrganizerConsumer(brokerList, "event-service-test")
+	orgConsumer := eventkafka.NewOrganizerConsumer(brokerList, "event-service-test", 1)
 	eventOutbox := outbox.NewStore(eventPool)
 	eventSvc := eventapp.NewEventService(eventRepo, orgConsumer, seatReader, eventOutbox)
 	eventHandler := eventhandler.NewEventHandler(eventSvc)
 	eventSrv := httptest.NewServer(eventHandler.Routes())
 
-	eventOutboxWorker := outbox.NewWorker(eventPool, kafkaProducer, eventLogger)
+	eventOutboxWorker := outbox.NewWorker(eventPool, kafkaProducer, eventLogger, 1, 200)
 
 	// ── Inventory Service ──
 	invLogger := log.New("inventory", "warn")
@@ -226,7 +226,7 @@ func startContainers() *TestEnv {
 	reservationCache := invredis.NewReservationCache(rdb)
 	seatCounter := invredis.NewSeatCounter(rdb)
 	eventStatusRepo := invpostgres.NewEventStatusRepo(invPool)
-	invConsumer := invkafka.NewInventoryConsumer(brokerList, "inventory-service-test")
+	invConsumer := invkafka.NewInventoryConsumer(brokerList, "inventory-service-test", 1)
 	invOutbox := outbox.NewStore(invPool)
 	invSvc := invapp.NewInventoryService(
 		bookingRepo,
@@ -241,13 +241,13 @@ func startContainers() *TestEnv {
 	invHandler := invhandler.NewInventoryHandler(invSvc)
 	invSrv := httptest.NewServer(invHandler.Routes())
 
-	invOutboxWorker := outbox.NewWorker(invPool, kafkaProducer, invLogger)
+	invOutboxWorker := outbox.NewWorker(invPool, kafkaProducer, invLogger, 1, 200)
 
 	// ── Payment Service ──
 	payLogger := log.New("payment", "warn")
 	txnRepo := paypostgres.NewTransactionRepo(payPool)
 	mockProcessor := processor.NewMockProcessor()
-	payConsumer := paykafka.NewPaymentConsumer(brokerList, "payment-service-test")
+	payConsumer := paykafka.NewPaymentConsumer(brokerList, "payment-service-test", 1)
 	payOutbox := outbox.NewStore(payPool)
 	paySvc := payapp.NewPaymentService(
 		txnRepo,
@@ -260,7 +260,7 @@ func startContainers() *TestEnv {
 	payHandler := payhandler.NewPaymentHandler(paySvc)
 	paySrv := httptest.NewServer(payHandler.Routes())
 
-	payOutboxWorker := outbox.NewWorker(payPool, kafkaProducer, payLogger)
+	payOutboxWorker := outbox.NewWorker(payPool, kafkaProducer, payLogger, 1, 200)
 
 	// ── Seed admin ──
 	n, err := authSvc.SeedAdmins(ctx, []application.AdminSeed{

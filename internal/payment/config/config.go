@@ -12,7 +12,10 @@ type Config struct {
 	Port           string `env:"PORT" envDefault:"8084"`
 	DatabaseURL    string `env:"DATABASE_URL" envDefault:"postgres://ticketsaas:ticketsaas@localhost:5435/payment_db?sslmode=disable"`
 	KafkaBrokers   string `env:"KAFKA_BROKERS" envDefault:"localhost:9092"`
-	WebhookBaseURL string `env:"WEBHOOK_BASE_URL" envDefault:"http://localhost:8000/api/payments/webhook"`
+	WebhookBaseURL       string `env:"WEBHOOK_BASE_URL"       envDefault:"http://localhost:8000/api/payments/webhook"`
+	ConsumerConcurrency  int    `env:"CONSUMER_CONCURRENCY"   envDefault:"4"`
+	OutboxConcurrency    int    `env:"OUTBOX_CONCURRENCY"     envDefault:"4"`
+	OutboxPollMs         int    `env:"OUTBOX_POLL_MS"         envDefault:"200"`
 }
 
 // Load reads configuration from environment variables.

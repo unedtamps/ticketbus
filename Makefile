@@ -105,6 +105,51 @@ build-payment:
 clean:
 	rm -rf bin
 
+# Docker image builds
+docker-build-auth:
+	docker build -f docker/Dockerfile --build-arg SERVICE=auth-service -t nedotick/auth-service:latest .
+
+docker-build-event:
+	docker build -f docker/Dockerfile --build-arg SERVICE=event-service -t nedotick/event-service:latest .
+
+docker-build-inventory:
+	docker build -f docker/Dockerfile --build-arg SERVICE=inventory-service -t nedotick/inventory-service:latest .
+
+docker-build-payment:
+	docker build -f docker/Dockerfile --build-arg SERVICE=payment-service -t nedotick/payment-service:latest .
+
+docker-build: docker-build-auth docker-build-event docker-build-inventory docker-build-payment
+
+# Docker migration image builds
+docker-migrate-build-auth:
+	docker build -f docker/migrate.Dockerfile --build-arg SERVICE=auth -t nedotick/migrate-auth:latest .
+
+docker-migrate-build-event:
+	docker build -f docker/migrate.Dockerfile --build-arg SERVICE=event -t nedotick/migrate-event:latest .
+
+docker-migrate-build-inventory:
+	docker build -f docker/migrate.Dockerfile --build-arg SERVICE=inventory -t nedotick/migrate-inventory:latest .
+
+docker-migrate-build-payment:
+	docker build -f docker/migrate.Dockerfile --build-arg SERVICE=payment -t nedotick/migrate-payment:latest .
+
+docker-migrate-build: docker-migrate-build-auth docker-migrate-build-event docker-migrate-build-inventory docker-migrate-build-payment
+
+# Docker migration run (requires DB to be running, --network=host for localhost access)
+docker-migrate-run-auth:
+	docker run --rm --network=host nedotick/migrate-auth "$(DATABASE_URL_AUTH)" up
+
+docker-migrate-run-event:
+	docker run --rm --network=host nedotick/migrate-event "$(DATABASE_URL_EVENT)" up
+
+docker-migrate-run-inventory:
+	docker run --rm --network=host nedotick/migrate-inventory "$(DATABASE_URL_INVENTORY)" up
+
+docker-migrate-run-payment:
+	docker run --rm --network=host nedotick/migrate-payment "$(DATABASE_URL_PAYMENT)" up
+
+docker-migrate-run: docker-migrate-run-auth docker-migrate-run-event docker-migrate-run-inventory docker-migrate-run-payment
+
 # Migrations (override via env var, e.g. DATABASE_URL_AUTH=... make migrate-auth-up)
 DATABASE_URL_AUTH ?= postgres://ticketsaas:ticketsaas@localhost:5432/auth_db?sslmode=disable
 DATABASE_URL_EVENT ?= postgres://ticketsaas:ticketsaas@localhost:5433/event_db?sslmode=disable

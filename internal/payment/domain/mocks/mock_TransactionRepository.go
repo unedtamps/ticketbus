@@ -231,6 +231,74 @@ func (_c *MockTransactionRepository_FindByID_Call) RunAndReturn(run func(ctx con
 	return _c
 }
 
+// ListByEventID provides a mock function for the type MockTransactionRepository
+func (_mock *MockTransactionRepository) ListByEventID(ctx context.Context, eventID string) ([]domain.Transaction, error) {
+	ret := _mock.Called(ctx, eventID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListByEventID")
+	}
+
+	var r0 []domain.Transaction
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]domain.Transaction, error)); ok {
+		return returnFunc(ctx, eventID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []domain.Transaction); ok {
+		r0 = returnFunc(ctx, eventID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]domain.Transaction)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, eventID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockTransactionRepository_ListByEventID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByEventID'
+type MockTransactionRepository_ListByEventID_Call struct {
+	*mock.Call
+}
+
+// ListByEventID is a helper method to define mock.On call
+//   - ctx context.Context
+//   - eventID string
+func (_e *MockTransactionRepository_Expecter) ListByEventID(ctx any, eventID any) *MockTransactionRepository_ListByEventID_Call {
+	return &MockTransactionRepository_ListByEventID_Call{Call: _e.mock.On("ListByEventID", ctx, eventID)}
+}
+
+func (_c *MockTransactionRepository_ListByEventID_Call) Run(run func(ctx context.Context, eventID string)) *MockTransactionRepository_ListByEventID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockTransactionRepository_ListByEventID_Call) Return(transactions []domain.Transaction, err error) *MockTransactionRepository_ListByEventID_Call {
+	_c.Call.Return(transactions, err)
+	return _c
+}
+
+func (_c *MockTransactionRepository_ListByEventID_Call) RunAndReturn(run func(ctx context.Context, eventID string) ([]domain.Transaction, error)) *MockTransactionRepository_ListByEventID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ListByUser provides a mock function for the type MockTransactionRepository
 func (_mock *MockTransactionRepository) ListByUser(ctx context.Context, userID string) ([]domain.Transaction, error) {
 	ret := _mock.Called(ctx, userID)
@@ -295,6 +363,69 @@ func (_c *MockTransactionRepository_ListByUser_Call) Return(transactions []domai
 }
 
 func (_c *MockTransactionRepository_ListByUser_Call) RunAndReturn(run func(ctx context.Context, userID string) ([]domain.Transaction, error)) *MockTransactionRepository_ListByUser_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateRefundStatus provides a mock function for the type MockTransactionRepository
+func (_mock *MockTransactionRepository) UpdateRefundStatus(ctx context.Context, id string, refundStatus string) error {
+	ret := _mock.Called(ctx, id, refundStatus)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateRefundStatus")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, id, refundStatus)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockTransactionRepository_UpdateRefundStatus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateRefundStatus'
+type MockTransactionRepository_UpdateRefundStatus_Call struct {
+	*mock.Call
+}
+
+// UpdateRefundStatus is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+//   - refundStatus string
+func (_e *MockTransactionRepository_Expecter) UpdateRefundStatus(ctx any, id any, refundStatus any) *MockTransactionRepository_UpdateRefundStatus_Call {
+	return &MockTransactionRepository_UpdateRefundStatus_Call{Call: _e.mock.On("UpdateRefundStatus", ctx, id, refundStatus)}
+}
+
+func (_c *MockTransactionRepository_UpdateRefundStatus_Call) Run(run func(ctx context.Context, id string, refundStatus string)) *MockTransactionRepository_UpdateRefundStatus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockTransactionRepository_UpdateRefundStatus_Call) Return(err error) *MockTransactionRepository_UpdateRefundStatus_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockTransactionRepository_UpdateRefundStatus_Call) RunAndReturn(run func(ctx context.Context, id string, refundStatus string) error) *MockTransactionRepository_UpdateRefundStatus_Call {
 	_c.Call.Return(run)
 	return _c
 }

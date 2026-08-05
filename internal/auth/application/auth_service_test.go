@@ -15,7 +15,6 @@ import (
 	"github.com/nedo/TicketSaas/internal/auth/domain"
 	"github.com/nedo/TicketSaas/internal/auth/domain/mocks"
 	sdomain "github.com/nedo/TicketSaas/internal/shared/domain"
-	"github.com/nedo/TicketSaas/internal/shared/outbox"
 	"github.com/nedo/TicketSaas/tests/fixtures"
 )
 
@@ -32,7 +31,7 @@ func newAuthService(
 	tokenSvc domain.TokenService,
 ) *application.AuthService {
 	t.Helper()
-	return application.NewAuthService(userRepo, tokenRepo, hasher, tokenSvc, tokensConfig, outbox.NoopStore{})
+	return application.NewAuthService(userRepo, tokenRepo, hasher, tokenSvc, tokensConfig)
 }
 
 func TestRegister_Success(t *testing.T) {

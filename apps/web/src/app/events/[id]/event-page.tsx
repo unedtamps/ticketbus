@@ -28,7 +28,7 @@ export default function EventPage() {
 
   const reserveMutation = useMutation({
     mutationFn: (items: { ticket_type_id: string; quantity: number; unit_price_cents: number }[]) =>
-      api.post<ReservationResponse>("/api/inventory/reserve", { event_id: id, items }),
+      api.post<ReservationResponse>("/api/bookings/reserve", { event_id: id, items }),
     onSuccess: (data) => {
       router.push("/checkout?booking_id=" + data.booking_id);
     },

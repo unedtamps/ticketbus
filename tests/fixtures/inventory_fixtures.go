@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nedo/TicketSaas/internal/inventory/domain"
+	"github.com/nedo/TicketSaas/internal/ticketing/domain"
 )
 
 // BookingOption is a functional option for NewTestBooking.
@@ -141,9 +141,9 @@ func WithReservationStatus(status string) ReservationOption {
 func NewTestReservation(opts ...ReservationOption) *domain.Reservation {
 	now := time.Now().Truncate(time.Second)
 	r := &domain.Reservation{
-		BookingID:  uuid.NewString(),
-		UserID:     uuid.NewString(),
-		EventID:    uuid.NewString(),
+		BookingID: uuid.NewString(),
+		UserID:    uuid.NewString(),
+		EventID:   uuid.NewString(),
 		Items: []domain.BookingItem{
 			*NewTestBookingItem(WithBookingItemUnitPrice(5000), WithBookingItemQuantity(2)),
 		},

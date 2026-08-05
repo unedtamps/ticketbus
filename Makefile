@@ -1,7 +1,7 @@
 .PHONY: help infra-up infra-down infra-logs infra-clean \
-        dev dev-auth dev-event dev-inventory dev-payment dev-web \
-        build build-auth build-event build-inventory build-payment clean \
-        migrate migrate-auth-up migrate-event-up migrate-inventory-up migrate-payment-up \
+        dev dev-auth dev-ticketing dev-payment dev-web \
+        build build-auth build-ticketing build-payment clean \
+        migrate migrate-auth-up migrate-ticketing-up migrate-payment-up \
         test lint format direnv-allow integration-test integration-test-race \
         k6-smoke k6-load k6-stress
 
@@ -14,8 +14,7 @@ help:
 	@echo "  make infra-clean           Stop and remove volumes"
 	@echo ""
 	@echo "  make dev-auth              Run auth service"
-	@echo "  make dev-event             Run event service"
-	@echo "  make dev-inventory         Run inventory service"
+	@echo "  make dev-ticketing         Run ticketing service"
 	@echo "  make dev-payment           Run payment service"
 	@echo "  make dev-web               Run Next.js frontend"
 	@echo ""
@@ -55,8 +54,7 @@ infra-clean:
 dev:
 	@echo "starting all services..."
 	@$(MAKE) dev-auth & \
-	$(MAKE) dev-event & \
-	$(MAKE) dev-inventory & \
+	$(MAKE) dev-ticketing & \
 	$(MAKE) dev-payment & \
 	$(MAKE) dev-web & \
 	wait
@@ -65,11 +63,8 @@ dev:
 dev-auth:
 	direnv exec cmd/auth-service  go run ./cmd/auth-service
 
-dev-event:
-	direnv exec cmd/event-service go run ./cmd/event-service
-
-dev-inventory:
-	direnv exec cmd/inventory-service go run ./cmd/inventory-service
+dev-ticketing:
+	direnv exec cmd/ticketing-service go run ./cmd/ticketing-service
 
 dev-payment:
 	direnv exec cmd/payment-service go run ./cmd/payment-service
@@ -79,24 +74,19 @@ dev-web:
 
 direnv-allow:
 	direnv allow cmd/auth-service
-	direnv allow cmd/event-service
-	direnv allow cmd/inventory-service
+	direnv allow cmd/ticketing-service
 	direnv allow cmd/payment-service
 
 # Builds
-build: build-auth build-event build-inventory build-payment
+build: build-auth build-ticketing build-payment
 
 build-auth:
 	@mkdir -p bin
 	go build -o bin/auth-service ./cmd/auth-service
 
-build-event:
+build-ticketing:
 	@mkdir -p bin
-	go build -o bin/event-service ./cmd/event-service
-
-build-inventory:
-	@mkdir -p bin
-	go build -o bin/inventory-service ./cmd/inventory-service
+	go build -o bin/ticketing-service ./cmd/ticketing-service
 
 build-payment:
 	@mkdir -p bin
@@ -109,16 +99,13 @@ clean:
 docker-build-auth:
 	docker build -f docker/Dockerfile --build-arg SERVICE=auth-service -t nedotick/auth-service:latest .
 
-docker-build-event:
-	docker build -f docker/Dockerfile --build-arg SERVICE=event-service -t nedotick/event-service:latest .
-
-docker-build-inventory:
-	docker build -f docker/Dockerfile --build-arg SERVICE=inventory-service -t nedotick/inventory-service:latest .
+docker-build-ticketing:
+	docker build -f docker/Dockerfile --build-arg SERVICE=ticketing-service -t nedotick/ticketing-service:latest .
 
 docker-build-payment:
 	docker build -f docker/Dockerfile --build-arg SERVICE=payment-service -t nedotick/payment-service:latest .
 
-docker-build: docker-build-auth docker-build-event docker-build-inventory docker-build-payment
+docker-build: docker-build-auth docker-build-ticketing docker-build-payment
 
 # Docker migration image build (single image for all services)
 docker-migrate-build:
@@ -128,36 +115,29 @@ docker-migrate-build:
 docker-migrate-run-auth:
 	docker run --rm --network=host nedotick/ticketbus-migrations auth "$(DATABASE_URL_AUTH)" up
 
-docker-migrate-run-event:
-	docker run --rm --network=host nedotick/ticketbus-migrations event "$(DATABASE_URL_EVENT)" up
-
-docker-migrate-run-inventory:
-	docker run --rm --network=host nedotick/ticketbus-migrations inventory "$(DATABASE_URL_INVENTORY)" up
+docker-migrate-run-ticketing:
+	docker run --rm --network=host nedotick/ticketbus-migrations ticketing "$(DATABASE_URL_TICKETING)" up
 
 docker-migrate-run-payment:
 	docker run --rm --network=host nedotick/ticketbus-migrations payment "$(DATABASE_URL_PAYMENT)" up
 
-docker-migrate-run: docker-migrate-run-auth docker-migrate-run-event docker-migrate-run-inventory docker-migrate-run-payment
+docker-migrate-run: docker-migrate-run-auth docker-migrate-run-ticketing docker-migrate-run-payment
 
 # Migrations (override via env var, e.g. DATABASE_URL_AUTH=... make migrate-auth-up)
 DATABASE_URL_AUTH ?= postgres://ticketsaas:ticketsaas@localhost:5432/auth_db?sslmode=disable
-DATABASE_URL_EVENT ?= postgres://ticketsaas:ticketsaas@localhost:5433/event_db?sslmode=disable
-DATABASE_URL_INVENTORY ?= postgres://ticketsaas:ticketsaas@localhost:5434/inventory_db?sslmode=disable
+DATABASE_URL_TICKETING ?= postgres://ticketsaas:ticketsaas@localhost:5433/ticketing_db?sslmode=disable
 DATABASE_URL_PAYMENT ?= postgres://ticketsaas:ticketsaas@localhost:5435/payment_db?sslmode=disable
 
 migrate-auth-up:
 	migrate -path migrations/auth -database "$(DATABASE_URL_AUTH)" up
 
-migrate-event-up:
-	migrate -path migrations/event -database "$(DATABASE_URL_EVENT)" up
-
-migrate-inventory-up:
-	migrate -path migrations/inventory -database "$(DATABASE_URL_INVENTORY)" up
+migrate-ticketing-up:
+	migrate -path migrations/ticketing -database "$(DATABASE_URL_TICKETING)" up
 
 migrate-payment-up:
 	migrate -path migrations/payment -database "$(DATABASE_URL_PAYMENT)" up
 
-migrate: migrate-auth-up migrate-event-up migrate-inventory-up migrate-payment-up
+migrate: migrate-auth-up migrate-ticketing-up migrate-payment-up
 
 # Testing
 test:

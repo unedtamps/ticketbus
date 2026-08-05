@@ -81,33 +81,33 @@ func (_c *MockEventConsumer_Close_Call) RunAndReturn(run func() error) *MockEven
 	return _c
 }
 
-// OnReservationCreated provides a mock function for the type MockEventConsumer
-func (_mock *MockEventConsumer) OnReservationCreated(ctx context.Context, fn func(ctx context.Context, bookingID string, amountCents int, userID string) error) {
+// OnEventCancelled provides a mock function for the type MockEventConsumer
+func (_mock *MockEventConsumer) OnEventCancelled(ctx context.Context, fn func(ctx context.Context, eventID string) error) {
 	_mock.Called(ctx, fn)
 	return
 }
 
-// MockEventConsumer_OnReservationCreated_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OnReservationCreated'
-type MockEventConsumer_OnReservationCreated_Call struct {
+// MockEventConsumer_OnEventCancelled_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OnEventCancelled'
+type MockEventConsumer_OnEventCancelled_Call struct {
 	*mock.Call
 }
 
-// OnReservationCreated is a helper method to define mock.On call
+// OnEventCancelled is a helper method to define mock.On call
 //   - ctx context.Context
-//   - fn func(ctx context.Context, bookingID string, amountCents int, userID string) error
-func (_e *MockEventConsumer_Expecter) OnReservationCreated(ctx any, fn any) *MockEventConsumer_OnReservationCreated_Call {
-	return &MockEventConsumer_OnReservationCreated_Call{Call: _e.mock.On("OnReservationCreated", ctx, fn)}
+//   - fn func(ctx context.Context, eventID string) error
+func (_e *MockEventConsumer_Expecter) OnEventCancelled(ctx any, fn any) *MockEventConsumer_OnEventCancelled_Call {
+	return &MockEventConsumer_OnEventCancelled_Call{Call: _e.mock.On("OnEventCancelled", ctx, fn)}
 }
 
-func (_c *MockEventConsumer_OnReservationCreated_Call) Run(run func(ctx context.Context, fn func(ctx context.Context, bookingID string, amountCents int, userID string) error)) *MockEventConsumer_OnReservationCreated_Call {
+func (_c *MockEventConsumer_OnEventCancelled_Call) Run(run func(ctx context.Context, fn func(ctx context.Context, eventID string) error)) *MockEventConsumer_OnEventCancelled_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 func(ctx context.Context, bookingID string, amountCents int, userID string) error
+		var arg1 func(ctx context.Context, eventID string) error
 		if args[1] != nil {
-			arg1 = args[1].(func(ctx context.Context, bookingID string, amountCents int, userID string) error)
+			arg1 = args[1].(func(ctx context.Context, eventID string) error)
 		}
 		run(
 			arg0,
@@ -117,35 +117,35 @@ func (_c *MockEventConsumer_OnReservationCreated_Call) Run(run func(ctx context.
 	return _c
 }
 
-func (_c *MockEventConsumer_OnReservationCreated_Call) Return() *MockEventConsumer_OnReservationCreated_Call {
+func (_c *MockEventConsumer_OnEventCancelled_Call) Return() *MockEventConsumer_OnEventCancelled_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *MockEventConsumer_OnReservationCreated_Call) RunAndReturn(run func(ctx context.Context, fn func(ctx context.Context, bookingID string, amountCents int, userID string) error)) *MockEventConsumer_OnReservationCreated_Call {
+func (_c *MockEventConsumer_OnEventCancelled_Call) RunAndReturn(run func(ctx context.Context, fn func(ctx context.Context, eventID string) error)) *MockEventConsumer_OnEventCancelled_Call {
 	_c.Run(run)
 	return _c
 }
 
-// OnReservationExpired provides a mock function for the type MockEventConsumer
-func (_mock *MockEventConsumer) OnReservationExpired(ctx context.Context, fn func(ctx context.Context, bookingID string) error) {
+// OnReservationCancelled provides a mock function for the type MockEventConsumer
+func (_mock *MockEventConsumer) OnReservationCancelled(ctx context.Context, fn func(ctx context.Context, bookingID string) error) {
 	_mock.Called(ctx, fn)
 	return
 }
 
-// MockEventConsumer_OnReservationExpired_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OnReservationExpired'
-type MockEventConsumer_OnReservationExpired_Call struct {
+// MockEventConsumer_OnReservationCancelled_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OnReservationCancelled'
+type MockEventConsumer_OnReservationCancelled_Call struct {
 	*mock.Call
 }
 
-// OnReservationExpired is a helper method to define mock.On call
+// OnReservationCancelled is a helper method to define mock.On call
 //   - ctx context.Context
 //   - fn func(ctx context.Context, bookingID string) error
-func (_e *MockEventConsumer_Expecter) OnReservationExpired(ctx any, fn any) *MockEventConsumer_OnReservationExpired_Call {
-	return &MockEventConsumer_OnReservationExpired_Call{Call: _e.mock.On("OnReservationExpired", ctx, fn)}
+func (_e *MockEventConsumer_Expecter) OnReservationCancelled(ctx any, fn any) *MockEventConsumer_OnReservationCancelled_Call {
+	return &MockEventConsumer_OnReservationCancelled_Call{Call: _e.mock.On("OnReservationCancelled", ctx, fn)}
 }
 
-func (_c *MockEventConsumer_OnReservationExpired_Call) Run(run func(ctx context.Context, fn func(ctx context.Context, bookingID string) error)) *MockEventConsumer_OnReservationExpired_Call {
+func (_c *MockEventConsumer_OnReservationCancelled_Call) Run(run func(ctx context.Context, fn func(ctx context.Context, bookingID string) error)) *MockEventConsumer_OnReservationCancelled_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -163,12 +163,12 @@ func (_c *MockEventConsumer_OnReservationExpired_Call) Run(run func(ctx context.
 	return _c
 }
 
-func (_c *MockEventConsumer_OnReservationExpired_Call) Return() *MockEventConsumer_OnReservationExpired_Call {
+func (_c *MockEventConsumer_OnReservationCancelled_Call) Return() *MockEventConsumer_OnReservationCancelled_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *MockEventConsumer_OnReservationExpired_Call) RunAndReturn(run func(ctx context.Context, fn func(ctx context.Context, bookingID string) error)) *MockEventConsumer_OnReservationExpired_Call {
+func (_c *MockEventConsumer_OnReservationCancelled_Call) RunAndReturn(run func(ctx context.Context, fn func(ctx context.Context, bookingID string) error)) *MockEventConsumer_OnReservationCancelled_Call {
 	_c.Run(run)
 	return _c
 }

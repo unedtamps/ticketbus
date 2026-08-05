@@ -38,7 +38,6 @@ func Test_EOCreatesDraftEvent(t *testing.T) {
 
 	eo := env.registerAndLogin("eo")
 	_ = env.authHeadersWith(eo.AccessToken)
-	waitForOrganizer(t, env, eo.AccessToken)
 
 	// Create event
 	event := createEventRaw(t, env, eo.AccessToken)
@@ -50,10 +49,8 @@ func Test_EOSeesOnlyOwnEvents(t *testing.T) {
 	env := getTestEnv()
 
 	eo1 := env.registerAndLogin("eo")
-	waitForOrganizer(t, env, eo1.AccessToken)
 
 	eo2 := env.registerAndLogin("eo")
-	waitForOrganizer(t, env, eo2.AccessToken)
 
 	// EO1 creates an event
 	createEventRaw(t, env, eo1.AccessToken)
@@ -75,7 +72,6 @@ func Test_AdminApprovesEvent(t *testing.T) {
 	env := getTestEnv()
 
 	eo := env.registerAndLogin("eo")
-	waitForOrganizer(t, env, eo.AccessToken)
 
 	event := createEventRaw(t, env, eo.AccessToken)
 	eventID := event.ID
@@ -99,7 +95,6 @@ func Test_CustomerViewsEventWithAvailableSeats(t *testing.T) {
 	env := getTestEnv()
 
 	eo := env.registerAndLogin("eo")
-	waitForOrganizer(t, env, eo.AccessToken)
 
 	event := createEventRaw(t, env, eo.AccessToken)
 
@@ -117,7 +112,7 @@ func Test_CustomerViewsEventWithAvailableSeats(t *testing.T) {
 			return false
 		}
 		return len(detail.TicketTypes) > 0 && detail.TicketTypes[0].Available > 0
-	}, "seat init via event.approved → inventory")
+	}, "seat init after approval")
 
 	assert.NotEmpty(t, detail.TicketTypes)
 	assert.Greater(t, detail.TicketTypes[0].Available, 0)
@@ -148,21 +143,6 @@ func Test_CustomerCannotApproveEvent(t *testing.T) {
 }
 
 // ── Helpers ──
-
-func waitForOrganizer(t *testing.T, env *TestEnv, accessToken string) {
-	t.Helper()
-	h := env.authHeadersWith(accessToken)
-	for i := 0; i < 30; i++ {
-		if i > 0 {
-			time.Sleep(500 * time.Millisecond)
-		}
-		resp, _, _ := doJSON(http.MethodGet, env.eventURL+"/api/events/organizers/me", nil, h)
-		if resp != nil && resp.StatusCode == 200 {
-			return
-		}
-	}
-	t.Fatal("organizer profile was never created")
-}
 
 func createEventRaw(t *testing.T, env *TestEnv, accessToken string) eventResp {
 	t.Helper()
@@ -198,7 +178,6 @@ func setupApprovedEvent(t *testing.T, env *TestEnv) (eventID string, ticketTypeI
 	t.Helper()
 
 	eo := env.registerAndLogin("eo")
-	waitForOrganizer(t, env, eo.AccessToken)
 
 	event := createEventRaw(t, env, eo.AccessToken)
 	eventID = event.ID
@@ -219,7 +198,7 @@ func setupApprovedEvent(t *testing.T, env *TestEnv) (eventID string, ticketTypeI
 			return false
 		}
 		return len(detail.TicketTypes) > 0 && detail.TicketTypes[0].Available > 0
-	}, "seat init via event.approved → inventory")
+	}, "seat init after approval")
 
 	for _, tt := range detail.TicketTypes {
 		ticketTypeIDs = append(ticketTypeIDs, tt.ID)

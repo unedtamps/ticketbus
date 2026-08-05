@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/nedo/TicketSaas/internal/auth/domain"
 	sdomain "github.com/nedo/TicketSaas/internal/shared/domain"
-	"github.com/nedo/TicketSaas/internal/shared/outbox"
 )
 
 // TokensConfig holds token TTL values.
@@ -24,7 +23,6 @@ type AuthService struct {
 	hasher      domain.PasswordHasher
 	tokenSvc    domain.TokenService
 	tokenConfig TokensConfig
-	outbox      outbox.StoreInterface
 }
 
 // NewAuthService creates a new AuthService.
@@ -34,15 +32,13 @@ func NewAuthService(
 	hasher domain.PasswordHasher,
 	tokenSvc domain.TokenService,
 	tokenConfig TokensConfig,
-	ob outbox.StoreInterface,
 ) *AuthService {
 	return &AuthService{
-		userRepo:           userRepo,
-		tokenRepo:          tokenRepo,
-		hasher:             hasher,
-		tokenSvc:           tokenSvc,
-		tokenConfig:        tokenConfig,
-		outbox:             ob,
+		userRepo:    userRepo,
+		tokenRepo:   tokenRepo,
+		hasher:      hasher,
+		tokenSvc:    tokenSvc,
+		tokenConfig: tokenConfig,
 	}
 }
 
@@ -73,21 +69,12 @@ func (s *AuthService) Register(ctx context.Context, email, password, name string
 	return user, nil
 }
 
-// RegisterOrganizer creates a user with role EO and publishes the organizer creation event.
+// RegisterOrganizer creates a user with role EO.
 func (s *AuthService) RegisterOrganizer(ctx context.Context, email, password, name, organizerName, description, profileLink, contactEmail string) (*domain.User, error) {
 	user, err := s.Register(ctx, email, password, name, sdomain.RoleEO)
 	if err != nil {
 		return nil, err
 	}
-
-	_ = s.outbox.Insert(ctx, "organizer.created", user.ID, sdomain.OrganizerCreated{
-		UserID:       user.ID,
-		Name:         organizerName,
-		Description:  description,
-		ProfileLink:  profileLink,
-		ContactEmail: contactEmail,
-		At:           time.Now(),
-	})
 
 	return user, nil
 }

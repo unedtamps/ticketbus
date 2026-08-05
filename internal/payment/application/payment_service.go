@@ -17,6 +17,7 @@ import (
 // PaymentService orchestrates payment operations.
 type PaymentService struct {
 	txnRepo    domain.TransactionRepository
+	refundRepo domain.RefundRepository
 	processor  domain.PaymentProcessor
 	consumer   domain.EventConsumer
 	outbox     outbox.StoreInterface
@@ -28,6 +29,7 @@ type PaymentService struct {
 // NewPaymentService creates a new PaymentService.
 func NewPaymentService(
 	txnRepo domain.TransactionRepository,
+	refundRepo domain.RefundRepository,
 	processor domain.PaymentProcessor,
 	consumer domain.EventConsumer,
 	ob outbox.StoreInterface,
@@ -36,6 +38,7 @@ func NewPaymentService(
 ) *PaymentService {
 	return &PaymentService{
 		txnRepo:    txnRepo,
+		refundRepo: refundRepo,
 		processor:  processor,
 		consumer:   consumer,
 		outbox:     ob,
@@ -52,25 +55,39 @@ func (s *PaymentService) InitiatePayment(
 	amountCents int,
 	userID string,
 ) (*domain.Transaction, error) {
+	return s.initiatePayment(ctx, bookingID, "", amountCents, userID)
+}
+
+// InitiatePaymentForEvent creates a transaction with its owning Ticketing event.
+func (s *PaymentService) InitiatePaymentForEvent(
+	ctx context.Context,
+	bookingID, eventID string,
+	amountCents int,
+	userID string,
+) (*domain.Transaction, error) {
+	return s.initiatePayment(ctx, bookingID, eventID, amountCents, userID)
+}
+
+func (s *PaymentService) initiatePayment(
+	ctx context.Context,
+	bookingID, eventID string,
+	amountCents int,
+	userID string,
+) (*domain.Transaction, error) {
 	txn := &domain.Transaction{
-		ID:          uuid.NewString(),
-		UserID:      userID,
-		BookingID:   bookingID,
-		AmountCents: amountCents,
-		Currency:    "USD",
-		Status:      domain.StatusInitiated,
-		Provider:    "mock",
+		ID:           uuid.NewString(),
+		UserID:       userID,
+		BookingID:    bookingID,
+		EventID:      eventID,
+		AmountCents:  amountCents,
+		Currency:     "USD",
+		Status:       domain.StatusPending,
+		Provider:     "mock",
+		RefundStatus: "none",
 	}
 	if err := s.txnRepo.Create(ctx, txn); err != nil {
 		return nil, err
 	}
-	_ = s.outbox.Insert(ctx, "payment.initiated", txn.ID, sdomain.PaymentInitiated{
-		TransactionID: txn.ID,
-		BookingID:     txn.BookingID,
-		UserID:        txn.UserID,
-		AmountCents:   txn.AmountCents,
-		At:            time.Now(),
-	})
 	return txn, nil
 }
 
@@ -80,17 +97,18 @@ func (s *PaymentService) Checkout(ctx context.Context, txnID string) (*domain.Tr
 	if err != nil {
 		return nil, domain.ErrTransactionNotFound
 	}
-	if txn.Status != domain.StatusInitiated {
+	if txn.Status != domain.StatusPending {
 		return nil, domain.ErrAlreadyProcessed
 	}
 
 	providerRef, err := s.processor.Charge(ctx, txn.ID, txn.AmountCents, txn.Currency)
 	if err != nil {
-		txn.Status = domain.StatusFailed
-		_ = s.txnRepo.UpdateStatus(ctx, txn.ID, domain.StatusFailed, "")
+		txn.Status = domain.StatusExpired
+		_ = s.txnRepo.UpdateStatus(ctx, txn.ID, domain.StatusExpired, "")
 		_ = s.outbox.Insert(ctx, "payment.failed", txn.ID, sdomain.PaymentFailed{
 			TransactionID: txn.ID,
 			BookingID:     txn.BookingID,
+			EventID:       txn.EventID,
 			UserID:        txn.UserID,
 			Reason:        err.Error(),
 			At:            time.Now(),
@@ -98,9 +116,9 @@ func (s *PaymentService) Checkout(ctx context.Context, txnID string) (*domain.Tr
 		return txn, err
 	}
 
-	txn.Status = domain.StatusProcessing
+	txn.Status = domain.StatusPending
 	txn.ProviderRef = providerRef
-	_ = s.txnRepo.UpdateStatus(ctx, txn.ID, domain.StatusProcessing, providerRef)
+	_ = s.txnRepo.UpdateStatus(ctx, txn.ID, domain.StatusPending, providerRef)
 
 	go func() {
 		if s.webhookURL == "" {
@@ -132,7 +150,7 @@ func (s *PaymentService) ConfirmPayment(ctx context.Context, txnID string) error
 	if err != nil {
 		return domain.ErrTransactionNotFound
 	}
-	if txn.Status != domain.StatusProcessing {
+	if txn.Status != domain.StatusPending {
 		s.logger.Warn(
 			"cannot confirm non-processing transaction",
 			"txn_id",
@@ -142,11 +160,11 @@ func (s *PaymentService) ConfirmPayment(ctx context.Context, txnID string) error
 		)
 		return domain.ErrAlreadyProcessed
 	}
-	txn.Status = domain.StatusCompleted
+	txn.Status = domain.StatusSuccess
 	if err := s.txnRepo.UpdateStatus(
 		ctx,
 		txn.ID,
-		domain.StatusCompleted,
+		domain.StatusSuccess,
 		txn.ProviderRef,
 	); err != nil {
 		return err
@@ -154,6 +172,7 @@ func (s *PaymentService) ConfirmPayment(ctx context.Context, txnID string) error
 	_ = s.outbox.Insert(ctx, "payment.completed", txn.ID, sdomain.PaymentCompleted{
 		TransactionID: txn.ID,
 		BookingID:     txn.BookingID,
+		EventID:       txn.EventID,
 		UserID:        txn.UserID,
 		At:            time.Now(),
 	})
@@ -190,16 +209,18 @@ func (s *PaymentService) CheckoutByBooking(
 	return s.Checkout(ctx, txn.ID)
 }
 
-// HandleReservationExpired cancels a pending transaction when a reservation expires.
-func (s *PaymentService) HandleReservationExpired(ctx context.Context, bookingID string) error {
+// HandleReservationCancelled ends a pending transaction when its booking is
+// released by the customer. The gateway payment request is voided in Phase 2
+// once the processor exposes CancelPayment.
+func (s *PaymentService) HandleReservationCancelled(ctx context.Context, bookingID string) error {
 	txn, err := s.txnRepo.FindByBookingID(ctx, bookingID)
 	if err != nil {
-		s.logger.Warn("no transaction found for expired reservation", "booking_id", bookingID)
+		s.logger.Warn("no transaction found for cancelled reservation", "booking_id", bookingID)
 		return nil
 	}
-	if txn.Status != domain.StatusInitiated && txn.Status != domain.StatusProcessing {
+	if txn.Status != domain.StatusPending {
 		s.logger.Info(
-			"transaction already processed, skipping expiry",
+			"transaction already processed, skipping cancellation",
 			"booking_id",
 			bookingID,
 			"status",
@@ -207,24 +228,16 @@ func (s *PaymentService) HandleReservationExpired(ctx context.Context, bookingID
 		)
 		return nil
 	}
-	txn.Status = domain.StatusFailed
 	if err := s.txnRepo.UpdateStatus(
 		ctx,
 		txn.ID,
-		domain.StatusFailed,
-		"reservation_expired",
+		domain.StatusExpired,
+		"reservation_cancelled",
 	); err != nil {
 		return err
 	}
-	_ = s.outbox.Insert(ctx, "payment.failed", txn.ID, sdomain.PaymentFailed{
-		TransactionID: txn.ID,
-		BookingID:     txn.BookingID,
-		UserID:        txn.UserID,
-		Reason:        "reservation expired",
-		At:            time.Now(),
-	})
 	s.logger.Info(
-		"cancelled transaction for expired reservation",
+		"cancelled transaction for released reservation",
 		"booking_id",
 		bookingID,
 		"txn_id",
@@ -233,20 +246,51 @@ func (s *PaymentService) HandleReservationExpired(ctx context.Context, bookingID
 	return nil
 }
 
-// StartConsumer starts the reservation listener.
-func (s *PaymentService) StartConsumer(ctx context.Context) error {
-	s.consumer.OnReservationCreated(
-		ctx,
-		func(ctx context.Context, bookingID string, amountCents int, userID string) error {
-			s.logger.Info("reservation created received", "booking_id", bookingID)
-			_, err := s.InitiatePayment(ctx, bookingID, amountCents, userID)
-			return err
-		},
-	)
+// HandleEventCancelled creates refund requests for successful transactions of
+// a cancelled event. Idempotent per transaction via the idempotency key.
+func (s *PaymentService) HandleEventCancelled(ctx context.Context, eventID string) error {
+	txns, err := s.txnRepo.ListByEventID(ctx, eventID)
+	if err != nil {
+		return err
+	}
 
-	s.consumer.OnReservationExpired(ctx, func(ctx context.Context, bookingID string) error {
-		s.logger.Info("reservation expired received", "booking_id", bookingID)
-		return s.HandleReservationExpired(ctx, bookingID)
+	for i := range txns {
+		txn := &txns[i]
+		if txn.Status != domain.StatusSuccess {
+			continue
+		}
+		refund := &domain.RefundRequest{
+			ID:             uuid.NewString(),
+			EventID:        txn.EventID,
+			BookingID:      txn.BookingID,
+			TransactionID:  txn.ID,
+			AmountCents:    int64(txn.AmountCents),
+			Currency:       txn.Currency,
+			Status:         domain.RefundPending,
+			Reason:         "event_cancelled",
+			IdempotencyKey: "event-cancelled:" + txn.ID,
+		}
+		if err := s.refundRepo.Create(ctx, refund); err != nil {
+			return err
+		}
+		if err := s.txnRepo.UpdateRefundStatus(ctx, txn.ID, "pending"); err != nil {
+			return err
+		}
+		s.logger.Info("refund requested for cancelled event", "event_id", eventID, "transaction_id", txn.ID)
+	}
+	return nil
+}
+
+// StartConsumer starts the reservation and event lifecycle listeners.
+func (s *PaymentService) StartConsumer(ctx context.Context) error {
+	s.consumer.OnReservationCancelled(ctx, func(ctx context.Context, bookingID string) error {
+		s.logger.Info("reservation cancelled received", "booking_id", bookingID)
+		return s.HandleReservationCancelled(ctx, bookingID)
+	})
+
+	s.consumer.OnEventCancelled(ctx, func(ctx context.Context, eventID string) error {
+		s.logger.Info("event cancelled received", "event_id", eventID)
+		return s.HandleEventCancelled(ctx, eventID)
 	})
 
 	go func() {

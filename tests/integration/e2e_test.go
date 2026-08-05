@@ -19,7 +19,6 @@ func Test_FullBookingJourney(t *testing.T) {
 
 	// 1. EO registers
 	eo := env.registerAndLogin("eo")
-	waitForOrganizer(t, env, eo.AccessToken)
 
 	// 2. EO creates event
 	event := createEventRaw(t, env, eo.AccessToken)
@@ -46,13 +45,13 @@ func Test_FullBookingJourney(t *testing.T) {
 			return false
 		}
 		return len(detail.TicketTypes) > 0 && detail.TicketTypes[0].Available > 0
-	}, "seat init via event.approved → inventory")
+	}, "seat init after approval")
 
 	require.NotEmpty(t, detail.TicketTypes)
 	ttID := detail.TicketTypes[0].ID
 
 	// 6. Customer reserves tickets
-	_, body, err = doJSON(http.MethodPost, env.invURL+"/api/inventory/reserve", map[string]interface{}{
+	_, body, err = doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": 1, "unit_price_cents": 10000}},
 	}, ch)
@@ -65,7 +64,9 @@ func Test_FullBookingJourney(t *testing.T) {
 
 	// 7. Poll checkout until transaction is created by payment consumer
 	var tr struct {
-		Data struct{ ID string `json:"id"` } `json:"data"`
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
 	}
 	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
 		resp, b, _ := doJSON(http.MethodPost, env.payURL+"/api/payments/by-booking/"+bookingID+"/checkout", nil, ch)
@@ -112,7 +113,7 @@ func Test_ConcurrentDuplicateReservation(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			resp, _, _ := doJSON(http.MethodPost, env.invURL+"/api/inventory/reserve", map[string]interface{}{
+			resp, _, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 				"event_id": eventID,
 				"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 5, "unit_price_cents": 10000}},
 			}, ch)
@@ -144,7 +145,6 @@ func Test_EventCancelCascade(t *testing.T) {
 
 	// 1. EO creates event
 	eo := env.registerAndLogin("eo")
-	waitForOrganizer(t, env, eo.AccessToken)
 	event := createEventRaw(t, env, eo.AccessToken)
 	eventID := event.ID
 
@@ -165,13 +165,13 @@ func Test_EventCancelCascade(t *testing.T) {
 			return false
 		}
 		return len(detail.TicketTypes) > 0 && detail.TicketTypes[0].Available > 0
-	}, "seat init via event.approved → inventory")
+	}, "seat init after approval")
 	require.NotEmpty(t, detail.TicketTypes)
 	ttID := detail.TicketTypes[0].ID
 	availableBefore := detail.TicketTypes[0].Available
 
 	// 4. Customer reserves tickets
-	_, body, err = doJSON(http.MethodPost, env.invURL+"/api/inventory/reserve", map[string]interface{}{
+	_, body, err = doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": 2, "unit_price_cents": 10000}},
 	}, ch)
@@ -183,7 +183,9 @@ func Test_EventCancelCascade(t *testing.T) {
 
 	// 5. Poll checkout → webhook → booking confirmed
 	var tr struct {
-		Data struct{ ID string `json:"id"` } `json:"data"`
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
 	}
 	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
 		resp, b, _ := doJSON(http.MethodPost, env.payURL+"/api/payments/by-booking/"+bookingID+"/checkout", nil, ch)
@@ -243,7 +245,6 @@ func Test_EventCancelCascade_CancelBeforeConfirm(t *testing.T) {
 
 	// 1. EO creates event
 	eo := env.registerAndLogin("eo")
-	waitForOrganizer(t, env, eo.AccessToken)
 	event := createEventRaw(t, env, eo.AccessToken)
 	eventID := event.ID
 
@@ -264,13 +265,13 @@ func Test_EventCancelCascade_CancelBeforeConfirm(t *testing.T) {
 			return false
 		}
 		return len(detail.TicketTypes) > 0 && detail.TicketTypes[0].Available > 0
-	}, "seat init via event.approved → inventory")
+	}, "seat init after approval")
 	require.NotEmpty(t, detail.TicketTypes)
 	ttID := detail.TicketTypes[0].ID
 	availableBefore := detail.TicketTypes[0].Available
 
 	// 4. Customer reserves tickets
-	_, body, err = doJSON(http.MethodPost, env.invURL+"/api/inventory/reserve", map[string]interface{}{
+	_, body, err = doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": 1, "unit_price_cents": 10000}},
 	}, ch)
@@ -282,7 +283,9 @@ func Test_EventCancelCascade_CancelBeforeConfirm(t *testing.T) {
 
 	// 5. Poll checkout (payment now processing)
 	var tr struct {
-		Data struct{ ID string `json:"id"` } `json:"data"`
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
 	}
 	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
 		resp, b, _ := doJSON(http.MethodPost, env.payURL+"/api/payments/by-booking/"+bookingID+"/checkout", nil, ch)

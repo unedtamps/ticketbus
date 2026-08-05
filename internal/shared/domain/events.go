@@ -39,29 +39,22 @@ type EventCancelled struct {
 }
 
 type BookingItem struct {
-	TicketTypeID  string `json:"ticket_type_id"`
-	Quantity      int    `json:"quantity"`
-	UnitPriceCents int   `json:"unit_price_cents"`
+	TicketTypeID   string `json:"ticket_type_id"`
+	Quantity       int    `json:"quantity"`
+	UnitPriceCents int    `json:"unit_price_cents"`
 }
 
-type ReservationCreated struct {
-	BookingID  string        `json:"booking_id"`
-	UserID     string        `json:"user_id"`
-	EventID    string        `json:"event_id"`
-	Items      []BookingItem `json:"items"`
-	TotalCents int           `json:"total_cents"`
-	At         time.Time     `json:"at"`
-}
-
-type ReservationExpired struct {
+type ReservationCancelled struct {
 	BookingID string    `json:"booking_id"`
 	EventID   string    `json:"event_id"`
+	UserID    string    `json:"user_id"`
 	At        time.Time `json:"at"`
 }
 
 type PaymentInitiated struct {
 	TransactionID string    `json:"transaction_id"`
 	BookingID     string    `json:"booking_id"`
+	EventID       string    `json:"event_id"`
 	UserID        string    `json:"user_id"`
 	AmountCents   int       `json:"amount_cents"`
 	At            time.Time `json:"at"`
@@ -70,6 +63,7 @@ type PaymentInitiated struct {
 type PaymentCompleted struct {
 	TransactionID string    `json:"transaction_id"`
 	BookingID     string    `json:"booking_id"`
+	EventID       string    `json:"event_id"`
 	UserID        string    `json:"user_id"`
 	At            time.Time `json:"at"`
 }
@@ -77,6 +71,7 @@ type PaymentCompleted struct {
 type PaymentFailed struct {
 	TransactionID string    `json:"transaction_id"`
 	BookingID     string    `json:"booking_id"`
+	EventID       string    `json:"event_id"`
 	UserID        string    `json:"user_id"`
 	Reason        string    `json:"reason"`
 	At            time.Time `json:"at"`

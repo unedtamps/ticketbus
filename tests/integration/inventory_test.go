@@ -29,7 +29,7 @@ func Test_ReserveTicketsSucceeds(t *testing.T) {
 	cust := env.registerAndLogin("customer")
 	ch := env.authHeadersWith(cust.AccessToken)
 
-	resp, body, err := doJSON(http.MethodPost, env.invURL+"/api/inventory/reserve", map[string]interface{}{
+	resp, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
 			{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 10000},
@@ -53,7 +53,7 @@ func Test_ReserveWithWrongPriceReturns400(t *testing.T) {
 	cust := env.registerAndLogin("customer")
 	ch := env.authHeadersWith(cust.AccessToken)
 
-	resp, body, err := doJSON(http.MethodPost, env.invURL+"/api/inventory/reserve", map[string]interface{}{
+	resp, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
 			{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 1},
@@ -72,7 +72,7 @@ func Test_OverReserveReturnsConflict(t *testing.T) {
 	cust := env.registerAndLogin("customer")
 	ch := env.authHeadersWith(cust.AccessToken)
 
-	resp, body, err := doJSON(http.MethodPost, env.invURL+"/api/inventory/reserve", map[string]interface{}{
+	resp, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
 			{"ticket_type_id": ttIDs[0], "quantity": 9999, "unit_price_cents": 10000},
@@ -90,7 +90,7 @@ func Test_ConfirmAndListBookings(t *testing.T) {
 	ch := env.authHeadersWith(cust.AccessToken)
 
 	// Reserve
-	_, body, err := doJSON(http.MethodPost, env.invURL+"/api/inventory/reserve", map[string]interface{}{
+	_, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
 			{"ticket_type_id": ttIDs[0], "quantity": 2, "unit_price_cents": 10000},
@@ -107,7 +107,9 @@ func Test_ConfirmAndListBookings(t *testing.T) {
 
 	// Poll checkout until transaction is created by payment consumer
 	var tr struct {
-		Data struct{ ID string `json:"id"` } `json:"data"`
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
 	}
 	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
 		resp, b, _ := doJSON(http.MethodPost, env.payURL+"/api/payments/by-booking/"+bookingID+"/checkout", nil, ch)
@@ -165,7 +167,7 @@ func Test_ReservationExpiry(t *testing.T) {
 	require.Greater(t, availableBefore, 4, "not enough seats for test")
 
 	// 2. Reserve seats
-	_, body, _ = doJSON(http.MethodPost, env.invURL+"/api/inventory/reserve", map[string]interface{}{
+	_, body, _ = doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 5, "unit_price_cents": 10000}},
 	}, ch)
@@ -205,9 +207,11 @@ func Test_ReservationExpiry(t *testing.T) {
 
 	// 5. NOTE: intentionally NOT calling the webhook.
 
-	// 6. Poll payment status until "failed" (TTL → reservation.expired → payment failed)
+	// 6. Poll payment status until "expired" (TTL → reservation.expired → payment expired)
 	var ts struct {
-		Data struct{ Status string `json:"status"` } `json:"data"`
+		Data struct {
+			Status string `json:"status"`
+		} `json:"data"`
 	}
 	pollFor(t, 60*time.Second, 1*time.Second, func() bool {
 		resp, b, _ := doJSON(http.MethodGet, env.payURL+"/api/payments/"+txnID+"/status", nil, ch)
@@ -215,10 +219,10 @@ func Test_ReservationExpiry(t *testing.T) {
 			return false
 		}
 		json.Unmarshal(b, &ts)
-		return ts.Data.Status == "failed"
+		return ts.Data.Status == "expired"
 	}, "payment failed via reservation expiry (30s TTL + grace)")
 
-	assert.Equal(t, "failed", ts.Data.Status)
+	assert.Equal(t, "expired", ts.Data.Status)
 
 	// 7. Verify seats released back to original count
 	_, body, _ = doJSON(http.MethodGet, env.eventURL+"/api/events/"+eventID, nil, ch)

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -19,9 +18,7 @@ import (
 	"github.com/nedo/TicketSaas/internal/auth/postgres"
 	shareddb "github.com/nedo/TicketSaas/internal/shared/db"
 	sharedhttp "github.com/nedo/TicketSaas/internal/shared/http"
-	sharedkafka "github.com/nedo/TicketSaas/internal/shared/kafka"
 	"github.com/nedo/TicketSaas/internal/shared/log"
-	"github.com/nedo/TicketSaas/internal/shared/outbox"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -60,18 +57,6 @@ func main() {
 	userRepo := postgres.NewUserRepo(pool)
 	tokenRepo := postgres.NewRefreshTokenRepo(pool)
 	hasher := bcrypt.NewHasher()
-	outboxStore := outbox.NewStore(pool)
-	kafkaProducer := sharedkafka.NewProducer(strings.Split(cfg.KafkaBrokers, ","))
-	if err := sharedkafka.EnsureTopics(strings.Split(cfg.KafkaBrokers, ","), []string{
-		"organizer.created",
-		"event.created", "event.approved", "event.rejected", "event.updated", "event.cancelled",
-		"reservation.created", "reservation.expired", "ticket.issued",
-		"payment.initiated", "payment.completed", "payment.failed",
-	}, 4, 3); err != nil {
-		logger.Error("failed to ensure kafka topics", "error", err)
-		os.Exit(1)
-	}
-	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger, cfg.OutboxConcurrency, cfg.OutboxPollMs)
 
 	// Application
 	authSvc := application.NewAuthService(
@@ -83,7 +68,6 @@ func main() {
 			AccessTokenTTL:  accessTokenTTL,
 			RefreshTokenTTL: refreshTokenTTL,
 		},
-		outboxStore,
 	)
 
 	// Primary adapter (HTTP)
@@ -127,9 +111,6 @@ func main() {
 	r.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	r.Mount("/", authHandler.Routes())
-
-	// Start outbox worker
-	go outboxWorker.Run(context.Background())
 
 	srv := &http.Server{Addr: ":" + cfg.Port, Handler: r}
 

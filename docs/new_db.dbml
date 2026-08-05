@@ -1,0 +1,177 @@
+Table auth_users [headercolor: #175e7a] {
+	id uuid [ pk, not null, unique, default: `gen_random_uuid()`, note: 'Physical table: users' ]
+	email text [ not null, unique ]
+	password_hash text [ not null ]
+	name text [ not null ]
+	role text [ not null, note: "CHECK (role IN ('admin', 'eo', 'customer'))" ]
+	created_at timestamptz [ not null, default: `NOW()` ]
+	updated_at timestamptz [ not null, default: `NOW()` ]
+}
+
+Table auth_refresh_tokens [headercolor: #175e7a] {
+	id uuid [ pk, not null, unique, default: `gen_random_uuid()`, note: 'Physical table: refresh_tokens' ]
+	user_id uuid [ not null ]
+	token_hash text [ not null ]
+	expires_at timestamptz [ not null ]
+	created_at timestamptz [ not null, default: `NOW()` ]
+
+	indexes {
+		(token_hash) [ name: 'idx_refresh_tokens_hash' ]
+		(user_id) [ name: 'idx_refresh_tokens_user' ]
+	}
+}
+
+Table auth_outbox [headercolor: #175e7a] {
+	id bigserial [ pk, not null, unique, note: 'Physical table: outbox' ]
+	topic text [ not null ]
+	key text [ not null ]
+	payload jsonb [ not null ]
+	delivered boolean [ not null, default: false ]
+	created_at timestamptz [ not null, default: `now()` ]
+
+	indexes {
+		(delivered, id) [ name: 'idx_outbox_delivered' ]
+	}
+}
+
+Table auth_eo [headercolor: #175e7a] {
+	id uuid [ pk, not null, unique, default: `gen_random_uuid()`, note: 'Physical table: organizers' ]
+	user_id uuid [ not null, unique, note: 'Local reference to auth_users.id' ]
+	name text [ not null ]
+	description text [ default: `''`, note: 'Nullable in PostgreSQL' ]
+	profile_link text [ default: `''`, note: 'Added by migration 002; nullable in PostgreSQL' ]
+	contact_email text [ default: `''`, note: 'Nullable in PostgreSQL' ]
+	created_at timestamptz [ not null, default: `NOW()` ]
+}
+
+Table event_events [headercolor: #175e7a] {
+	id uuid [ pk, not null, unique, default: `gen_random_uuid()`, note: 'Physical table: events' ]
+	organizer_id uuid [ not null, note: 'Logical reference to auth_users.id; no cross-database foreign key' ]
+	title text [ not null ]
+	description text [ default: `''`, note: 'Nullable in PostgreSQL' ]
+	start_at timestamptz [ not null ]
+	end_at timestamptz [ not null ]
+	status text [ not null, default: `'draft'`, note: "CHECK (status IN ('draft', 'pending', 'published', 'rejected', 'cancelled'))" ]
+	reviewed_by uuid [ note: 'Nullable logical reference to auth_users.id; no cross-database foreign key' ]
+	reviewed_at timestamptz [ note: 'Nullable' ]
+	created_at timestamptz [ not null, default: `NOW()` ]
+	updated_at timestamptz [ not null, default: `NOW()` ]
+	venue_name text [ not null, default: `''`, note: 'Added by migration 003; venue data is embedded in events' ]
+	venue_address text [ not null, default: `''` ]
+	venue_capacity int [ not null, default: 0, note: 'CHECK (venue_capacity >= 0)' ]
+}
+
+Table event_ticket_types [headercolor: #175e7a] {
+	id uuid [ pk, not null, unique, default: `gen_random_uuid()`, note: 'Physical table: ticket_types' ]
+	event_id uuid [ not null ]
+	name text [ not null ]
+	price_cents bigint [ not null, note: 'CHECK (price_cents >= 0)' ]
+	quantity int [ not null, note: 'CHECK (quantity > 0)' ]
+	available_seat int [ not null, default: 0, note: 'CHECK (available_seat >= 0 AND available_seat <= quantity)' ]
+	max_per_order int [ not null, default: 5, note: 'CHECK (max_per_order > 0)' ]
+}
+
+Table ticketing_outbox [headercolor: #175e7a] {
+	id bigserial [ pk, not null, unique, note: 'Physical table: outbox' ]
+	topic text [ not null ]
+	key text [ not null ]
+	payload jsonb [ not null ]
+	delivered boolean [ not null, default: false ]
+	created_at timestamptz [ not null, default: `now()` ]
+
+	indexes {
+		(delivered, id) [ name: 'idx_outbox_delivered' ]
+	}
+}
+
+Table event_bookings [headercolor: #175e7a] {
+	id uuid [ pk, not null, unique, default: `gen_random_uuid()`, note: 'Physical table: bookings' ]
+	user_id uuid [ not null, note: 'Logical reference to auth_users.id; no cross-database foreign key' ]
+	event_id uuid [ not null, note: 'Local reference to event_events.id' ]
+	status text [ not null, note: "CHECK (status IN ('confirmed', 'pending', 'expired', 'cancelled'))" ]
+	expires_at timestamptz [ note: "Nullable; CHECK (status <> 'pending' OR expires_at IS NOT NULL)" ]
+	created_at timestamptz [ not null, default: `NOW()` ]
+}
+
+Table event_booking_items [headercolor: #175e7a] {
+	id uuid [ pk, not null, unique, default: `gen_random_uuid()`, note: 'Physical table: booking_items' ]
+	booking_id uuid [ not null ]
+	ticket_type_id uuid [ not null, note: 'Ticketing-local reference to event_ticket_types.id' ]
+	quantity int [ not null, note: 'CHECK (quantity > 0)' ]
+	total_price bigint [ not null, note: 'Line total; CHECK (total_price >= 0)' ]
+}
+
+Table payment_transactions [headercolor: #175e7a] {
+	id uuid [ pk, not null, unique, default: `gen_random_uuid()`, note: 'Physical table: transactions' ]
+	user_id uuid [ not null, note: 'Logical reference to auth_users.id; no cross-database foreign key' ]
+	booking_id uuid [ not null, note: 'Logical reference to event_bookings.id; no cross-database foreign key' ]
+	amount_cents bigint [ not null, note: 'CHECK (amount_cents >= 0)' ]
+	currency text [ not null, default: `'USD'` ]
+	provider text [ not null, default: `'mock'` ]
+	provider_ref text [ note: 'Nullable' ]
+	created_at timestamptz [ not null, default: `NOW()` ]
+	updated_at timestamptz [ not null, default: `NOW()` ]
+	event_id uuid [ not null ]
+	status text [ not null, note: "CHECK (status IN ('success', 'pending', 'expired'))" ]
+	refund_status text [ not null, default: `'none'`, note: "CHECK (refund_status IN ('none', 'pending', 'success'))" ]
+}
+
+Table payment_outbox [headercolor: #175e7a] {
+	id bigserial [ pk, not null, unique, note: 'Physical table: outbox' ]
+	topic text [ not null ]
+	key text [ not null ]
+	payload jsonb [ not null ]
+	delivered boolean [ not null, default: false ]
+	created_at timestamptz [ not null, default: `now()` ]
+
+	indexes {
+		(delivered, id) [ name: 'idx_outbox_delivered' ]
+	}
+}
+
+Table payment_refund_requests [headercolor: #175e7a] {
+	id uuid [ pk, not null, unique, default: `gen_random_uuid()` ]
+	event_id uuid [ not null, note: 'Logical reference to event_events.id; no cross-database foreign key' ]
+	booking_id uuid [ not null, note: 'Logical reference to event_bookings.id; no cross-database foreign key' ]
+	transaction_id uuid [ not null, note: 'Local reference to payment_transactions.id' ]
+	amount_cents bigint [ not null, note: 'CHECK (amount_cents >= 0)' ]
+	currency text [ not null, default: `'USD'` ]
+	status text [ not null, note: "CHECK (status IN ('pending', 'processing', 'succeeded', 'failed'))" ]
+	reason text [ not null, default: `'event_cancelled'` ]
+	provider_ref text
+	idempotency_key text [ not null, unique ]
+	created_at timestamptz [ not null, default: `NOW()` ]
+	updated_at timestamptz [ not null, default: `NOW()` ]
+	processed_at timestamptz
+
+	indexes {
+		(event_id) [ name: 'idx_refund_requests_event' ]
+		(booking_id) [ name: 'idx_refund_requests_booking' ]
+		(transaction_id) [ name: 'idx_refund_requests_transaction' ]
+		(status) [ name: 'idx_refund_requests_status' ]
+	}
+}
+
+Ref fk_auth_refresh_tokens_user_id_auth_users {
+	auth_refresh_tokens.user_id > auth_users.id [ delete: no action, update: cascade ]
+}
+
+Ref fk_auth_eo_user_id_auth_users {
+	auth_eo.user_id - auth_users.id [ delete: cascade, update: cascade ]
+}
+
+Ref fk_event_ticket_types_event_id_event_events {
+	event_ticket_types.event_id > event_events.id [ delete: no action, update: cascade ]
+}
+
+Ref fk_event_booking_items_booking_id_event_bookings {
+	event_booking_items.booking_id > event_bookings.id [ delete: no action, update: cascade ]
+}
+
+Ref fk_event_events_id_event_bookings {
+	event_events.id < event_bookings.event_id [ delete: no action, update: no action ]
+}
+
+Ref fk_payment_refund_requests_transaction_id_payment_transactions {
+	payment_refund_requests.transaction_id > payment_transactions.id [ delete: no action, update: cascade ]
+}

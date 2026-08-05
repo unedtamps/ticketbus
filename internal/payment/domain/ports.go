@@ -8,7 +8,14 @@ type TransactionRepository interface {
 	FindByID(ctx context.Context, id string) (*Transaction, error)
 	FindByBookingID(ctx context.Context, bookingID string) (*Transaction, error)
 	UpdateStatus(ctx context.Context, id, status, providerRef string) error
+	UpdateRefundStatus(ctx context.Context, id, refundStatus string) error
 	ListByUser(ctx context.Context, userID string) ([]Transaction, error)
+	ListByEventID(ctx context.Context, eventID string) ([]Transaction, error)
+}
+
+// RefundRepository defines the contract for refund request persistence.
+type RefundRepository interface {
+	Create(ctx context.Context, refund *RefundRequest) error
 }
 
 // PaymentProcessor defines the contract for external payment processing.
@@ -18,8 +25,8 @@ type PaymentProcessor interface {
 
 // EventConsumer defines the contract for consuming reservation events.
 type EventConsumer interface {
-	OnReservationCreated(ctx context.Context, fn func(ctx context.Context, bookingID string, amountCents int, userID string) error)
-	OnReservationExpired(ctx context.Context, fn func(ctx context.Context, bookingID string) error)
+	OnReservationCancelled(ctx context.Context, fn func(ctx context.Context, bookingID string) error)
+	OnEventCancelled(ctx context.Context, fn func(ctx context.Context, eventID string) error)
 	Start(ctx context.Context) error
 	Close() error
 }

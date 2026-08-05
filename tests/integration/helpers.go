@@ -19,11 +19,11 @@ import (
 
 	authapp "github.com/nedo/TicketSaas/internal/auth/application"
 	"github.com/nedo/TicketSaas/internal/auth/jwt"
-	eventapp "github.com/nedo/TicketSaas/internal/event/application"
-	invapp "github.com/nedo/TicketSaas/internal/inventory/application"
-	invredis "github.com/nedo/TicketSaas/internal/inventory/redis"
 	payapp "github.com/nedo/TicketSaas/internal/payment/application"
 	sharedkafka "github.com/nedo/TicketSaas/internal/shared/kafka"
+	bookingpkg "github.com/nedo/TicketSaas/internal/ticketing/application/booking"
+	eventpkg "github.com/nedo/TicketSaas/internal/ticketing/application/event"
+	eventredis "github.com/nedo/TicketSaas/internal/ticketing/redis"
 	"github.com/testcontainers/testcontainers-go"
 )
 
@@ -40,20 +40,19 @@ type TestEnv struct {
 
 	kafkaProducer    *sharedkafka.Producer
 	authSvc          *authapp.AuthService
-	eventSvc         *eventapp.EventService
-	invSvc           *invapp.InventoryService
+	eventSvc         *eventpkg.EventService
+	invSvc           *bookingpkg.BookingService
 	paySvc           *payapp.PaymentService
 	tokenSvc         *jwt.TokenService
 	jwtPublicPEM     string
-	reservationCache *invredis.ReservationCache
+	reservationCache *eventredis.ReservationCache
 	authURL          string
 	eventURL         string
 	invURL           string
 	payURL           string
 	cancelBg         context.CancelFunc
 	authSrv          *httptest.Server
-	eventSrv         *httptest.Server
-	invSrv           *httptest.Server
+	ticketingSrv     *httptest.Server
 	paySrv           *httptest.Server
 }
 
@@ -196,6 +195,7 @@ func pollFor(t *testing.T, timeout, interval time.Duration, fn func() bool, msg 
 	}
 	t.Fatalf("%s timed out after %v", msg, timeout)
 }
+
 // authHeadersWith contains both Bearer auth and X-auth headers.
 func (env *TestEnv) authHeadersWith(accessToken string) map[string]string {
 	h := env.authHeaders(accessToken)

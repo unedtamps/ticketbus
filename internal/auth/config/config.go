@@ -8,17 +8,14 @@ import (
 
 // Config holds all configuration for the auth service.
 type Config struct {
-	AppEnv        string `env:"APP_ENV"         envDefault:"development"`
-	Port          string `env:"PORT"             envDefault:"8081"`
-	DatabaseURL   string `env:"DATABASE_URL"     envDefault:"postgres://ticketsaas:ticketsaas@localhost:5432/auth_db?sslmode=disable"`
-	JWTPrivateKey string `env:"JWT_PRIVATE_KEY"`
-	JWTPublicKey  string `env:"JWT_PUBLIC_KEY"`
-	KafkaBrokers  string `env:"KAFKA_BROKERS"    envDefault:"localhost:9092"`
-	AdminEmails          []string `env:"ADMIN_EMAILS"          envDefault:""`
-	AdminPasswords       []string `env:"ADMIN_PASSWORDS"       envDefault:""`
-	SeedAdmin            bool     `env:"SEED_ADMIN"            envDefault:"false"`
-	OutboxConcurrency    int      `env:"OUTBOX_CONCURRENCY"    envDefault:"4"`
-	OutboxPollMs         int      `env:"OUTBOX_POLL_MS"        envDefault:"200"`
+	AppEnv         string   `env:"APP_ENV"         envDefault:"development"`
+	Port           string   `env:"PORT"             envDefault:"8081"`
+	DatabaseURL    string   `env:"DATABASE_URL"     envDefault:"postgres://ticketsaas:ticketsaas@localhost:5432/auth_db?sslmode=disable"`
+	JWTPrivateKey  string   `env:"JWT_PRIVATE_KEY"`
+	JWTPublicKey   string   `env:"JWT_PUBLIC_KEY"`
+	AdminEmails    []string `env:"ADMIN_EMAILS"          envDefault:""`
+	AdminPasswords []string `env:"ADMIN_PASSWORDS"       envDefault:""`
+	SeedAdmin      bool     `env:"SEED_ADMIN"            envDefault:"false"`
 }
 
 // Load reads configuration from environment variables.

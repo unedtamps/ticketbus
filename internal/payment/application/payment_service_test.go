@@ -28,7 +28,19 @@ func newPaymentService(
 	consumer domain.EventConsumer,
 ) *application.PaymentService {
 	t.Helper()
-	return application.NewPaymentService(txnRepo, processor, consumer, outbox.NoopStore{}, payLogger, "http://localhost:8000/api/payments/webhook")
+	refundRepo := mocks.NewMockRefundRepository(t)
+	return application.NewPaymentService(txnRepo, refundRepo, processor, consumer, outbox.NoopStore{}, payLogger, "http://localhost:8000/api/payments/webhook")
+}
+
+func newPaymentServiceWithRefundRepo(
+	t testing.TB,
+	txnRepo domain.TransactionRepository,
+	refundRepo domain.RefundRepository,
+	processor domain.PaymentProcessor,
+	consumer domain.EventConsumer,
+) *application.PaymentService {
+	t.Helper()
+	return application.NewPaymentService(txnRepo, refundRepo, processor, consumer, outbox.NoopStore{}, payLogger, "http://localhost:8000/api/payments/webhook")
 }
 
 func TestInitiatePayment_Success(t *testing.T) {
@@ -90,7 +102,7 @@ func TestCheckout_AlreadyProcessing(t *testing.T) {
 	processor := mocks.NewMockPaymentProcessor(t)
 	consumer := mocks.NewMockEventConsumer(t)
 	ctx := context.Background()
-	txn := fixtures.NewTestTransaction(fixtures.WithTransactionID("txn-1"), fixtures.WithTransactionStatus(domain.StatusProcessing))
+	txn := fixtures.NewTestTransaction(fixtures.WithTransactionID("txn-1"), fixtures.WithTransactionStatus(domain.StatusSuccess))
 	txnRepo.EXPECT().FindByID(ctx, "txn-1").Return(txn, nil)
 	svc := newPaymentService(t, txnRepo, processor, consumer)
 	_, err := svc.Checkout(ctx, "txn-1")
@@ -165,7 +177,7 @@ func TestConfirmPayment_StillInitiated(t *testing.T) {
 	processor := mocks.NewMockPaymentProcessor(t)
 	consumer := mocks.NewMockEventConsumer(t)
 	ctx := context.Background()
-	txn := fixtures.NewTestTransaction(fixtures.WithTransactionID("txn-1"), fixtures.WithTransactionStatus(domain.StatusInitiated))
+	txn := fixtures.NewTestTransaction(fixtures.WithTransactionID("txn-1"), fixtures.WithTransactionStatus(domain.StatusExpired))
 	txnRepo.EXPECT().FindByID(ctx, "txn-1").Return(txn, nil)
 	svc := newPaymentService(t, txnRepo, processor, consumer)
 	err := svc.ConfirmPayment(ctx, "txn-1")
@@ -186,65 +198,52 @@ func TestConfirmPayment_UpdateStatusFails(t *testing.T) {
 	assert.Contains(t, err.Error(), "db error")
 }
 
-func TestHandleReservationExpired_Success_Initiated(t *testing.T) {
+func TestHandleReservationCancelled_Success_Pending(t *testing.T) {
 	txnRepo := mocks.NewMockTransactionRepository(t)
 	processor := mocks.NewMockPaymentProcessor(t)
 	consumer := mocks.NewMockEventConsumer(t)
 	ctx := context.Background()
-	txn := fixtures.NewTestTransaction(fixtures.WithTransactionID("txn-1"), fixtures.WithTransactionBookingID("book-1"), fixtures.WithTransactionStatus(domain.StatusInitiated))
+	txn := fixtures.NewTestTransaction(fixtures.WithTransactionID("txn-1"), fixtures.WithTransactionBookingID("book-1"), fixtures.WithTransactionStatus(domain.StatusPending))
 	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
-	txnRepo.EXPECT().UpdateStatus(ctx, "txn-1", domain.StatusFailed, "reservation_expired").Return(nil)
+	txnRepo.EXPECT().UpdateStatus(ctx, "txn-1", domain.StatusExpired, "reservation_cancelled").Return(nil)
 	svc := newPaymentService(t, txnRepo, processor, consumer)
-	err := svc.HandleReservationExpired(ctx, "book-1")
+	err := svc.HandleReservationCancelled(ctx, "book-1")
 	require.NoError(t, err)
 }
 
-func TestHandleReservationExpired_Success_Processing(t *testing.T) {
+func TestHandleReservationCancelled_AlreadyProcessed(t *testing.T) {
 	txnRepo := mocks.NewMockTransactionRepository(t)
 	processor := mocks.NewMockPaymentProcessor(t)
 	consumer := mocks.NewMockEventConsumer(t)
 	ctx := context.Background()
-	txn := fixtures.NewTestTransaction(fixtures.WithTransactionID("txn-1"), fixtures.WithTransactionBookingID("book-1"), fixtures.WithTransactionStatus(domain.StatusProcessing))
+	txn := fixtures.NewTestTransaction(fixtures.WithTransactionID("txn-1"), fixtures.WithTransactionBookingID("book-1"), fixtures.WithTransactionStatus(domain.StatusExpired))
 	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
-	txnRepo.EXPECT().UpdateStatus(ctx, "txn-1", domain.StatusFailed, "reservation_expired").Return(nil)
 	svc := newPaymentService(t, txnRepo, processor, consumer)
-	err := svc.HandleReservationExpired(ctx, "book-1")
+	err := svc.HandleReservationCancelled(ctx, "book-1")
 	require.NoError(t, err)
 }
 
-func TestHandleReservationExpired_AlreadyCompleted(t *testing.T) {
-	txnRepo := mocks.NewMockTransactionRepository(t)
-	processor := mocks.NewMockPaymentProcessor(t)
-	consumer := mocks.NewMockEventConsumer(t)
-	ctx := context.Background()
-	txn := fixtures.NewTestTransaction(fixtures.WithTransactionID("txn-1"), fixtures.WithTransactionBookingID("book-1"), fixtures.WithTransactionStatus(domain.StatusCompleted))
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
-	svc := newPaymentService(t, txnRepo, processor, consumer)
-	err := svc.HandleReservationExpired(ctx, "book-1")
-	require.NoError(t, err)
-}
-
-func TestHandleReservationExpired_NoTransaction(t *testing.T) {
+func TestHandleReservationCancelled_NoTransaction(t *testing.T) {
 	txnRepo := mocks.NewMockTransactionRepository(t)
 	processor := mocks.NewMockPaymentProcessor(t)
 	consumer := mocks.NewMockEventConsumer(t)
 	ctx := context.Background()
 	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(nil, pgx.ErrNoRows)
 	svc := newPaymentService(t, txnRepo, processor, consumer)
-	err := svc.HandleReservationExpired(ctx, "book-1")
+	err := svc.HandleReservationCancelled(ctx, "book-1")
 	require.NoError(t, err)
 }
 
-func TestHandleReservationExpired_UpdateStatusFails(t *testing.T) {
+func TestHandleReservationCancelled_UpdateStatusFails(t *testing.T) {
 	txnRepo := mocks.NewMockTransactionRepository(t)
 	processor := mocks.NewMockPaymentProcessor(t)
 	consumer := mocks.NewMockEventConsumer(t)
 	ctx := context.Background()
-	txn := fixtures.NewTestTransaction(fixtures.WithTransactionID("txn-1"), fixtures.WithTransactionBookingID("book-1"), fixtures.WithTransactionStatus(domain.StatusInitiated))
+	txn := fixtures.NewTestTransaction(fixtures.WithTransactionID("txn-1"), fixtures.WithTransactionBookingID("book-1"), fixtures.WithTransactionStatus(domain.StatusPending))
 	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
-	txnRepo.EXPECT().UpdateStatus(ctx, "txn-1", domain.StatusFailed, "reservation_expired").Return(errors.New("db error"))
+	txnRepo.EXPECT().UpdateStatus(ctx, "txn-1", domain.StatusExpired, "reservation_cancelled").Return(errors.New("db error"))
 	svc := newPaymentService(t, txnRepo, processor, consumer)
-	err := svc.HandleReservationExpired(ctx, "book-1")
+	err := svc.HandleReservationCancelled(ctx, "book-1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "db error")
 }
@@ -323,4 +322,63 @@ func TestListMyTransactions_Empty(t *testing.T) {
 	txns, err := svc.ListMyTransactions(ctx, "new-user")
 	require.NoError(t, err)
 	assert.Empty(t, txns)
+}
+
+func TestHandleEventCancelled_CreatesRefundForSuccessOnly(t *testing.T) {
+	txnRepo := mocks.NewMockTransactionRepository(t)
+	refundRepo := mocks.NewMockRefundRepository(t)
+	processor := mocks.NewMockPaymentProcessor(t)
+	consumer := mocks.NewMockEventConsumer(t)
+	ctx := context.Background()
+
+	txns := []domain.Transaction{
+		{ID: "txn-1", EventID: "event-1", BookingID: "book-1", AmountCents: 10000, Currency: "USD", Status: domain.StatusSuccess},
+		{ID: "txn-2", EventID: "event-1", BookingID: "book-2", AmountCents: 5000, Currency: "USD", Status: domain.StatusPending},
+	}
+	txnRepo.EXPECT().ListByEventID(ctx, "event-1").Return(txns, nil)
+	refundRepo.EXPECT().Create(ctx, mock.MatchedBy(func(r *domain.RefundRequest) bool {
+		return r.TransactionID == "txn-1" &&
+			r.Status == domain.RefundPending &&
+			r.Reason == "event_cancelled" &&
+			r.IdempotencyKey == "event-cancelled:txn-1" &&
+			r.AmountCents == 10000
+	})).Return(nil)
+	txnRepo.EXPECT().UpdateRefundStatus(ctx, "txn-1", "pending").Return(nil)
+
+	svc := newPaymentServiceWithRefundRepo(t, txnRepo, refundRepo, processor, consumer)
+	err := svc.HandleEventCancelled(ctx, "event-1")
+	require.NoError(t, err)
+}
+
+func TestHandleEventCancelled_IdempotentAcrossCalls(t *testing.T) {
+	txnRepo := mocks.NewMockTransactionRepository(t)
+	refundRepo := mocks.NewMockRefundRepository(t)
+	processor := mocks.NewMockPaymentProcessor(t)
+	consumer := mocks.NewMockEventConsumer(t)
+	ctx := context.Background()
+
+	txns := []domain.Transaction{
+		{ID: "txn-1", EventID: "event-1", BookingID: "book-1", AmountCents: 10000, Currency: "USD", Status: domain.StatusSuccess},
+	}
+	txnRepo.EXPECT().ListByEventID(ctx, "event-1").Return(txns, nil).Twice()
+	refundRepo.EXPECT().Create(ctx, mock.AnythingOfType("*domain.RefundRequest")).Return(nil).Twice()
+	txnRepo.EXPECT().UpdateRefundStatus(ctx, "txn-1", "pending").Return(nil).Twice()
+
+	svc := newPaymentServiceWithRefundRepo(t, txnRepo, refundRepo, processor, consumer)
+	require.NoError(t, svc.HandleEventCancelled(ctx, "event-1"))
+	require.NoError(t, svc.HandleEventCancelled(ctx, "event-1"))
+}
+
+func TestHandleEventCancelled_ListError(t *testing.T) {
+	txnRepo := mocks.NewMockTransactionRepository(t)
+	refundRepo := mocks.NewMockRefundRepository(t)
+	processor := mocks.NewMockPaymentProcessor(t)
+	consumer := mocks.NewMockEventConsumer(t)
+	ctx := context.Background()
+
+	txnRepo.EXPECT().ListByEventID(ctx, "event-1").Return(nil, errors.New("db error"))
+	svc := newPaymentServiceWithRefundRepo(t, txnRepo, refundRepo, processor, consumer)
+	err := svc.HandleEventCancelled(ctx, "event-1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db error")
 }

@@ -17,17 +17,21 @@ Traefik (:8000) — CORS, rate-limit, forward-auth (→ auth:8081/api/auth/verif
   └─ /api/payments/*   → payment-service :8084  (checkout, mock webhook)
 
 Services communicate asynchronously via Kafka (4 brokers, RF=3, 4 partitions per topic):
-  ├─ Kafka produces: organizer.created · event.{created,approved,rejected,updated,cancelled}
+  ├─ Kafka produces: event.cancelled
   │                  reservation.{created,expired} · ticket.issued
-  │                  payment.{initiated,completed,failed}
-  └─ Kafka consumes: inventory listens to event.{approved,cancelled} / payment.{completed,failed}
+  │                  payment.{completed,failed}
+  └─ Kafka consumes: ticketing listens to payment.{completed,failed}
                      payment listens to reservation.{created,expired}
-                     event listens to organizer.created
 
 Redis:
-  ├─ reservation:{booking_id} (TTL 5 min) — transient reservation holds
-  ├─ rsvn-data:{booking_id}  (no TTL) — shadow key for expiry recovery
-  └─ counter:seat:{event_id}:{ticket_type_id} (no TTL) — atomic seat counters
+  └─ reservation:{booking_id} (TTL 5 min) — TTL marker that triggers booking expiry
+
+Seat availability is authoritative in PostgreSQL:
+  └─ ticket_types.available_seat — atomic seat counter (conditional UPDATE)
+
+Reservation expiry is hybrid:
+  └─ Redis TTL + keyspace notification for instant expiry (fast path)
+  └─ PG sweeper (RESERVATION_SWEEP_INTERVAL_SEC, default 60s) as recovery safety net
 ```
 
 ## Roles
@@ -51,10 +55,9 @@ All inter-service communication flows through the **transactional outbox pattern
 
 | Service | Produces via Outbox | Consumes |
 |---------|-------------------|----------|
-| Auth | `organizer.created` | — |
-| Event | `event.{created,approved,rejected,updated,cancelled}` | `organizer.created` |
-| Inventory | `reservation.{created,expired}` | `event.{approved,cancelled}`, `payment.{completed,failed}` |
-| Payment | `payment.{initiated,completed,failed}` | `reservation.{created,expired}` |
+| Auth | — | — |
+| Ticketing | `event.cancelled`, `reservation.{created,expired}`, `ticket.issued` | `payment.{completed,failed}` |
+| Payment | `payment.{completed,failed}` | `reservation.{created,expired}` |
 
 This guarantees **at-least-once delivery** and eliminates the dual-write problem (no DB write that can succeed while the Kafka write fails). Consumers are idempotent via `ON CONFLICT DO NOTHING` and cache-miss-safe handlers.
 
@@ -62,7 +65,7 @@ This guarantees **at-least-once delivery** and eliminates the dual-write problem
 
 | Service | Language | Port | Database | Responsibilities |
 |---------|----------|------|----------|-----------------|
-| `auth-service` | Go | 8081 | `auth_db` (5432) | Registration, login, JWT (access 15m, refresh 7d), ForwardAuth verify, admin seed, outbox: organizer.created |
+| `auth-service` | Go | 8081 | `auth_db` (5432) | Registration, login, JWT (access 15m, refresh 7d), ForwardAuth verify, admin seed |
 | `event-service` | Go | 8082 | `event_db` (5433) | Event CRUD, organizer profiles, admin approval workflow, live seat availability (Redis reader), outbox: event.* |
 | `inventory-service` | Go | 8083 | `inventory_db` (5434) | Reservation holds (Redis TTL), booking persistence, seat counter init/reserve/release, expiry listener, cancel cascade with refund tracking, outbox: reservation.* |
 | `payment-service` | Go | 8084 | `payment_db` (5435) | Mock checkout, async webhook (60s delay, 75% success), transaction status, idempotency guard (409 on duplicate), outbox: payment.* |

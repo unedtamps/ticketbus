@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"time"
 
-	sharedkafka "github.com/nedo/TicketSaas/internal/shared/kafka"
 	sdomain "github.com/nedo/TicketSaas/internal/shared/domain"
+	sharedkafka "github.com/nedo/TicketSaas/internal/shared/kafka"
 )
 
 // PaymentConsumer implements domain.EventConsumer for payment events.
@@ -15,8 +15,8 @@ type PaymentConsumer struct {
 	groupID     string
 	concurrency int
 
-	reservationCreatedFn func(context.Context, string, int, string) error
-	reservationExpiredFn func(context.Context, string) error
+	reservationCancelledFn func(context.Context, string) error
+	eventCancelledFn       func(context.Context, string) error
 }
 
 // NewPaymentConsumer creates a new Kafka consumer for payment events.
@@ -24,36 +24,36 @@ func NewPaymentConsumer(brokers []string, groupID string, concurrency int) *Paym
 	return &PaymentConsumer{brokers: brokers, groupID: groupID, concurrency: concurrency}
 }
 
-func (c *PaymentConsumer) OnReservationCreated(ctx context.Context, fn func(context.Context, string, int, string) error) {
-	c.reservationCreatedFn = fn
+func (c *PaymentConsumer) OnReservationCancelled(ctx context.Context, fn func(context.Context, string) error) {
+	c.reservationCancelledFn = fn
 }
 
-func (c *PaymentConsumer) OnReservationExpired(ctx context.Context, fn func(context.Context, string) error) {
-	c.reservationExpiredFn = fn
+func (c *PaymentConsumer) OnEventCancelled(ctx context.Context, fn func(context.Context, string) error) {
+	c.eventCancelledFn = fn
 }
 
-// Start begins consuming reservation.created and reservation.expired events.
+// Start begins consuming reservation and event lifecycle topics.
 func (c *PaymentConsumer) Start(ctx context.Context) error {
 	time.Sleep(500 * time.Millisecond)
 
-	startConsumer(ctx, c.brokers, c.groupID, c.concurrency, "reservation.created", func(ctx context.Context, msg sharedkafka.Message) error {
-		var event sdomain.ReservationCreated
+	startConsumer(ctx, c.brokers, c.groupID, c.concurrency, "reservation.cancelled", func(ctx context.Context, msg sharedkafka.Message) error {
+		var event sdomain.ReservationCancelled
 		if err := json.Unmarshal(msg.Value, &event); err != nil {
 			return err
 		}
-		if c.reservationCreatedFn != nil {
-			return c.reservationCreatedFn(ctx, event.BookingID, event.TotalCents, event.UserID)
+		if c.reservationCancelledFn != nil {
+			return c.reservationCancelledFn(ctx, event.BookingID)
 		}
 		return nil
 	})
 
-	startConsumer(ctx, c.brokers, c.groupID, c.concurrency, "reservation.expired", func(ctx context.Context, msg sharedkafka.Message) error {
-		var event sdomain.ReservationExpired
+	startConsumer(ctx, c.brokers, c.groupID, c.concurrency, "event.cancelled", func(ctx context.Context, msg sharedkafka.Message) error {
+		var event sdomain.EventCancelled
 		if err := json.Unmarshal(msg.Value, &event); err != nil {
 			return err
 		}
-		if c.reservationExpiredFn != nil {
-			return c.reservationExpiredFn(ctx, event.BookingID)
+		if c.eventCancelledFn != nil {
+			return c.eventCancelledFn(ctx, event.EventID)
 		}
 		return nil
 	})

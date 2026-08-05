@@ -4,50 +4,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nedo/TicketSaas/internal/event/domain"
 	sdomain "github.com/nedo/TicketSaas/internal/shared/domain"
+	"github.com/nedo/TicketSaas/internal/ticketing/domain"
 )
-
-// OrganizerOption is a functional option for NewTestOrganizer.
-type OrganizerOption func(*domain.Organizer)
-
-// WithOrganizerID overrides the default organizer ID.
-func WithOrganizerID(id string) OrganizerOption {
-	return func(o *domain.Organizer) { o.ID = id }
-}
-
-// WithOrganizerUserID overrides the default user ID.
-func WithOrganizerUserID(userID string) OrganizerOption {
-	return func(o *domain.Organizer) { o.UserID = userID }
-}
-
-// WithOrganizerName overrides the default name.
-func WithOrganizerName(name string) OrganizerOption {
-	return func(o *domain.Organizer) { o.Name = name }
-}
-
-// WithOrganizerContactEmail overrides the default contact email.
-func WithOrganizerContactEmail(email string) OrganizerOption {
-	return func(o *domain.Organizer) { o.ContactEmail = email }
-}
-
-// NewTestOrganizer creates an Organizer with sensible defaults.
-func NewTestOrganizer(opts ...OrganizerOption) *domain.Organizer {
-	now := time.Now().Truncate(time.Second)
-	org := &domain.Organizer{
-		ID:           uuid.NewString(),
-		UserID:       uuid.NewString(),
-		Name:         "Test Organizer",
-		Description:  "A test event organizer for unit testing.",
-		ProfileLink:  "https://test-org.example.com",
-		ContactEmail: "org@example.com",
-		CreatedAt:    now,
-	}
-	for _, o := range opts {
-		o(org)
-	}
-	return org
-}
 
 // EventOption is a functional option for NewTestEvent.
 type EventOption func(*domain.Event)

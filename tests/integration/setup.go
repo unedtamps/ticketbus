@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
@@ -26,16 +27,6 @@ import (
 	authhandler "github.com/nedo/TicketSaas/internal/auth/handler"
 	"github.com/nedo/TicketSaas/internal/auth/jwt"
 	authpostgres "github.com/nedo/TicketSaas/internal/auth/postgres"
-	eventapp "github.com/nedo/TicketSaas/internal/event/application"
-	eventhandler "github.com/nedo/TicketSaas/internal/event/handler"
-	eventkafka "github.com/nedo/TicketSaas/internal/event/kafka"
-	eventpostgres "github.com/nedo/TicketSaas/internal/event/postgres"
-	eventredis "github.com/nedo/TicketSaas/internal/event/redis"
-	invapp "github.com/nedo/TicketSaas/internal/inventory/application"
-	invhandler "github.com/nedo/TicketSaas/internal/inventory/handler"
-	invkafka "github.com/nedo/TicketSaas/internal/inventory/kafka"
-	invpostgres "github.com/nedo/TicketSaas/internal/inventory/postgres"
-	invredis "github.com/nedo/TicketSaas/internal/inventory/redis"
 	payapp "github.com/nedo/TicketSaas/internal/payment/application"
 	payhandler "github.com/nedo/TicketSaas/internal/payment/handler"
 	paykafka "github.com/nedo/TicketSaas/internal/payment/kafka"
@@ -43,6 +34,12 @@ import (
 	"github.com/nedo/TicketSaas/internal/payment/processor"
 	"github.com/nedo/TicketSaas/internal/shared/log"
 	"github.com/nedo/TicketSaas/internal/shared/outbox"
+	bookingpkg "github.com/nedo/TicketSaas/internal/ticketing/application/booking"
+	eventpkg "github.com/nedo/TicketSaas/internal/ticketing/application/event"
+	eventhandler "github.com/nedo/TicketSaas/internal/ticketing/handler"
+	eventkafka "github.com/nedo/TicketSaas/internal/ticketing/kafka"
+	eventpostgres "github.com/nedo/TicketSaas/internal/ticketing/postgres"
+	eventredis "github.com/nedo/TicketSaas/internal/ticketing/redis"
 
 	sharedkafka "github.com/nedo/TicketSaas/internal/shared/kafka"
 	"github.com/testcontainers/testcontainers-go"
@@ -101,20 +98,15 @@ func startContainers() *TestEnv {
 	)
 	adminPool := mustNewPool(adminDSN)
 
-	for _, db := range []string{"event_db", "inventory_db", "payment_db"} {
+	for _, db := range []string{"ticketing_db", "payment_db"} {
 		_, err := adminPool.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s", db))
 		if err != nil {
 			panic(fmt.Sprintf("create db %s: %v", db, err))
 		}
 	}
 
-	eventDSN := fmt.Sprintf(
-		"postgres://ticketsaas:ticketsaas@%s:%s/event_db?sslmode=disable",
-		pgHost,
-		pgPort.Port(),
-	)
-	invDSN := fmt.Sprintf(
-		"postgres://ticketsaas:ticketsaas@%s:%s/inventory_db?sslmode=disable",
+	ticketingDSN := fmt.Sprintf(
+		"postgres://ticketsaas:ticketsaas@%s:%s/ticketing_db?sslmode=disable",
 		pgHost,
 		pgPort.Port(),
 	)
@@ -125,13 +117,11 @@ func startContainers() *TestEnv {
 	)
 
 	authPool := mustNewPool(adminDSN)
-	eventPool := mustNewPool(eventDSN)
-	invPool := mustNewPool(invDSN)
+	ticketingPool := mustNewPool(ticketingDSN)
 	payPool := mustNewPool(payDSN)
 
 	runMigrations("auth", adminPool)
-	runMigrations("event", eventPool)
-	runMigrations("inventory", invPool)
+	runMigrations("ticketing", ticketingPool)
 	runMigrations("payment", payPool)
 
 	// ── Redis ──
@@ -189,7 +179,6 @@ func startContainers() *TestEnv {
 	jwtPrivatePEM, jwtPublicPEM := generateRSAKeys()
 
 	// ── Auth Service ──
-	authLogger := log.New("auth", "warn")
 	userRepo := authpostgres.NewUserRepo(authPool)
 	tokenRepo := authpostgres.NewRefreshTokenRepo(authPool)
 	hasher := bcrypt.NewHasher()
@@ -197,60 +186,53 @@ func startContainers() *TestEnv {
 	if err != nil {
 		panic(fmt.Sprintf("token svc: %v", err))
 	}
-	authOutbox := outbox.NewStore(authPool)
 	authSvc := application.NewAuthService(
 		userRepo, tokenRepo, hasher, tokenSvc,
 		application.TokensConfig{AccessTokenTTL: accessTokenTTL, RefreshTokenTTL: refreshTokenTTL},
-		authOutbox,
 	)
 	authHandler := authhandler.NewAuthHandler(authSvc)
 	authSrv := httptest.NewServer(authHandler.Routes())
 
-	authOutboxWorker := outbox.NewWorker(authPool, kafkaProducer, authLogger, 1, 200)
-
-	// ── Event Service ──
-	eventLogger := log.New("event", "warn")
-	eventRepo := eventpostgres.NewEventRepo(eventPool)
-	seatReader := eventredis.NewSeatReader(rdb)
-	orgConsumer := eventkafka.NewOrganizerConsumer(brokerList, "event-service-test", 1)
-	eventOutbox := outbox.NewStore(eventPool)
-	eventSvc := eventapp.NewEventService(eventRepo, orgConsumer, seatReader, eventOutbox)
-	eventHandler := eventhandler.NewEventHandler(eventSvc)
-	eventSrv := httptest.NewServer(eventHandler.Routes())
-
-	eventOutboxWorker := outbox.NewWorker(eventPool, kafkaProducer, eventLogger, 1, 200)
-
-	// ── Inventory Service ──
-	invLogger := log.New("inventory", "warn")
-	bookingRepo := invpostgres.NewBookingRepo(invPool)
-	reservationCache := invredis.NewReservationCache(rdb)
-	seatCounter := invredis.NewSeatCounter(rdb)
-	eventStatusRepo := invpostgres.NewEventStatusRepo(invPool)
-	invConsumer := invkafka.NewInventoryConsumer(brokerList, "inventory-service-test", 1)
-	invOutbox := outbox.NewStore(invPool)
-	invSvc := invapp.NewInventoryService(
+	// ── Ticketing Service ──
+	ticketingLogger := log.New("ticketing", "warn")
+	eventRepo := eventpostgres.NewEventRepo(ticketingPool)
+	seatReader := eventpostgres.NewSeatReader(ticketingPool)
+	ticketingOutbox := outbox.NewStore(ticketingPool)
+	bookingRepo := eventpostgres.NewBookingRepo(ticketingPool)
+	reservationCache := eventredis.NewReservationCache(rdb)
+	seatCounter := eventpostgres.NewSeatCounter(ticketingPool)
+	eventStatusRepo := eventpostgres.NewEventStatusRepo(ticketingPool)
+	invConsumer := eventkafka.NewTicketingConsumer(brokerList, "ticketing-service-test", 1)
+	invSvc := bookingpkg.NewBookingService(
 		bookingRepo,
 		reservationCache,
 		seatCounter,
 		invConsumer,
 		eventStatusRepo,
-		invOutbox,
-		invLogger,
+		ticketingOutbox,
+		ticketingLogger,
 		30,
 	)
-	invHandler := invhandler.NewInventoryHandler(invSvc)
-	invSrv := httptest.NewServer(invHandler.Routes())
+	eventSvc := eventpkg.NewEventService(eventRepo, seatReader, seatCounter, ticketingOutbox)
+	eventHandler := eventhandler.NewEventHandler(eventSvc)
+	invHandler := eventhandler.NewBookingHandler(invSvc)
+	ticketingRouter := chi.NewRouter()
+	ticketingRouter.Mount("/", eventHandler.Routes())
+	ticketingRouter.Mount("/", invHandler.Routes())
+	ticketingSrv := httptest.NewServer(ticketingRouter)
 
-	invOutboxWorker := outbox.NewWorker(invPool, kafkaProducer, invLogger, 1, 200)
+	ticketingOutboxWorker := outbox.NewWorker(ticketingPool, kafkaProducer, ticketingLogger, 1, 200)
 
 	// ── Payment Service ──
 	payLogger := log.New("payment", "warn")
 	txnRepo := paypostgres.NewTransactionRepo(payPool)
+	refundRepo := paypostgres.NewRefundRepo(payPool)
 	mockProcessor := processor.NewMockProcessor()
 	payConsumer := paykafka.NewPaymentConsumer(brokerList, "payment-service-test", 1)
 	payOutbox := outbox.NewStore(payPool)
 	paySvc := payapp.NewPaymentService(
 		txnRepo,
+		refundRepo,
 		mockProcessor,
 		payConsumer,
 		payOutbox,
@@ -275,22 +257,20 @@ func startContainers() *TestEnv {
 	// ── Start background goroutines ──
 	ctxBg, cancelBg := context.WithCancel(context.Background())
 
-	go authOutboxWorker.Run(ctxBg)
-	go eventOutboxWorker.Run(ctxBg)
-	go invOutboxWorker.Run(ctxBg)
+	go ticketingOutboxWorker.Run(ctxBg)
 	go payOutboxWorker.Run(ctxBg)
 
-	go eventSvc.StartOrganizerConsumer(ctxBg)
 	go func() { _ = invSvc.StartConsumers(ctxBg) }()
 	invSvc.StartExpiryListener(ctxBg)
+	invSvc.StartExpiryRecovery(ctxBg, 5*time.Second)
 	go func() { _ = paySvc.StartConsumer(ctxBg) }()
 
 	time.Sleep(3 * time.Second)
 
 	return &TestEnv{
 		authPool:  authPool,
-		eventPool: eventPool,
-		invPool:   invPool,
+		eventPool: ticketingPool,
+		invPool:   ticketingPool,
 		payPool:   payPool,
 		rdb:       rdb,
 		adminPool: adminPool,
@@ -307,13 +287,12 @@ func startContainers() *TestEnv {
 		tokenSvc:         tokenSvc,
 		jwtPublicPEM:     jwtPublicPEM,
 		authURL:          authSrv.URL,
-		eventURL:         eventSrv.URL,
-		invURL:           invSrv.URL,
+		eventURL:         ticketingSrv.URL,
+		invURL:           ticketingSrv.URL,
 		payURL:           paySrv.URL,
 		cancelBg:         cancelBg,
 		authSrv:          authSrv,
-		eventSrv:         eventSrv,
-		invSrv:           invSrv,
+		ticketingSrv:     ticketingSrv,
 		paySrv:           paySrv,
 		reservationCache: reservationCache,
 	}
@@ -322,10 +301,9 @@ func startContainers() *TestEnv {
 // waitForKafka creates topics then smoke-tests the broker.
 func waitForKafka(brokers []string, producer *sharedkafka.Producer) {
 	topics := []string{
-		"organizer.created",
-		"event.created", "event.approved", "event.rejected", "event.updated", "event.cancelled",
-		"reservation.created", "reservation.expired", "ticket.issued",
-		"payment.initiated", "payment.completed", "payment.failed",
+		"event.cancelled",
+		"reservation.cancelled", "ticket.issued",
+		"payment.completed", "payment.failed",
 		"test-smoke",
 	}
 
@@ -425,14 +403,12 @@ func (env *TestEnv) cleanup() {
 	ctx := context.Background()
 	env.cancelBg()
 	env.authSrv.Close()
-	env.eventSrv.Close()
-	env.invSrv.Close()
+	env.ticketingSrv.Close()
 	env.paySrv.Close()
 	_ = env.kafkaProducer.Close()
 	_ = env.rdb.Close()
 	env.authPool.Close()
 	env.eventPool.Close()
-	env.invPool.Close()
 	env.payPool.Close()
 	env.adminPool.Close()
 	_ = env.containers.pg.Terminate(ctx)

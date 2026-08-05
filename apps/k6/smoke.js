@@ -108,7 +108,7 @@ export default function (data) {
     const ev = randomItem(data.events);
     const qty = randomInt(1, 2);
     const res = http.post(
-      `${HOST}/api/inventory/reserve`,
+      `${HOST}/api/bookings/reserve`,
       JSON.stringify({
         event_id: ev.eventID,
         items: [

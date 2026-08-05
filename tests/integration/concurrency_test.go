@@ -5,7 +5,6 @@ package integration
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/rand"
 	"net/http"
 	"sync"
@@ -92,7 +91,7 @@ func TestConcurrentBookingConsistency(t *testing.T) {
 				// 3a. Reserve
 				resp, body, err := doJSON(
 					http.MethodPost,
-					env.invURL+"/api/inventory/reserve",
+					env.invURL+"/api/bookings/reserve",
 					map[string]interface{}{
 						"event_id": s.EventID,
 						"items": []map[string]interface{}{{
@@ -184,11 +183,6 @@ func TestConcurrentBookingConsistency(t *testing.T) {
 			env.rdb.Expire(ctx, k, 3600*time.Second)
 		}
 	}
-	if keys, err := env.rdb.Keys(ctx, "rsvn-data:*").Result(); err == nil {
-		for _, k := range keys {
-			env.rdb.Expire(ctx, k, 3600*time.Second)
-		}
-	}
 
 	// ── 4. Settle async pipeline ──
 	pools := map[string]*pgxpool.Pool{
@@ -211,7 +205,7 @@ func TestConcurrentBookingConsistency(t *testing.T) {
 		var pendingTxn int
 		env.payPool.QueryRow(
 			ctx,
-			"SELECT COUNT(*) FROM transactions WHERE status IN ('initiated', 'processing')",
+			"SELECT COUNT(*) FROM transactions WHERE status IN ('pending')",
 		).Scan(&pendingTxn)
 		return pendingTxn == 0
 	}, "async propagation (payment.completed → inventory)")
@@ -220,7 +214,7 @@ func TestConcurrentBookingConsistency(t *testing.T) {
 	pollFor(t, 500*time.Second, 500*time.Millisecond, func() bool {
 		var completed int
 		env.payPool.QueryRow(ctx,
-			"SELECT COUNT(*) FROM transactions WHERE status = 'completed'").Scan(&completed)
+			"SELECT COUNT(*) FROM transactions WHERE status = 'success'").Scan(&completed)
 
 		var confirmed int
 		env.invPool.QueryRow(ctx,
@@ -265,9 +259,10 @@ func TestConcurrentBookingConsistency(t *testing.T) {
 
 	t.Run("seat conservation", func(t *testing.T) {
 		for _, s := range seats {
-			key := fmt.Sprintf("counter:seat:%s:%s", s.EventID, s.TTID)
-			avail, err := env.rdb.Get(ctx, key).Int()
-			require.NoError(t, err, "redis key %s not found", key)
+			var avail int
+			err := env.invPool.QueryRow(ctx, `SELECT available_seat FROM ticket_types WHERE id = $1`, s.TTID).
+				Scan(&avail)
+			require.NoError(t, err, "ticket type %s not found", s.TTID)
 
 			var booked int
 			env.invPool.QueryRow(ctx, `
@@ -302,8 +297,9 @@ func TestConcurrentBookingConsistency(t *testing.T) {
 
 	t.Run("no ghost seats", func(t *testing.T) {
 		for _, s := range seats {
-			key := fmt.Sprintf("counter:seat:%s:%s", s.EventID, s.TTID)
-			avail, err := env.rdb.Get(ctx, key).Int()
+			var avail int
+			err := env.invPool.QueryRow(ctx, `SELECT available_seat FROM ticket_types WHERE id = $1`, s.TTID).
+				Scan(&avail)
 			require.NoError(t, err)
 			assert.GreaterOrEqual(t, avail, 0,
 				"negative seat count for %s/%s: %d", s.EventID, s.TTID, avail)

@@ -42,6 +42,7 @@ func main() {
 	defer pool.Close()
 
 	txnRepo := postgres.NewTransactionRepo(pool)
+	refundRepo := postgres.NewRefundRepo(pool)
 	mockProcessor := processor.NewMockProcessor()
 
 	kafkaBrokers := strings.Split(cfg.KafkaBrokers, ",")
@@ -51,10 +52,9 @@ func main() {
 	outboxStore := outbox.NewStore(pool)
 	kafkaProducer := sharedkafka.NewProducer(kafkaBrokers)
 	if err := sharedkafka.EnsureTopics(kafkaBrokers, []string{
-		"organizer.created",
-		"event.created", "event.approved", "event.rejected", "event.updated", "event.cancelled",
-		"reservation.created", "reservation.expired", "ticket.issued",
-		"payment.initiated", "payment.completed", "payment.failed",
+		"reservation.cancelled",
+		"event.cancelled",
+		"payment.completed", "payment.failed",
 	}, 4, 3); err != nil {
 		logger.Error("failed to ensure kafka topics", "error", err)
 		os.Exit(1)
@@ -63,6 +63,7 @@ func main() {
 
 	svc := application.NewPaymentService(
 		txnRepo,
+		refundRepo,
 		mockProcessor,
 		consumer,
 		outboxStore,

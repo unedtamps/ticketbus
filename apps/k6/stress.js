@@ -118,7 +118,7 @@ export default function (data) {
   } else {
     const ev = randomItem(data.events);
     const res = http.post(
-      `${HOST}/api/inventory/reserve`,
+      `${HOST}/api/bookings/reserve`,
       JSON.stringify({
         event_id: ev.eventID,
         items: [

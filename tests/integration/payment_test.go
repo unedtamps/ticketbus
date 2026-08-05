@@ -20,7 +20,7 @@ func Test_CheckoutAndWebhookCompletesPayment(t *testing.T) {
 	ch := env.authHeadersWith(cust.AccessToken)
 
 	// Reserve
-	_, body, err := doJSON(http.MethodPost, env.invURL+"/api/inventory/reserve", map[string]interface{}{
+	_, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
 			{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 10000},
@@ -36,8 +36,8 @@ func Test_CheckoutAndWebhookCompletesPayment(t *testing.T) {
 	// Poll checkout until transaction is created by payment consumer
 	var tr struct {
 		Data struct {
-			ID       string `json:"id"`
-			Status   string `json:"status"`
+			ID        string `json:"id"`
+			Status    string `json:"status"`
 			BookingID string `json:"booking_id"`
 		} `json:"data"`
 	}
@@ -71,7 +71,7 @@ func Test_CheckoutAndWebhookCompletesPayment(t *testing.T) {
 		} `json:"data"`
 	}
 	json.Unmarshal(body, &ts)
-	assert.Equal(t, "completed", ts.Data.Status)
+	assert.Equal(t, "success", ts.Data.Status)
 }
 
 func Test_DuplicateBookingTransactionIsIdempotent(t *testing.T) {
@@ -82,7 +82,7 @@ func Test_DuplicateBookingTransactionIsIdempotent(t *testing.T) {
 	ch := env.authHeadersWith(cust.AccessToken)
 
 	// Reserve
-	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/inventory/reserve", map[string]interface{}{
+	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 10000}},
 	}, ch)
@@ -93,7 +93,9 @@ func Test_DuplicateBookingTransactionIsIdempotent(t *testing.T) {
 
 	// Poll checkout until transaction is created by Kafka consumer
 	var tr struct {
-		Data struct{ ID string `json:"id"` } `json:"data"`
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
 	}
 	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
 		resp, b, _ := doJSON(http.MethodPost, env.payURL+"/api/payments/by-booking/"+bookingID+"/checkout", nil, ch)
@@ -131,7 +133,7 @@ func Test_PaymentStaysProcessingWhenWebhookNotCalled(t *testing.T) {
 	ch := env.authHeadersWith(cust.AccessToken)
 
 	// Reserve
-	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/inventory/reserve", map[string]interface{}{
+	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 10000}},
 	}, ch)
@@ -160,14 +162,16 @@ func Test_PaymentStaysProcessingWhenWebhookNotCalled(t *testing.T) {
 	require.NotEmpty(t, txnID)
 
 	// NOTE: intentionally NOT calling the webhook.
-	// Status should be "processing" — not "completed".
+	// Status should be "pending" — not "success".
 	resp, body, err := doJSON(http.MethodGet, env.payURL+"/api/payments/"+txnID+"/status", nil, ch)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
 	var ts struct {
-		Data struct{ Status string `json:"status"` } `json:"data"`
+		Data struct {
+			Status string `json:"status"`
+		} `json:"data"`
 	}
 	json.Unmarshal(body, &ts)
-	assert.Equal(t, "processing", ts.Data.Status)
+	assert.Equal(t, "pending", ts.Data.Status)
 }

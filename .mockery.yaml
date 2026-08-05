@@ -11,21 +11,14 @@ packages:
       RefreshTokenRepository:
       PasswordHasher:
       TokenService:
-  github.com/nedo/TicketSaas/internal/event/domain:
+  github.com/nedo/TicketSaas/internal/ticketing/domain:
     config:
       structname: Mock{{.InterfaceName}}
       dir: "{{.InterfaceDir}}/mocks"
       pkgname: mocks
     interfaces:
       EventRepository:
-      OrganizerConsumer:
       SeatReader:
-  github.com/nedo/TicketSaas/internal/inventory/domain:
-    config:
-      structname: Mock{{.InterfaceName}}
-      dir: "{{.InterfaceDir}}/mocks"
-      pkgname: mocks
-    interfaces:
       BookingRepository:
       ReservationCache:
       SeatCounter:
@@ -38,5 +31,6 @@ packages:
       pkgname: mocks
     interfaces:
       TransactionRepository:
+      RefundRepository:
       PaymentProcessor:
       EventConsumer:

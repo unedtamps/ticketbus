@@ -136,40 +136,21 @@ services:
       timeout: 5s
       retries: 5
 
-  postgres-event:
+  postgres-ticketing:
     image: postgres:16-alpine
-    container_name: ticketsaas-postgres-event
+    container_name: ticketsaas-postgres-ticketing
     ports:
       - "5433:5432"
     environment:
       POSTGRES_USER: ticketsaas
       POSTGRES_PASSWORD: ticketsaas
-      POSTGRES_DB: event_db
+      POSTGRES_DB: ticketing_db
     volumes:
-      - pg_event_data:/var/lib/postgresql/data
+      - pg_ticketing_data:/var/lib/postgresql/data
     networks:
       - ticketsaas-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ticketsaas -d event_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  postgres-inventory:
-    image: postgres:16-alpine
-    container_name: ticketsaas-postgres-inventory
-    ports:
-      - "5434:5432"
-    environment:
-      POSTGRES_USER: ticketsaas
-      POSTGRES_PASSWORD: ticketsaas
-      POSTGRES_DB: inventory_db
-    volumes:
-      - pg_inv_data:/var/lib/postgresql/data
-    networks:
-      - ticketsaas-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ticketsaas -d inventory_db"]
+      test: ["CMD-SHELL", "pg_isready -U ticketsaas -d ticketing_db"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -233,8 +214,7 @@ volumes:
   kafka4_data:
   redis_data:
   pg_auth_data:
-  pg_event_data:
-  pg_inv_data:
+  pg_ticketing_data:
   pg_pay_data:
 
 networks:

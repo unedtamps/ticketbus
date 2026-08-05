@@ -37,8 +37,8 @@ func (h *PaymentHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sharedhttp.OK(w, TransactionResponse{
-		ID: txn.ID, BookingID: txn.BookingID, AmountCents: txn.AmountCents,
-		Currency: txn.Currency, Status: txn.Status,
+		ID: txn.ID, BookingID: txn.BookingID, EventID: txn.EventID, AmountCents: txn.AmountCents,
+		Currency: txn.Currency, Status: txn.Status, RefundStatus: txn.RefundStatus,
 		CreatedAt: txn.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	})
 }
@@ -60,8 +60,8 @@ func (h *PaymentHandler) CheckoutByBooking(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	sharedhttp.OK(w, TransactionResponse{
-		ID: txn.ID, BookingID: txn.BookingID, AmountCents: txn.AmountCents,
-		Currency: txn.Currency, Status: txn.Status,
+		ID: txn.ID, BookingID: txn.BookingID, EventID: txn.EventID, AmountCents: txn.AmountCents,
+		Currency: txn.Currency, Status: txn.Status, RefundStatus: txn.RefundStatus,
 		CreatedAt: txn.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	})
 }
@@ -75,8 +75,8 @@ func (h *PaymentHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sharedhttp.OK(w, TransactionResponse{
-		ID: txn.ID, BookingID: txn.BookingID, AmountCents: txn.AmountCents,
-		Currency: txn.Currency, Status: txn.Status,
+		ID: txn.ID, BookingID: txn.BookingID, EventID: txn.EventID, AmountCents: txn.AmountCents,
+		Currency: txn.Currency, Status: txn.Status, RefundStatus: txn.RefundStatus,
 		CreatedAt: txn.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	})
 }
@@ -133,8 +133,8 @@ func (h *PaymentHandler) ListTransactions(w http.ResponseWriter, r *http.Request
 	resp := make([]TransactionResponse, 0, len(txns))
 	for _, t := range txns {
 		resp = append(resp, TransactionResponse{
-			ID: t.ID, BookingID: t.BookingID, AmountCents: t.AmountCents,
-			Currency: t.Currency, Status: t.Status,
+			ID: t.ID, BookingID: t.BookingID, EventID: t.EventID, AmountCents: t.AmountCents,
+			Currency: t.Currency, Status: t.Status, RefundStatus: t.RefundStatus,
 			CreatedAt: t.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		})
 	}

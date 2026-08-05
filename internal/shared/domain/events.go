@@ -68,7 +68,7 @@ type PaymentCompleted struct {
 	At            time.Time `json:"at"`
 }
 
-type PaymentFailed struct {
+type PaymentExpired struct {
 	TransactionID string    `json:"transaction_id"`
 	BookingID     string    `json:"booking_id"`
 	EventID       string    `json:"event_id"`

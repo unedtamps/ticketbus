@@ -33,7 +33,7 @@ func (c *TicketingConsumer) OnPaymentCompleted(ctx context.Context, fn func(cont
 	c.paymentCompletedFn = fn
 }
 
-func (c *TicketingConsumer) OnPaymentFailed(ctx context.Context, fn func(context.Context, string) error) {
+func (c *TicketingConsumer) OnPaymentExpired(ctx context.Context, fn func(context.Context, string) error) {
 	c.paymentFailedFn = fn
 }
 
@@ -54,8 +54,8 @@ func (c *TicketingConsumer) Start(ctx context.Context) error {
 		return nil
 	})
 
-	startConsumer(ctx, c.brokers, c.groupID, c.concurrency, "payment.failed", func(ctx context.Context, msg sharedkafka.Message) error {
-		var event sdomain.PaymentFailed
+	startConsumer(ctx, c.brokers, c.groupID, c.concurrency, "payment.expired", func(ctx context.Context, msg sharedkafka.Message) error {
+		var event sdomain.PaymentExpired
 		if err := json.Unmarshal(msg.Value, &event); err != nil {
 			return err
 		}

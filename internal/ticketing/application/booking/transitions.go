@@ -63,9 +63,9 @@ func (s *BookingService) Release(ctx context.Context, bookingID string) error {
 	return s.releaseReservation(ctx, bookingID, "cancelled")
 }
 
-// ExpireOnPaymentFailed ends a reservation because its payment failed
-// (triggered by payment.failed). The booking becomes expired, not cancelled.
-func (s *BookingService) ExpireOnPaymentFailed(ctx context.Context, bookingID string) error {
+// ExpireOnPaymentExpired ends a reservation because its payment expired
+// (triggered by payment.expired). The booking becomes expired, not cancelled.
+func (s *BookingService) ExpireOnPaymentExpired(ctx context.Context, bookingID string) error {
 	return s.releaseReservation(ctx, bookingID, "expired")
 }
 

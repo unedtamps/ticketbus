@@ -72,7 +72,7 @@ func main() {
 	if err := sharedkafka.EnsureTopics(kafkaBrokers, []string{
 		"event.cancelled",
 		"reservation.cancelled", "ticket.issued",
-		"payment.completed", "payment.failed",
+		"payment.completed", "payment.expired",
 	}, 4, 3); err != nil {
 		logger.Error("failed to ensure kafka topics", "error", err)
 		os.Exit(1)

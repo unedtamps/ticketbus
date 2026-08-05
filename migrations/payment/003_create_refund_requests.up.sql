@@ -3,8 +3,9 @@ CREATE TABLE IF NOT EXISTS refund_requests (
     event_id         UUID NOT NULL,
     booking_id       UUID NOT NULL,
     transaction_id   UUID NOT NULL REFERENCES transactions(id) ON UPDATE CASCADE,
+    customer_email   TEXT,
     amount_cents     BIGINT NOT NULL CHECK (amount_cents >= 0),
-    currency         TEXT NOT NULL DEFAULT 'USD',
+    currency         TEXT NOT NULL DEFAULT 'IDR',
     status           TEXT NOT NULL
         CHECK (status IN ('pending', 'processing', 'succeeded', 'failed')),
     reason           TEXT NOT NULL DEFAULT 'event_cancelled',

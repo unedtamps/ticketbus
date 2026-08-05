@@ -173,25 +173,25 @@ func (_c *MockEventConsumer_OnPaymentCompleted_Call) RunAndReturn(run func(ctx c
 	return _c
 }
 
-// OnPaymentFailed provides a mock function for the type MockEventConsumer
-func (_mock *MockEventConsumer) OnPaymentFailed(ctx context.Context, fn func(ctx context.Context, bookingID string) error) {
+// OnPaymentExpired provides a mock function for the type MockEventConsumer
+func (_mock *MockEventConsumer) OnPaymentExpired(ctx context.Context, fn func(ctx context.Context, bookingID string) error) {
 	_mock.Called(ctx, fn)
 	return
 }
 
-// MockEventConsumer_OnPaymentFailed_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OnPaymentFailed'
-type MockEventConsumer_OnPaymentFailed_Call struct {
+// MockEventConsumer_OnPaymentExpired_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OnPaymentExpired'
+type MockEventConsumer_OnPaymentExpired_Call struct {
 	*mock.Call
 }
 
-// OnPaymentFailed is a helper method to define mock.On call
+// OnPaymentExpired is a helper method to define mock.On call
 //   - ctx context.Context
 //   - fn func(ctx context.Context, bookingID string) error
-func (_e *MockEventConsumer_Expecter) OnPaymentFailed(ctx any, fn any) *MockEventConsumer_OnPaymentFailed_Call {
-	return &MockEventConsumer_OnPaymentFailed_Call{Call: _e.mock.On("OnPaymentFailed", ctx, fn)}
+func (_e *MockEventConsumer_Expecter) OnPaymentExpired(ctx any, fn any) *MockEventConsumer_OnPaymentExpired_Call {
+	return &MockEventConsumer_OnPaymentExpired_Call{Call: _e.mock.On("OnPaymentExpired", ctx, fn)}
 }
 
-func (_c *MockEventConsumer_OnPaymentFailed_Call) Run(run func(ctx context.Context, fn func(ctx context.Context, bookingID string) error)) *MockEventConsumer_OnPaymentFailed_Call {
+func (_c *MockEventConsumer_OnPaymentExpired_Call) Run(run func(ctx context.Context, fn func(ctx context.Context, bookingID string) error)) *MockEventConsumer_OnPaymentExpired_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -209,12 +209,12 @@ func (_c *MockEventConsumer_OnPaymentFailed_Call) Run(run func(ctx context.Conte
 	return _c
 }
 
-func (_c *MockEventConsumer_OnPaymentFailed_Call) Return() *MockEventConsumer_OnPaymentFailed_Call {
+func (_c *MockEventConsumer_OnPaymentExpired_Call) Return() *MockEventConsumer_OnPaymentExpired_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *MockEventConsumer_OnPaymentFailed_Call) RunAndReturn(run func(ctx context.Context, fn func(ctx context.Context, bookingID string) error)) *MockEventConsumer_OnPaymentFailed_Call {
+func (_c *MockEventConsumer_OnPaymentExpired_Call) RunAndReturn(run func(ctx context.Context, fn func(ctx context.Context, bookingID string) error)) *MockEventConsumer_OnPaymentExpired_Call {
 	_c.Run(run)
 	return _c
 }

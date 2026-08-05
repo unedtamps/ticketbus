@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"time"
 
 	"github.com/nedo/TicketSaas/internal/payment/domain"
 	shareddb "github.com/nedo/TicketSaas/internal/shared/db"
@@ -17,44 +18,67 @@ func NewTransactionRepo(db shareddb.DBTx) *TransactionRepo {
 	return &TransactionRepo{db: db}
 }
 
+const txnColumns = `id, user_id, booking_id, event_id, amount_cents, currency, status, provider, provider_ref, payment_link_url, customer_email, refund_status, expires_at, created_at, updated_at`
+
+func scanTxn(row interface{ Scan(...any) error }) (*domain.Transaction, error) {
+	var t domain.Transaction
+	err := row.Scan(
+		&t.ID, &t.UserID, &t.BookingID, &t.EventID, &t.AmountCents, &t.Currency,
+		&t.Status, &t.Provider, &t.ProviderRef, &t.PaymentLinkURL, &t.CustomerEmail,
+		&t.RefundStatus, &t.ExpiresAt, &t.CreatedAt, &t.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
 // Create inserts a new transaction.
 func (r *TransactionRepo) Create(ctx context.Context, txn *domain.Transaction) error {
 	_, err := r.db.Exec(ctx, `
-		INSERT INTO transactions (id, user_id, booking_id, event_id, amount_cents, currency, status, provider, provider_ref, refund_status)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-		txn.ID, txn.UserID, txn.BookingID, txn.EventID, txn.AmountCents, txn.Currency, txn.Status, txn.Provider, txn.ProviderRef, txn.RefundStatus)
+		INSERT INTO transactions (id, user_id, booking_id, event_id, amount_cents, currency, status, provider, provider_ref, payment_link_url, customer_email, refund_status, expires_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+		txn.ID, txn.UserID, txn.BookingID, txn.EventID, txn.AmountCents, txn.Currency,
+		txn.Status, txn.Provider, txn.ProviderRef, txn.PaymentLinkURL, txn.CustomerEmail,
+		txn.RefundStatus, txn.ExpiresAt)
 	return err
 }
 
 // FindByID retrieves a transaction by ID.
 func (r *TransactionRepo) FindByID(ctx context.Context, id string) (*domain.Transaction, error) {
-	var t domain.Transaction
-	err := r.db.QueryRow(ctx, `
-		SELECT id, user_id, booking_id, event_id, amount_cents, currency, status, provider, provider_ref, refund_status, created_at, updated_at
-		FROM transactions WHERE id=$1`, id).
-		Scan(&t.ID, &t.UserID, &t.BookingID, &t.EventID, &t.AmountCents, &t.Currency, &t.Status, &t.Provider, &t.ProviderRef, &t.RefundStatus, &t.CreatedAt, &t.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return &t, nil
+	row := r.db.QueryRow(ctx, `SELECT `+txnColumns+` FROM transactions WHERE id=$1`, id)
+	return scanTxn(row)
 }
 
 // FindByBookingID retrieves a transaction by booking ID.
 func (r *TransactionRepo) FindByBookingID(ctx context.Context, bookingID string) (*domain.Transaction, error) {
-	var t domain.Transaction
-	err := r.db.QueryRow(ctx, `
-		SELECT id, user_id, booking_id, event_id, amount_cents, currency, status, provider, provider_ref, refund_status, created_at, updated_at
-		FROM transactions WHERE booking_id=$1 ORDER BY created_at DESC LIMIT 1`, bookingID).
-		Scan(&t.ID, &t.UserID, &t.BookingID, &t.EventID, &t.AmountCents, &t.Currency, &t.Status, &t.Provider, &t.ProviderRef, &t.RefundStatus, &t.CreatedAt, &t.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return &t, nil
+	row := r.db.QueryRow(ctx, `SELECT `+txnColumns+` FROM transactions WHERE booking_id=$1 ORDER BY created_at DESC LIMIT 1`, bookingID)
+	return scanTxn(row)
 }
 
 // UpdateStatus updates transaction status and provider reference.
 func (r *TransactionRepo) UpdateStatus(ctx context.Context, id, status, providerRef string) error {
 	_, err := r.db.Exec(ctx, `UPDATE transactions SET status=$1, provider_ref=$2, updated_at=NOW() WHERE id=$3`, status, providerRef, id)
+	return err
+}
+
+// UpdateStatusIfPending transitions the transaction only when it is still
+// pending, so concurrent paths (webhook vs poll) cannot race.
+func (r *TransactionRepo) UpdateStatusIfPending(ctx context.Context, id, status, providerRef string) (bool, error) {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE transactions SET status=$1, provider_ref=$2, updated_at=NOW() WHERE id=$3 AND status='pending'`,
+		status, providerRef, id)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+// UpdateSession stores the gateway payment session details.
+func (r *TransactionRepo) UpdateSession(ctx context.Context, id, providerRef, paymentLinkURL string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE transactions SET provider_ref=$1, payment_link_url=$2, updated_at=NOW() WHERE id=$3`,
+		providerRef, paymentLinkURL, id)
 	return err
 }
 
@@ -66,40 +90,44 @@ func (r *TransactionRepo) UpdateRefundStatus(ctx context.Context, id, refundStat
 
 // ListByUser returns transactions for a user.
 func (r *TransactionRepo) ListByUser(ctx context.Context, userID string) ([]domain.Transaction, error) {
-	rows, err := r.db.Query(ctx, `
-		SELECT id, user_id, booking_id, event_id, amount_cents, currency, status, provider, provider_ref, refund_status, created_at, updated_at
-		FROM transactions WHERE user_id=$1 ORDER BY created_at DESC`, userID)
+	rows, err := r.db.Query(ctx, `SELECT `+txnColumns+` FROM transactions WHERE user_id=$1 ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var txns []domain.Transaction
-	for rows.Next() {
-		var t domain.Transaction
-		if err := rows.Scan(&t.ID, &t.UserID, &t.BookingID, &t.EventID, &t.AmountCents, &t.Currency, &t.Status, &t.Provider, &t.ProviderRef, &t.RefundStatus, &t.CreatedAt, &t.UpdatedAt); err != nil {
-			return nil, err
-		}
-		txns = append(txns, t)
-	}
-	return txns, nil
+	return collectTxns(rows)
 }
 
 // ListByEventID returns transactions for an event.
 func (r *TransactionRepo) ListByEventID(ctx context.Context, eventID string) ([]domain.Transaction, error) {
-	rows, err := r.db.Query(ctx, `
-		SELECT id, user_id, booking_id, event_id, amount_cents, currency, status, provider, provider_ref, refund_status, created_at, updated_at
-		FROM transactions WHERE event_id=$1 ORDER BY created_at DESC`, eventID)
+	rows, err := r.db.Query(ctx, `SELECT `+txnColumns+` FROM transactions WHERE event_id=$1 ORDER BY created_at DESC`, eventID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+	return collectTxns(rows)
+}
+
+// ListPendingExpired returns pending transactions whose deadline has passed.
+func (r *TransactionRepo) ListPendingExpired(ctx context.Context, now time.Time, limit int) ([]domain.Transaction, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT `+txnColumns+` FROM transactions WHERE status='pending' AND expires_at IS NOT NULL AND expires_at <= $1 ORDER BY expires_at ASC LIMIT $2`,
+		now, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return collectTxns(rows)
+}
+
+func collectTxns(rows interface{ Next() bool; Scan(...any) error }) ([]domain.Transaction, error) {
 	var txns []domain.Transaction
 	for rows.Next() {
-		var t domain.Transaction
-		if err := rows.Scan(&t.ID, &t.UserID, &t.BookingID, &t.EventID, &t.AmountCents, &t.Currency, &t.Status, &t.Provider, &t.ProviderRef, &t.RefundStatus, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		t, err := scanTxn(rows)
+		if err != nil {
 			return nil, err
 		}
-		txns = append(txns, t)
+		txns = append(txns, *t)
 	}
 	return txns, nil
 }

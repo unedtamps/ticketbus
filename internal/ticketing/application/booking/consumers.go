@@ -18,9 +18,9 @@ func (s *BookingService) StartConsumers(ctx context.Context) error {
 		},
 	)
 
-	s.consumer.OnPaymentFailed(ctx, func(ctx context.Context, bookingID string) error {
-		s.logger.Info("payment failed received", "booking_id", bookingID)
-		return s.ExpireOnPaymentFailed(ctx, bookingID)
+	s.consumer.OnPaymentExpired(ctx, func(ctx context.Context, bookingID string) error {
+		s.logger.Info("payment expired received", "booking_id", bookingID)
+		return s.ExpireOnPaymentExpired(ctx, bookingID)
 	})
 
 	s.consumer.OnEventCancelled(ctx, func(ctx context.Context, eventID string) error {

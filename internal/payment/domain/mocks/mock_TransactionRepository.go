@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/nedo/TicketSaas/internal/payment/domain"
 	mock "github.com/stretchr/testify/mock"
@@ -367,6 +368,80 @@ func (_c *MockTransactionRepository_ListByUser_Call) RunAndReturn(run func(ctx c
 	return _c
 }
 
+// ListPendingExpired provides a mock function for the type MockTransactionRepository
+func (_mock *MockTransactionRepository) ListPendingExpired(ctx context.Context, now time.Time, limit int) ([]domain.Transaction, error) {
+	ret := _mock.Called(ctx, now, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListPendingExpired")
+	}
+
+	var r0 []domain.Transaction
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, int) ([]domain.Transaction, error)); ok {
+		return returnFunc(ctx, now, limit)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, int) []domain.Transaction); ok {
+		r0 = returnFunc(ctx, now, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]domain.Transaction)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, time.Time, int) error); ok {
+		r1 = returnFunc(ctx, now, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockTransactionRepository_ListPendingExpired_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListPendingExpired'
+type MockTransactionRepository_ListPendingExpired_Call struct {
+	*mock.Call
+}
+
+// ListPendingExpired is a helper method to define mock.On call
+//   - ctx context.Context
+//   - now time.Time
+//   - limit int
+func (_e *MockTransactionRepository_Expecter) ListPendingExpired(ctx any, now any, limit any) *MockTransactionRepository_ListPendingExpired_Call {
+	return &MockTransactionRepository_ListPendingExpired_Call{Call: _e.mock.On("ListPendingExpired", ctx, now, limit)}
+}
+
+func (_c *MockTransactionRepository_ListPendingExpired_Call) Run(run func(ctx context.Context, now time.Time, limit int)) *MockTransactionRepository_ListPendingExpired_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 time.Time
+		if args[1] != nil {
+			arg1 = args[1].(time.Time)
+		}
+		var arg2 int
+		if args[2] != nil {
+			arg2 = args[2].(int)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockTransactionRepository_ListPendingExpired_Call) Return(transactions []domain.Transaction, err error) *MockTransactionRepository_ListPendingExpired_Call {
+	_c.Call.Return(transactions, err)
+	return _c
+}
+
+func (_c *MockTransactionRepository_ListPendingExpired_Call) RunAndReturn(run func(ctx context.Context, now time.Time, limit int) ([]domain.Transaction, error)) *MockTransactionRepository_ListPendingExpired_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UpdateRefundStatus provides a mock function for the type MockTransactionRepository
 func (_mock *MockTransactionRepository) UpdateRefundStatus(ctx context.Context, id string, refundStatus string) error {
 	ret := _mock.Called(ctx, id, refundStatus)
@@ -426,6 +501,75 @@ func (_c *MockTransactionRepository_UpdateRefundStatus_Call) Return(err error) *
 }
 
 func (_c *MockTransactionRepository_UpdateRefundStatus_Call) RunAndReturn(run func(ctx context.Context, id string, refundStatus string) error) *MockTransactionRepository_UpdateRefundStatus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateSession provides a mock function for the type MockTransactionRepository
+func (_mock *MockTransactionRepository) UpdateSession(ctx context.Context, id string, providerRef string, paymentLinkURL string) error {
+	ret := _mock.Called(ctx, id, providerRef, paymentLinkURL)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateSession")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) error); ok {
+		r0 = returnFunc(ctx, id, providerRef, paymentLinkURL)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockTransactionRepository_UpdateSession_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateSession'
+type MockTransactionRepository_UpdateSession_Call struct {
+	*mock.Call
+}
+
+// UpdateSession is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+//   - providerRef string
+//   - paymentLinkURL string
+func (_e *MockTransactionRepository_Expecter) UpdateSession(ctx any, id any, providerRef any, paymentLinkURL any) *MockTransactionRepository_UpdateSession_Call {
+	return &MockTransactionRepository_UpdateSession_Call{Call: _e.mock.On("UpdateSession", ctx, id, providerRef, paymentLinkURL)}
+}
+
+func (_c *MockTransactionRepository_UpdateSession_Call) Run(run func(ctx context.Context, id string, providerRef string, paymentLinkURL string)) *MockTransactionRepository_UpdateSession_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockTransactionRepository_UpdateSession_Call) Return(err error) *MockTransactionRepository_UpdateSession_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockTransactionRepository_UpdateSession_Call) RunAndReturn(run func(ctx context.Context, id string, providerRef string, paymentLinkURL string) error) *MockTransactionRepository_UpdateSession_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -495,6 +639,84 @@ func (_c *MockTransactionRepository_UpdateStatus_Call) Return(err error) *MockTr
 }
 
 func (_c *MockTransactionRepository_UpdateStatus_Call) RunAndReturn(run func(ctx context.Context, id string, status string, providerRef string) error) *MockTransactionRepository_UpdateStatus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateStatusIfPending provides a mock function for the type MockTransactionRepository
+func (_mock *MockTransactionRepository) UpdateStatusIfPending(ctx context.Context, id string, status string, providerRef string) (bool, error) {
+	ret := _mock.Called(ctx, id, status, providerRef)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateStatusIfPending")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) (bool, error)); ok {
+		return returnFunc(ctx, id, status, providerRef)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) bool); ok {
+		r0 = returnFunc(ctx, id, status, providerRef)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
+		r1 = returnFunc(ctx, id, status, providerRef)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockTransactionRepository_UpdateStatusIfPending_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateStatusIfPending'
+type MockTransactionRepository_UpdateStatusIfPending_Call struct {
+	*mock.Call
+}
+
+// UpdateStatusIfPending is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+//   - status string
+//   - providerRef string
+func (_e *MockTransactionRepository_Expecter) UpdateStatusIfPending(ctx any, id any, status any, providerRef any) *MockTransactionRepository_UpdateStatusIfPending_Call {
+	return &MockTransactionRepository_UpdateStatusIfPending_Call{Call: _e.mock.On("UpdateStatusIfPending", ctx, id, status, providerRef)}
+}
+
+func (_c *MockTransactionRepository_UpdateStatusIfPending_Call) Run(run func(ctx context.Context, id string, status string, providerRef string)) *MockTransactionRepository_UpdateStatusIfPending_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockTransactionRepository_UpdateStatusIfPending_Call) Return(b bool, err error) *MockTransactionRepository_UpdateStatusIfPending_Call {
+	_c.Call.Return(b, err)
+	return _c
+}
+
+func (_c *MockTransactionRepository_UpdateStatusIfPending_Call) RunAndReturn(run func(ctx context.Context, id string, status string, providerRef string) (bool, error)) *MockTransactionRepository_UpdateStatusIfPending_Call {
 	_c.Call.Return(run)
 	return _c
 }

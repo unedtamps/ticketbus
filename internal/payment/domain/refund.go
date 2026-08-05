@@ -9,6 +9,7 @@ type RefundRequest struct {
 	EventID        string     `json:"event_id"`
 	BookingID      string     `json:"booking_id"`
 	TransactionID  string     `json:"transaction_id"`
+	CustomerEmail  string     `json:"customer_email"`
 	AmountCents    int64      `json:"amount_cents"`
 	Currency       string     `json:"currency"`
 	Status         string     `json:"status"`

@@ -438,7 +438,7 @@ func TestListMyBookings(t *testing.T) {
 	assert.Len(t, bookings, 2)
 }
 
-func TestExpireOnPaymentFailed_SetsExpired(t *testing.T) {
+func TestExpireOnPaymentExpired_SetsExpired(t *testing.T) {
 	bookingRepo := mocks.NewMockBookingRepository(t)
 	cache := mocks.NewMockReservationCache(t)
 	seatCounter := mocks.NewMockSeatCounter(t)
@@ -451,6 +451,6 @@ func TestExpireOnPaymentFailed_SetsExpired(t *testing.T) {
 	bookingRepo.EXPECT().TransitionAndReleaseSeats(ctx, mock.AnythingOfType("*domain.Booking"), "expired").Return(true, nil)
 	cache.EXPECT().Delete(ctx, "book-1").Return(nil)
 	svc, _ := newBookingService(t, bookingRepo, cache, seatCounter, consumer)
-	err := svc.ExpireOnPaymentFailed(ctx, "book-1")
+	err := svc.ExpireOnPaymentExpired(ctx, "book-1")
 	require.NoError(t, err)
 }

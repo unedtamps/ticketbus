@@ -227,7 +227,7 @@ func startContainers() *TestEnv {
 	payLogger := log.New("payment", "warn")
 	txnRepo := paypostgres.NewTransactionRepo(payPool)
 	refundRepo := paypostgres.NewRefundRepo(payPool)
-	mockProcessor := processor.NewMockProcessor()
+	mockProcessor := processor.NewMockProcessor("")
 	payConsumer := paykafka.NewPaymentConsumer(brokerList, "payment-service-test", 1)
 	payOutbox := outbox.NewStore(payPool)
 	paySvc := payapp.NewPaymentService(
@@ -238,9 +238,13 @@ func startContainers() *TestEnv {
 		payOutbox,
 		payLogger,
 		"",
+		"mock",
+		5,
+		[]string{"ID_QRIS", "ID_BCA_VA"},
 	)
-	payHandler := payhandler.NewPaymentHandler(paySvc)
+	payHandler := payhandler.NewPaymentHandler(paySvc, "test-internal-key", "")
 	paySrv := httptest.NewServer(payHandler.Routes())
+	mockProcessor.SetWebhookURL(paySrv.URL + "/api/payments/webhook")
 
 	payOutboxWorker := outbox.NewWorker(payPool, kafkaProducer, payLogger, 1, 200)
 
@@ -303,7 +307,7 @@ func waitForKafka(brokers []string, producer *sharedkafka.Producer) {
 	topics := []string{
 		"event.cancelled",
 		"reservation.cancelled", "ticket.issued",
-		"payment.completed", "payment.failed",
+		"payment.completed", "payment.expired",
 		"test-smoke",
 	}
 

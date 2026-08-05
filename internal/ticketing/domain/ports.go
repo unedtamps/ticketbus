@@ -65,7 +65,7 @@ type SeatCounter interface {
 // EventConsumer defines the contract for consuming events from other services.
 type EventConsumer interface {
 	OnPaymentCompleted(ctx context.Context, fn func(ctx context.Context, bookingID, transactionID string) error)
-	OnPaymentFailed(ctx context.Context, fn func(ctx context.Context, bookingID string) error)
+	OnPaymentExpired(ctx context.Context, fn func(ctx context.Context, bookingID string) error)
 	OnEventCancelled(ctx context.Context, fn func(ctx context.Context, eventID string) error)
 	Start(ctx context.Context) error
 	Close() error

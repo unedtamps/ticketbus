@@ -13,9 +13,16 @@ func (h *PaymentHandler) Routes() chi.Router {
 	// Provider webhook (public — providers authenticate via signature, not user JWT)
 	r.Post("/api/payments/webhook/{provider}", h.Webhook)
 
+	// Internal service-to-service routes (protected by X-Internal-Key)
+	r.With(h.requireInternalKey).Post("/api/payments/internal", h.CreateTxnForBooking)
+
 	// Customer routes
 	r.Group(func(r chi.Router) {
 		r.Use(sharedhttp.WithUserContext)
+		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
+			Post("/api/payments/booking/{booking_id}", h.InitiatePayment)
+		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
+			Get("/api/payments/booking/{booking_id}", h.GetPaymentStatus)
 		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
 			Post("/api/payments/by-booking/{booking_id}/checkout", h.CheckoutByBooking)
 		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).Get("/api/payments/{id}/status", h.GetStatus)

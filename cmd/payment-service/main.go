@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/nedo/TicketSaas/internal/payment/application"
 	"github.com/nedo/TicketSaas/internal/payment/config"
+	"github.com/nedo/TicketSaas/internal/payment/domain"
 	"github.com/nedo/TicketSaas/internal/payment/handler"
 	paykafka "github.com/nedo/TicketSaas/internal/payment/kafka"
 	"github.com/nedo/TicketSaas/internal/payment/postgres"
@@ -43,7 +44,16 @@ func main() {
 
 	txnRepo := postgres.NewTransactionRepo(pool)
 	refundRepo := postgres.NewRefundRepo(pool)
-	mockProcessor := processor.NewMockProcessor()
+
+	var payProcessor domain.PaymentProcessor
+	switch cfg.Provider {
+	case "xendit":
+		payProcessor = processor.NewXenditProcessor(cfg.XenditBaseURL, cfg.XenditAPIKey)
+	case "mock":
+		fallthrough
+	default:
+		payProcessor = processor.NewMockProcessor(cfg.WebhookBaseURL)
+	}
 
 	kafkaBrokers := strings.Split(cfg.KafkaBrokers, ",")
 	consumer := paykafka.NewPaymentConsumer(kafkaBrokers, "payment-service", cfg.ConsumerConcurrency)
@@ -54,7 +64,7 @@ func main() {
 	if err := sharedkafka.EnsureTopics(kafkaBrokers, []string{
 		"reservation.cancelled",
 		"event.cancelled",
-		"payment.completed", "payment.failed",
+		"payment.completed", "payment.expired",
 	}, 4, 3); err != nil {
 		logger.Error("failed to ensure kafka topics", "error", err)
 		os.Exit(1)
@@ -64,19 +74,23 @@ func main() {
 	svc := application.NewPaymentService(
 		txnRepo,
 		refundRepo,
-		mockProcessor,
+		payProcessor,
 		consumer,
 		outboxStore,
 		logger,
 		cfg.WebhookBaseURL,
+		cfg.Provider,
+		cfg.GatewayExpiryBufferMin,
+		cfg.EnabledMethods(),
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go outboxWorker.Run(ctx)
 	_ = svc.StartConsumer(ctx)
+	svc.StartExpiryPoller(ctx, cfg.ExpiryPollSec)
 
-	h := handler.NewPaymentHandler(svc)
+	h := handler.NewPaymentHandler(svc, cfg.InternalAPIKey, cfg.XenditCallbackTok)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
@@ -94,7 +108,7 @@ func main() {
 	srv := &http.Server{Addr: ":" + cfg.Port, Handler: r}
 
 	go func() {
-		logger.Info("payment-service starting", "env", cfg.AppEnv, "port", cfg.Port)
+		logger.Info("payment-service starting", "env", cfg.AppEnv, "port", cfg.Port, "provider", cfg.Provider)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("server failed", "error", err)
 			os.Exit(1)

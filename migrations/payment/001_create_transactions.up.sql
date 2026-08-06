@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     expires_at      TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    status          TEXT NOT NULL CHECK (status IN ('pending', 'completed', 'expired')),
+    status          TEXT NOT NULL CHECK (status IN ('initiated', 'pending', 'completed', 'expired')),
     refund_status   TEXT NOT NULL DEFAULT 'none'
         CHECK (refund_status IN ('none', 'pending', 'success'))
 );

@@ -38,12 +38,12 @@ func (_m *MockPaymentClient) EXPECT() *MockPaymentClient_Expecter {
 	return &MockPaymentClient_Expecter{mock: &_m.Mock}
 }
 
-// CreateTxnForBooking provides a mock function for the type MockPaymentClient
-func (_mock *MockPaymentClient) CreateTxnForBooking(ctx context.Context, bookingID string, eventID string, userID string, email string, amountCents int, expiresAt time.Time) error {
+// InitiateTxnForBooking provides a mock function for the type MockPaymentClient
+func (_mock *MockPaymentClient) InitiateTxnForBooking(ctx context.Context, bookingID string, eventID string, userID string, email string, amountCents int, expiresAt time.Time) error {
 	ret := _mock.Called(ctx, bookingID, eventID, userID, email, amountCents, expiresAt)
 
 	if len(ret) == 0 {
-		panic("no return value specified for CreateTxnForBooking")
+		panic("no return value specified for InitiateTxnForBooking")
 	}
 
 	var r0 error
@@ -55,12 +55,12 @@ func (_mock *MockPaymentClient) CreateTxnForBooking(ctx context.Context, booking
 	return r0
 }
 
-// MockPaymentClient_CreateTxnForBooking_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateTxnForBooking'
-type MockPaymentClient_CreateTxnForBooking_Call struct {
+// MockPaymentClient_InitiateTxnForBooking_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'InitiateTxnForBooking'
+type MockPaymentClient_InitiateTxnForBooking_Call struct {
 	*mock.Call
 }
 
-// CreateTxnForBooking is a helper method to define mock.On call
+// InitiateTxnForBooking is a helper method to define mock.On call
 //   - ctx context.Context
 //   - bookingID string
 //   - eventID string
@@ -68,11 +68,11 @@ type MockPaymentClient_CreateTxnForBooking_Call struct {
 //   - email string
 //   - amountCents int
 //   - expiresAt time.Time
-func (_e *MockPaymentClient_Expecter) CreateTxnForBooking(ctx any, bookingID any, eventID any, userID any, email any, amountCents any, expiresAt any) *MockPaymentClient_CreateTxnForBooking_Call {
-	return &MockPaymentClient_CreateTxnForBooking_Call{Call: _e.mock.On("CreateTxnForBooking", ctx, bookingID, eventID, userID, email, amountCents, expiresAt)}
+func (_e *MockPaymentClient_Expecter) InitiateTxnForBooking(ctx any, bookingID any, eventID any, userID any, email any, amountCents any, expiresAt any) *MockPaymentClient_InitiateTxnForBooking_Call {
+	return &MockPaymentClient_InitiateTxnForBooking_Call{Call: _e.mock.On("InitiateTxnForBooking", ctx, bookingID, eventID, userID, email, amountCents, expiresAt)}
 }
 
-func (_c *MockPaymentClient_CreateTxnForBooking_Call) Run(run func(ctx context.Context, bookingID string, eventID string, userID string, email string, amountCents int, expiresAt time.Time)) *MockPaymentClient_CreateTxnForBooking_Call {
+func (_c *MockPaymentClient_InitiateTxnForBooking_Call) Run(run func(ctx context.Context, bookingID string, eventID string, userID string, email string, amountCents int, expiresAt time.Time)) *MockPaymentClient_InitiateTxnForBooking_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -115,12 +115,12 @@ func (_c *MockPaymentClient_CreateTxnForBooking_Call) Run(run func(ctx context.C
 	return _c
 }
 
-func (_c *MockPaymentClient_CreateTxnForBooking_Call) Return(err error) *MockPaymentClient_CreateTxnForBooking_Call {
+func (_c *MockPaymentClient_InitiateTxnForBooking_Call) Return(err error) *MockPaymentClient_InitiateTxnForBooking_Call {
 	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *MockPaymentClient_CreateTxnForBooking_Call) RunAndReturn(run func(ctx context.Context, bookingID string, eventID string, userID string, email string, amountCents int, expiresAt time.Time) error) *MockPaymentClient_CreateTxnForBooking_Call {
+func (_c *MockPaymentClient_InitiateTxnForBooking_Call) RunAndReturn(run func(ctx context.Context, bookingID string, eventID string, userID string, email string, amountCents int, expiresAt time.Time) error) *MockPaymentClient_InitiateTxnForBooking_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -12,7 +12,7 @@ import (
 // gateway expiry webhook never arrived (or was never created because the
 // customer did not initiate a payment session).
 func (s *PaymentService) ProcessExpired(ctx context.Context, limit int) error {
-	txns, err := s.txnRepo.ListPendingExpired(ctx, time.Now(), limit)
+	txns, err := s.txnRepo.ListActiveExpired(ctx, time.Now(), limit)
 	if err != nil {
 		return err
 	}
@@ -23,7 +23,7 @@ func (s *PaymentService) ProcessExpired(ctx context.Context, limit int) error {
 				s.logger.Warn("failed to cancel session at gateway", "txn_id", txn.ID, "error", err)
 			}
 		}
-		applied, err := s.txnRepo.UpdateStatusIfPending(
+		applied, err := s.txnRepo.TransitionIfActive(
 			ctx,
 			txn.ID,
 			domain.StatusExpired,

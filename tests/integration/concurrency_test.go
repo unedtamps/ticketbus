@@ -178,7 +178,7 @@ func TestConcurrentBookingConsistency(t *testing.T) {
 		var pendingTxn int
 		env.payPool.QueryRow(
 			ctx,
-			"SELECT COUNT(*) FROM transactions WHERE status IN ('pending')",
+			"SELECT COUNT(*) FROM transactions WHERE status IN ('initiated','pending')",
 		).Scan(&pendingTxn)
 		return pendingTxn == 0
 	}, "async propagation (payment.completed → inventory)")

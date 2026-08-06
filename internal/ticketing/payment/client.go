@@ -29,9 +29,9 @@ func NewClient(baseURL, apiKey string, timeoutSec int) *Client {
 	}
 }
 
-// CreateTxnForBooking creates a pending transaction in the payment service.
+// InitiateTxnForBooking creates a pending transaction in the payment service.
 // Idempotent per booking; safe to retry once on 5xx.
-func (c *Client) CreateTxnForBooking(
+func (c *Client) InitiateTxnForBooking(
 	ctx context.Context,
 	bookingID, eventID, userID, email string,
 	amountCents int,

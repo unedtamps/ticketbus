@@ -84,7 +84,7 @@ func (s *BookingService) Reserve(
 		return nil, err
 	}
 
-	if err := s.paymentClient.CreateTxnForBooking(
+	if err := s.paymentClient.InitiateTxnForBooking(
 		ctx,
 		res.BookingID,
 		res.EventID,

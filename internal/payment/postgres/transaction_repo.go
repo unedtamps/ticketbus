@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/nedo/TicketSaas/internal/payment/domain"
@@ -62,16 +63,38 @@ func (r *TransactionRepo) UpdateStatus(ctx context.Context, id, status, provider
 	return err
 }
 
-// UpdateStatusIfPending transitions the transaction only when it is still
-// pending, so concurrent paths (webhook vs poll) cannot race.
-func (r *TransactionRepo) UpdateStatusIfPending(ctx context.Context, id, status, providerRef string) (bool, error) {
+// TransitionIfActive transitions the transaction only when it is still in an
+// active (non-terminal) status, so concurrent paths (webhook vs poll) cannot
+// race.
+func (r *TransactionRepo) TransitionIfActive(ctx context.Context, id, status, providerRef string) (bool, error) {
 	tag, err := r.db.Exec(ctx,
-		`UPDATE transactions SET status=$1, provider_ref=$2, updated_at=NOW() WHERE id=$3 AND status='pending'`,
+		`UPDATE transactions SET status=$1, provider_ref=$2, updated_at=NOW() WHERE id=$3 AND status IN (`+statusInClause(domain.ActiveStatuses())+`)`,
 		status, providerRef, id)
 	if err != nil {
 		return false, err
 	}
 	return tag.RowsAffected() > 0, nil
+}
+
+// TransitionIfInitiated transitions the transaction only while it is still
+// initiated. Used for the initiated → pending step so a concurrent
+// ProcessPayment cannot clobber an existing session reference.
+func (r *TransactionRepo) TransitionIfInitiated(ctx context.Context, id, status, providerRef string) (bool, error) {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE transactions SET status=$1, provider_ref=$2, updated_at=NOW() WHERE id=$3 AND status='initiated'`,
+		status, providerRef, id)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+func statusInClause(statuses []string) string {
+	quoted := make([]string, len(statuses))
+	for i, s := range statuses {
+		quoted[i] = "'" + s + "'"
+	}
+	return strings.Join(quoted, ",")
 }
 
 // UpdateSession stores the gateway payment session details.
@@ -108,10 +131,10 @@ func (r *TransactionRepo) ListByEventID(ctx context.Context, eventID string) ([]
 	return collectTxns(rows)
 }
 
-// ListPendingExpired returns pending transactions whose deadline has passed.
-func (r *TransactionRepo) ListPendingExpired(ctx context.Context, now time.Time, limit int) ([]domain.Transaction, error) {
+// ListActiveExpired returns active transactions whose deadline has passed.
+func (r *TransactionRepo) ListActiveExpired(ctx context.Context, now time.Time, limit int) ([]domain.Transaction, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT `+txnColumns+` FROM transactions WHERE status='pending' AND expires_at IS NOT NULL AND expires_at <= $1 ORDER BY expires_at ASC LIMIT $2`,
+		`SELECT `+txnColumns+` FROM transactions WHERE status IN (`+statusInClause(domain.ActiveStatuses())+`) AND expires_at IS NOT NULL AND expires_at <= $1 ORDER BY expires_at ASC LIMIT $2`,
 		now, limit)
 	if err != nil {
 		return nil, err

@@ -11,18 +11,23 @@ type TransactionRepository interface {
 	FindByID(ctx context.Context, id string) (*Transaction, error)
 	FindByBookingID(ctx context.Context, bookingID string) (*Transaction, error)
 	UpdateStatus(ctx context.Context, id, status, providerRef string) error
-	// UpdateStatusIfPending transitions the transaction only if it is still
-	// pending, guarding concurrent paths (webhook vs expiry poll) atomically.
-	UpdateStatusIfPending(ctx context.Context, id, status, providerRef string) (bool, error)
+	// TransitionIfActive transitions the transaction only if it is still in an
+	// active (non-terminal) status, guarding concurrent paths (webhook vs
+	// expiry poll) atomically.
+	TransitionIfActive(ctx context.Context, id, status, providerRef string) (bool, error)
+	// TransitionIfInitiated transitions the transaction only while it is still
+	// initiated (the initiated → pending step of ProcessPayment), so a
+	// concurrent request cannot overwrite an existing session reference.
+	TransitionIfInitiated(ctx context.Context, id, status, providerRef string) (bool, error)
 	// UpdateSession stores the gateway payment session details after the
 	// customer initiates a payment for the booking.
 	UpdateSession(ctx context.Context, id, providerRef, paymentLinkURL string) error
 	UpdateRefundStatus(ctx context.Context, id, refundStatus string) error
 	ListByUser(ctx context.Context, userID string) ([]Transaction, error)
 	ListByEventID(ctx context.Context, eventID string) ([]Transaction, error)
-	// ListPendingExpired returns pending transactions whose deadline has
-	// passed, for the expiry fallback poller.
-	ListPendingExpired(ctx context.Context, now time.Time, limit int) ([]Transaction, error)
+	// ListActiveExpired returns active transactions whose deadline has passed,
+	// for the expiry fallback poller.
+	ListActiveExpired(ctx context.Context, now time.Time, limit int) ([]Transaction, error)
 }
 
 // RefundRepository defines the contract for refund request persistence.

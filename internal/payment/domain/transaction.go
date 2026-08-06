@@ -23,6 +23,7 @@ type Transaction struct {
 
 // PaymentStatus constants.
 const (
+	StatusInitiated = "initiated"
 	StatusPending   = "pending"
 	StatusCompleted = "completed"
 	StatusExpired   = "expired"
@@ -31,3 +32,9 @@ const (
 // GatewayExpiredReason is used on payment.expired events published because the
 // gateway expired the payment session.
 const GatewayExpiredReason = "gateway_expired"
+
+// ActiveStatuses returns the non-terminal transaction statuses (initiated and
+// pending). Terminal statuses are completed and expired.
+func ActiveStatuses() []string {
+	return []string{StatusInitiated, StatusPending}
+}

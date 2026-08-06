@@ -31,8 +31,8 @@ type InternalCreateResponse struct {
 	BookingID     string `json:"booking_id"`
 }
 
-// InitiateResponse returns the gateway session details to render/redirect.
-type InitiateResponse struct {
+// ProcessPaymentResponse returns the gateway session details to render/redirect.
+type ProcessPaymentResponse struct {
 	TransactionID    string `json:"transaction_id"`
 	PaymentSessionID string `json:"payment_session_id"`
 	PaymentLinkURL   string `json:"payment_link_url"`

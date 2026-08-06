@@ -33,11 +33,11 @@ func Test_InitiateAndWebhookCompletesPayment(t *testing.T) {
 	bookingID := rr.Data.BookingID
 	require.NotEmpty(t, bookingID)
 
-	// The transaction row must exist immediately (sync reserve), pending.
+	// The transaction row must exist immediately (sync reserve), initiated.
 	var txnStatus string
 	require.NoError(t, env.payPool.QueryRow(
 		context.Background(), `SELECT status FROM transactions WHERE booking_id = $1`, bookingID).Scan(&txnStatus))
-	assert.Equal(t, "pending", txnStatus)
+	assert.Equal(t, "initiated", txnStatus)
 
 	// Initiate payment → payment session with checkout link
 	sessionID, link := initiatePayment(t, env, bookingID, ch)

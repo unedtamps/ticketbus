@@ -14,13 +14,13 @@ func (h *PaymentHandler) Routes() chi.Router {
 	r.Post("/api/payments/webhook/{provider}", h.Webhook)
 
 	// Internal service-to-service routes (protected by X-Internal-Key)
-	r.With(h.requireInternalKey).Post("/api/payments/internal", h.CreateTxnForBooking)
+	r.With(h.requireInternalKey).Post("/api/payments/internal", h.InitiateTxnForBooking)
 
 	// Customer routes
 	r.Group(func(r chi.Router) {
 		r.Use(sharedhttp.WithUserContext)
 		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
-			Post("/api/payments/booking/{booking_id}", h.InitiatePayment)
+			Post("/api/payments/booking/{booking_id}", h.ProcessPayment)
 		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
 			Get("/api/payments/booking/{booking_id}", h.GetPaymentStatus)
 		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).

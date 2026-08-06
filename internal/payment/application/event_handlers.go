@@ -48,18 +48,20 @@ func (s *PaymentService) HandleEventCancelled(ctx context.Context, eventID strin
 				txn.ID,
 			)
 
-		case domain.StatusPending:
-			// Pending payments are intentionally left to run their course:
-			// the customer may still complete the payment, and the session
-			// expires on its own. Any transaction that completes after this
-			// pass is picked up by a later cancel-reprocess of event.cancelled
-			// and refunded then.
+		case domain.StatusInitiated, domain.StatusPending:
+			// Initiated and pending payments are intentionally left to run
+			// their course: the customer may still complete the payment, and
+			// the session expires on its own. Any transaction that completes
+			// after this pass is picked up by a later cancel-reprocess of
+			// event.cancelled and refunded then.
 			s.logger.Info(
-				"pending payment left for cancelled event",
+				"payment left for cancelled event",
 				"event_id",
 				eventID,
 				"transaction_id",
 				txn.ID,
+				"status",
+				txn.Status,
 			)
 		}
 	}

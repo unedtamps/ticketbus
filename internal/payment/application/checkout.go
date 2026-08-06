@@ -17,7 +17,7 @@ func (s *PaymentService) Checkout(ctx context.Context, txnID string) (*domain.Tr
 	if err != nil {
 		return nil, domain.ErrTransactionNotFound
 	}
-	if txn.Status != domain.StatusPending {
+	if txn.Status != domain.StatusInitiated && txn.Status != domain.StatusPending {
 		return nil, domain.ErrAlreadyProcessed
 	}
 

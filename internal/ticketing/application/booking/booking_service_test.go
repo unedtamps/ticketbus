@@ -61,7 +61,7 @@ func TestReserve_Success_SingleItem(t *testing.T) {
 	bookingRepo.EXPECT().Create(ctx, mock.MatchedBy(func(b *domain.Booking) bool {
 		return b.Status == "pending" && b.ExpiresAt != nil && len(b.Items) == 1
 	})).Return(nil)
-	paymentClient.EXPECT().CreateTxnForBooking(ctx, mock.AnythingOfType("string"), "event-1", "user-1", "user@example.com", 20000, mock.Anything).Return(nil)
+	paymentClient.EXPECT().InitiateTxnForBooking(ctx, mock.AnythingOfType("string"), "event-1", "user-1", "user@example.com", 20000, mock.Anything).Return(nil)
 	svc, _ := newBookingService(t, bookingRepo, paymentClient, seatCounter, consumer)
 	userID, email, eventID, itemsOut := reserveArgs(items)
 	res, err := svc.Reserve(ctx, userID, email, eventID, itemsOut)
@@ -87,7 +87,7 @@ func TestReserve_Success_MultiItem(t *testing.T) {
 	seatCounter.EXPECT().Reserve(ctx, "event-1", "vip", 2).Return(nil)
 	seatCounter.EXPECT().Reserve(ctx, "event-1", "reg", 1).Return(nil)
 	bookingRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
-	paymentClient.EXPECT().CreateTxnForBooking(ctx, mock.Anything, "event-1", "user-1", "user@example.com", 25000, mock.Anything).Return(nil)
+	paymentClient.EXPECT().InitiateTxnForBooking(ctx, mock.Anything, "event-1", "user-1", "user@example.com", 25000, mock.Anything).Return(nil)
 	svc, _ := newBookingService(t, bookingRepo, paymentClient, seatCounter, consumer)
 	userID, email, eventID, itemsOut := reserveArgs(items)
 	res, err := svc.Reserve(ctx, userID, email, eventID, itemsOut)
@@ -145,7 +145,7 @@ func TestReserve_PaymentFails_RollbackAll(t *testing.T) {
 	seatCounter.EXPECT().Reserve(ctx, "event-1", "vip", 2).Return(nil)
 	bookingRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
 	bookingRepo.EXPECT().Delete(ctx, mock.AnythingOfType("string")).Return(nil)
-	paymentClient.EXPECT().CreateTxnForBooking(ctx, mock.Anything, "event-1", "user-1", "user@example.com", 20000, mock.Anything).Return(domain.ErrPaymentUnavailable)
+	paymentClient.EXPECT().InitiateTxnForBooking(ctx, mock.Anything, "event-1", "user-1", "user@example.com", 20000, mock.Anything).Return(domain.ErrPaymentUnavailable)
 	seatCounter.EXPECT().Release(ctx, "event-1", "vip", 2).Return(nil)
 	userID, email, eventID, itemsOut := reserveArgs(items)
 	_, err := svc.Reserve(ctx, userID, email, eventID, itemsOut)

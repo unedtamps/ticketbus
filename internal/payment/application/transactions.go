@@ -11,10 +11,10 @@ import (
 	"github.com/nedo/TicketSaas/internal/payment/domain"
 )
 
-// CreateTxnForBooking creates a pending transaction for a booking. Called
+// InitiateTxnForBooking creates a pending transaction for a booking. Called
 // synchronously by the ticketing service during reserve, so the transaction
 // row always exists before any gateway activity. Idempotent per booking.
-func (s *PaymentService) CreateTxnForBooking(
+func (s *PaymentService) InitiateTxnForBooking(
 	ctx context.Context,
 	bookingID, eventID, userID, email string,
 	amountCents int,
@@ -27,7 +27,7 @@ func (s *PaymentService) CreateTxnForBooking(
 		EventID:       eventID,
 		AmountCents:   amountCents,
 		Currency:      "IDR",
-		Status:        domain.StatusPending,
+		Status:        domain.StatusInitiated,
 		Provider:      s.provider,
 		CustomerEmail: email,
 		RefundStatus:  "none",
@@ -74,4 +74,77 @@ func (s *PaymentService) ListMyTransactions(
 	userID string,
 ) ([]domain.Transaction, error) {
 	return s.txnRepo.ListByUser(ctx, userID)
+}
+
+// ProcessPayment creates the gateway payment session for a booking and moves
+// the transaction from initiated to pending. Allowed only while at least one
+// minute of the booking hold remains and the transaction is still initiated.
+// Amount and currency come from the stored transaction, never from the
+// request.
+func (s *PaymentService) ProcessPayment(
+	ctx context.Context,
+	bookingID, userID string,
+) (*domain.Transaction, *domain.SessionResult, error) {
+	txn, err := s.txnRepo.FindByBookingID(ctx, bookingID)
+	if err != nil {
+		return nil, nil, domain.ErrTransactionNotFound
+	}
+	if txn.Status != domain.StatusInitiated {
+		return nil, nil, domain.ErrAlreadyProcessed
+	}
+	if txn.ExpiresAt == nil || !txn.ExpiresAt.After(time.Now()) ||
+		time.Until(*txn.ExpiresAt) < time.Minute {
+		return nil, nil, domain.ErrTransactionExpired
+	}
+	if txn.UserID != userID {
+		return nil, nil, domain.ErrTransactionNotFound
+	}
+
+	gatewayExpiresAt := txn.ExpiresAt.Add(-time.Duration(s.gatewayExpiryBufferMin) * time.Minute)
+	result, err := s.processor.CreateSession(
+		ctx,
+		bookingID,
+		txn.AmountCents,
+		txn.Currency,
+		gatewayExpiresAt,
+		s.allowedChannels,
+		txn.CustomerEmail,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Transition initiated → pending. Guarded on initiated only, so a
+	// concurrent request cannot overwrite an existing session reference. If
+	// another path settled the transaction first, void the session we just
+	// created and report the conflict.
+	applied, err := s.txnRepo.TransitionIfInitiated(
+		ctx,
+		txn.ID,
+		domain.StatusPending,
+		result.ProviderRef,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !applied {
+		_ = s.processor.CancelSession(ctx, result.ProviderRef)
+		return nil, nil, domain.ErrAlreadyProcessed
+	}
+
+	if err := s.txnRepo.UpdateSession(
+		ctx,
+		txn.ID,
+		result.ProviderRef,
+		result.PaymentLinkURL,
+	); err != nil {
+		return nil, nil, err
+	}
+
+	s.logger.Info(
+		"payment session initiated",
+		"booking_id", bookingID,
+		"session_id", result.ProviderRef,
+	)
+	return txn, result, nil
 }

@@ -23,7 +23,7 @@ type sessionWebhookPayload struct {
 }
 
 // HandleSessionWebhook applies a verified gateway webhook directly to the
-// transaction row. Terminal transitions are guarded by UpdateStatusIfPending,
+// transaction row. Terminal transitions are guarded by TransitionIfActive,
 // so duplicates and concurrent deliveries are idempotent. When the
 // transaction does not exist yet the caller returns a non-2xx so the gateway
 // retries.
@@ -47,7 +47,7 @@ func (s *PaymentService) HandleSessionWebhook(
 
 	switch event.Event {
 	case "payment_session.completed":
-		applied, err := s.txnRepo.UpdateStatusIfPending(
+		applied, err := s.txnRepo.TransitionIfActive(
 			ctx,
 			txn.ID,
 			domain.StatusCompleted,
@@ -74,7 +74,7 @@ func (s *PaymentService) HandleSessionWebhook(
 		}
 
 	case "payment_session.expired":
-		applied, err := s.txnRepo.UpdateStatusIfPending(
+		applied, err := s.txnRepo.TransitionIfActive(
 			ctx,
 			txn.ID,
 			domain.StatusExpired,

@@ -47,8 +47,8 @@ func (h *PaymentHandler) requireInternalKey(next http.Handler) http.Handler {
 	})
 }
 
-// CreateTxnForBooking handles POST /api/payments/internal (ticketing → payment).
-func (h *PaymentHandler) CreateTxnForBooking(w http.ResponseWriter, r *http.Request) {
+// InitiateTxnForBooking handles POST /api/payments/internal (ticketing → payment).
+func (h *PaymentHandler) InitiateTxnForBooking(w http.ResponseWriter, r *http.Request) {
 	var req InternalCreateRequest
 	if err := sharedhttp.DecodeJSON(r, &req); err != nil {
 		sharedhttp.BadRequest(w, "invalid request body")
@@ -59,7 +59,7 @@ func (h *PaymentHandler) CreateTxnForBooking(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	txn, err := h.svc.CreateTxnForBooking(
+	txn, err := h.svc.InitiateTxnForBooking(
 		r.Context(),
 		req.BookingID,
 		req.EventID,
@@ -78,8 +78,8 @@ func (h *PaymentHandler) CreateTxnForBooking(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-// InitiatePayment handles POST /api/payments/booking/{booking_id}.
-func (h *PaymentHandler) InitiatePayment(w http.ResponseWriter, r *http.Request) {
+// ProcessPayment handles POST /api/payments/booking/{booking_id}.
+func (h *PaymentHandler) ProcessPayment(w http.ResponseWriter, r *http.Request) {
 	bookingID := chi.URLParam(r, "booking_id")
 	userID := sharedhttp.UserIDFromContext(r.Context())
 	if userID == "" {
@@ -87,7 +87,7 @@ func (h *PaymentHandler) InitiatePayment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	txn, result, err := h.svc.InitiatePayment(r.Context(), bookingID, userID)
+	txn, result, err := h.svc.ProcessPayment(r.Context(), bookingID, userID)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrTransactionNotFound):
@@ -102,7 +102,7 @@ func (h *PaymentHandler) InitiatePayment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	sharedhttp.OK(w, InitiateResponse{
+	sharedhttp.OK(w, ProcessPaymentResponse{
 		TransactionID:    txn.ID,
 		PaymentSessionID: result.ProviderRef,
 		PaymentLinkURL:   result.PaymentLinkURL,

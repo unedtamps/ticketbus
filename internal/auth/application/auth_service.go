@@ -43,7 +43,11 @@ func NewAuthService(
 }
 
 // Register creates a new user account.
-func (s *AuthService) Register(ctx context.Context, email, password, name string, role sdomain.Role) (*domain.User, error) {
+func (s *AuthService) Register(
+	ctx context.Context,
+	email, password, name string,
+	role sdomain.Role,
+) (*domain.User, error) {
 	existing, _ := s.userRepo.FindByEmail(ctx, email)
 	if existing != nil {
 		return nil, domain.ErrUserExists
@@ -70,7 +74,10 @@ func (s *AuthService) Register(ctx context.Context, email, password, name string
 }
 
 // RegisterOrganizer creates a user with role EO.
-func (s *AuthService) RegisterOrganizer(ctx context.Context, email, password, name, organizerName, description, profileLink, contactEmail string) (*domain.User, error) {
+func (s *AuthService) RegisterOrganizer(
+	ctx context.Context,
+	email, password, name, organizerName, description, profileLink, contactEmail string,
+) (*domain.User, error) {
 	user, err := s.Register(ctx, email, password, name, sdomain.RoleEO)
 	if err != nil {
 		return nil, err
@@ -80,7 +87,10 @@ func (s *AuthService) RegisterOrganizer(ctx context.Context, email, password, na
 }
 
 // Login authenticates a user and returns a token pair.
-func (s *AuthService) Login(ctx context.Context, email, password string) (*domain.TokenPair, error) {
+func (s *AuthService) Login(
+	ctx context.Context,
+	email, password string,
+) (*domain.TokenPair, error) {
 	user, err := s.userRepo.FindByEmail(ctx, email)
 	if err != nil {
 		return nil, domain.ErrInvalidCredentials
@@ -119,7 +129,10 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*domai
 }
 
 // RefreshToken exchanges a valid refresh token for a new token pair.
-func (s *AuthService) RefreshToken(ctx context.Context, rawRefreshToken string) (*domain.TokenPair, error) {
+func (s *AuthService) RefreshToken(
+	ctx context.Context,
+	rawRefreshToken string,
+) (*domain.TokenPair, error) {
 	hash := s.tokenSvc.HashRefreshToken(rawRefreshToken)
 
 	stored, err := s.tokenRepo.FindByHash(ctx, hash)
@@ -184,11 +197,13 @@ func (s *AuthService) DeleteUser(ctx context.Context, userID string) error {
 	return s.userRepo.DeleteByID(ctx, userID)
 }
 
-// AdminSeed represents a single admin account to seed.
+// AdminSeed represents a single admin account to seed. Name is required by
+// the config boundary; the application tolerates an empty name as a defensive
+// default (email prefix).
 type AdminSeed struct {
-	Email    string
-	Password string
-	Name     string // defaults to email prefix if empty
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Name     string `json:"name"`
 }
 
 // SeedAdmins creates admin users for each entry. Idempotent — skips existing emails.

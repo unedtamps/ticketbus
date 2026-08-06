@@ -35,6 +35,10 @@ func main() {
 		logger.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
+	if err := cfg.Validate(); err != nil {
+		logger.Error("invalid config", "error", err)
+		os.Exit(1)
+	}
 
 	tokenSvc, err := jwt.NewTokenService(cfg.JWTPrivateKey, cfg.JWTPublicKey, accessTokenTTL)
 	if err != nil {
@@ -73,19 +77,13 @@ func main() {
 	// Primary adapter (HTTP)
 	authHandler := handler.NewAuthHandler(authSvc)
 
-	// Seed admin users (idempotent).
-	if cfg.SeedAdmin && len(cfg.AdminEmails) > 0 {
-		if len(cfg.AdminEmails) != len(cfg.AdminPasswords) {
-			logger.Error("ADMIN_EMAILS and ADMIN_PASSWORDS must have the same length")
-			os.Exit(1)
-		}
-		admins := make([]application.AdminSeed, len(cfg.AdminEmails))
-		for i := range cfg.AdminEmails {
-			admins[i] = application.AdminSeed{
-				Email:    cfg.AdminEmails[i],
-				Password: cfg.AdminPasswords[i],
-			}
-		}
+	// Seed admin users on every startup (idempotent — skips existing emails).
+	admins, err := cfg.AdminSeeds()
+	if err != nil {
+		logger.Error("invalid admin seeds", "error", err)
+		os.Exit(1)
+	}
+	if len(admins) > 0 {
 		created, err := authSvc.SeedAdmins(context.Background(), admins)
 		if err != nil {
 			logger.Error("failed to seed admins", "error", err)

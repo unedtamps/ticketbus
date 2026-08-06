@@ -28,12 +28,12 @@ func (s *BookingService) Reserve(
 		if err != nil {
 			return nil, err
 		}
-		if item.UnitPriceCents != realPrice {
+		if item.UnitPriceRupiah != realPrice {
 			return nil, fmt.Errorf(
 				"%w: expected %d, got %d",
 				domain.ErrPriceMismatch,
 				realPrice,
-				item.UnitPriceCents,
+				item.UnitPriceRupiah,
 			)
 		}
 
@@ -60,7 +60,7 @@ func (s *BookingService) Reserve(
 		UserID:     userID,
 		EventID:    eventID,
 		Items:      items,
-		TotalCents: calculateTotal(items),
+		TotalRupiah: calculateTotal(items),
 		Status:     "pending",
 		ExpiresAt:  expiresAt,
 		CreatedAt:  time.Now(),
@@ -68,7 +68,7 @@ func (s *BookingService) Reserve(
 	for i := range res.Items {
 		res.Items[i].ID = uuid.NewString()
 		res.Items[i].BookingID = res.BookingID
-		res.Items[i].TotalPrice = res.Items[i].UnitPriceCents * res.Items[i].Quantity
+		res.Items[i].TotalPriceRupiah = res.Items[i].UnitPriceRupiah * res.Items[i].Quantity
 	}
 
 	booking := &domain.Booking{
@@ -90,7 +90,7 @@ func (s *BookingService) Reserve(
 		res.EventID,
 		res.UserID,
 		userEmail,
-		res.TotalCents,
+		res.TotalRupiah,
 		res.ExpiresAt,
 	); err != nil {
 		_ = s.bookingRepo.Delete(ctx, res.BookingID)
@@ -117,7 +117,7 @@ func (s *BookingService) rollbackSeats(
 func calculateTotal(items []domain.BookingItem) int {
 	total := 0
 	for _, item := range items {
-		total += item.UnitPriceCents * item.Quantity
+		total += item.UnitPriceRupiah * item.Quantity
 	}
 	return total
 }

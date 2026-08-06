@@ -11,7 +11,7 @@ type Booking struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 	// Deprecated compatibility fields. The target schema derives totals from items
 	// and keeps payment state in the payment service.
-	TotalCents   int           `json:"total_cents"`
+	TotalRupiah   int           `json:"total_rupiah"`
 	PaymentID    string        `json:"payment_id"`
 	RefundStatus string        `json:"refund_status,omitempty"`
 	Items        []BookingItem `json:"items"`
@@ -24,8 +24,8 @@ type BookingItem struct {
 	BookingID      string `json:"booking_id"`
 	TicketTypeID   string `json:"ticket_type_id"`
 	Quantity       int    `json:"quantity"`
-	UnitPriceCents int    `json:"unit_price_cents"`
-	TotalPrice     int    `json:"total_price"`
+	UnitPriceRupiah int    `json:"unit_price_rupiah"`
+	TotalPriceRupiah     int    `json:"total_price_rupiah"`
 }
 
 // Reservation is a temporary hold in Redis.
@@ -34,7 +34,7 @@ type Reservation struct {
 	UserID     string        `json:"user_id"`
 	EventID    string        `json:"event_id"`
 	Items      []BookingItem `json:"items"`
-	TotalCents int           `json:"total_cents"`
+	TotalRupiah int           `json:"total_rupiah"`
 	Status     string        `json:"status"`
 	ExpiresAt  time.Time     `json:"expires_at"`
 	CreatedAt  time.Time     `json:"created_at"`

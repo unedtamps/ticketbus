@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const protectedRoutes = ["/dashboard", "/events", "/admin", "/checkout"];
+const protectedRoutes = ["/dashboard", "/events", "/admin", "/checkout", "/payment"];
 const authRoutes = ["/login", "/register"];
 const publicEventPattern = /^\/events\/.+$/;
 

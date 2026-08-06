@@ -19,7 +19,7 @@ type TicketTypeInfo struct {
 	TicketTypeID string `json:"ticket_type_id"`
 	Name         string `json:"name"`
 	Quantity     int    `json:"quantity"`
-	PriceCents   int    `json:"price_cents"`
+	PriceRupiah   int    `json:"price_rupiah"`
 }
 
 type EventRejected struct {
@@ -41,7 +41,7 @@ type EventCancelled struct {
 type BookingItem struct {
 	TicketTypeID   string `json:"ticket_type_id"`
 	Quantity       int    `json:"quantity"`
-	UnitPriceCents int    `json:"unit_price_cents"`
+	UnitPriceRupiah int    `json:"unit_price_rupiah"`
 }
 
 type PaymentInitiated struct {
@@ -49,7 +49,7 @@ type PaymentInitiated struct {
 	BookingID     string    `json:"booking_id"`
 	EventID       string    `json:"event_id"`
 	UserID        string    `json:"user_id"`
-	AmountCents   int       `json:"amount_cents"`
+	AmountRupiah   int       `json:"amount_rupiah"`
 	At            time.Time `json:"at"`
 }
 

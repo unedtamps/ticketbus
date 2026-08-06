@@ -6,9 +6,8 @@ import (
 	sharedhttp "github.com/nedo/TicketSaas/internal/shared/http"
 )
 
-// Routes returns the event service HTTP routes.
-func (h *EventHandler) Routes() chi.Router {
-	r := chi.NewRouter()
+// Routes registers the event HTTP routes onto the provided router.
+func (h *EventHandler) Routes(r chi.Router) chi.Router {
 
 	// Public routes
 	r.Get("/api/events", h.ListPublished)

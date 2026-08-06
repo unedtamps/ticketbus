@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     user_id         UUID NOT NULL,
     booking_id      UUID NOT NULL UNIQUE,
     event_id        UUID NOT NULL,
-    amount_cents    BIGINT NOT NULL CHECK (amount_cents >= 0),
+    amount_rupiah   BIGINT NOT NULL CHECK (amount_rupiah >= 0),
     currency        TEXT NOT NULL DEFAULT 'IDR',
     provider        TEXT NOT NULL DEFAULT 'mock',
     provider_ref    TEXT,

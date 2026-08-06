@@ -19,7 +19,7 @@ type reserveResp struct {
 		BookingID  string `json:"booking_id"`
 		EventID    string `json:"event_id"`
 		Status     string `json:"status"`
-		TotalCents int    `json:"total_cents"`
+		TotalRupiah int    `json:"total_rupiah"`
 	} `json:"data"`
 }
 
@@ -33,7 +33,7 @@ func Test_ReserveTicketsSucceeds(t *testing.T) {
 	resp, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
-			{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 10000},
+			{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": 10000},
 		},
 	}, ch)
 	require.NoError(t, err)
@@ -57,12 +57,12 @@ func Test_ReserveWithWrongPriceReturns400(t *testing.T) {
 	resp, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
-			{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 1},
+			{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": 1},
 		},
 	}, ch)
 	require.NoError(t, err)
 	assert.Equal(t, 400, resp.StatusCode, "expected 400 for wrong price: %s", string(body))
-	assert.Contains(t, string(body), "unit_price_cents does not match",
+	assert.Contains(t, string(body), "unit_price_rupiah does not match",
 		"error should mention price mismatch")
 }
 
@@ -76,7 +76,7 @@ func Test_OverReserveReturnsConflict(t *testing.T) {
 	resp, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
-			{"ticket_type_id": ttIDs[0], "quantity": 9999, "unit_price_cents": 10000},
+			{"ticket_type_id": ttIDs[0], "quantity": 9999, "unit_price_rupiah": 10000},
 		},
 	}, ch)
 	require.NoError(t, err)
@@ -92,7 +92,7 @@ func Test_ReservationCannotBeCancelled(t *testing.T) {
 
 	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": 10000}},
 	}, ch)
 	var rr reserveResp
 	require.NoError(t, json.Unmarshal(body, &rr))
@@ -116,7 +116,7 @@ func Test_ConfirmAndListBookings(t *testing.T) {
 	_, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
-			{"ticket_type_id": ttIDs[0], "quantity": 2, "unit_price_cents": 10000},
+			{"ticket_type_id": ttIDs[0], "quantity": 2, "unit_price_rupiah": 10000},
 		},
 	}, ch)
 	require.NoError(t, err)
@@ -171,7 +171,7 @@ func Test_ReservationExpiryViaPaymentPoll(t *testing.T) {
 	// 2. Reserve seats (payment never initiated)
 	_, body, _ = doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 5, "unit_price_cents": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 5, "unit_price_rupiah": 10000}},
 	}, ch)
 	var rr reserveResp
 	json.Unmarshal(body, &rr)

@@ -16,6 +16,7 @@ import {
   Ticket,
   CreditCard,
   ChevronRight,
+  ArrowRight,
   Loader2,
   Check,
   X,
@@ -23,7 +24,7 @@ import {
   MapPin,
   Users,
 } from "lucide-react";
-import { fmtShortDate } from "@/lib/format";
+import { fmtIDR, fmtShortDate } from "@/lib/format";
 import type { EventItem, TransactionResponse } from "@/types";
 
 type AdminFilter = "" | "pending" | "published" | "cancelled";
@@ -38,7 +39,7 @@ const FILTER_LABELS: { key: AdminFilter; label: string }[] = [
 interface BookingItem {
   ticket_type_id: string;
   quantity: number;
-  unit_price_cents: number;
+  unit_price_rupiah: number;
 }
 
 interface Booking {
@@ -46,7 +47,7 @@ interface Booking {
   event_id: string;
   status: string;
   refund_status?: string;
-  total_cents: number;
+  total_rupiah: number;
   created_at: string;
   items: BookingItem[];
 }
@@ -362,10 +363,19 @@ export default function DashboardPage() {
                       <p className="text-xs text-[#8B8580] mt-0.5">{fmtShortDate(b.created_at)}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold text-[#1A1817]">${(b.total_cents / 100).toFixed(2)}</p>
+                      <p className="font-semibold text-[#1A1817]">{fmtIDR(b.total_rupiah)}</p>
                       <span className={`badge text-[0.65rem] mt-1 ${
-                        b.status === "confirmed" ? "badge-green" : "badge-red"
+                        b.status === "confirmed" ? "badge-green" :
+                        b.status === "pending" ? "badge-yellow" : "badge-red"
                       }`}>{b.status}</span>
+                      {b.status === "pending" && (
+                        <Link
+                          href={`/checkout/${b.id}`}
+                          className="btn-accent text-xs mt-2 inline-flex items-center gap-1"
+                        >
+                          Checkout <ArrowRight className="w-3 h-3" />
+                        </Link>
+                      )}
                     </div>
                   </div>
                   {b.items.length > 0 && (
@@ -374,7 +384,7 @@ export default function DashboardPage() {
                         <div key={i} className="flex justify-between text-xs">
                           <span className="text-[#8B8580]">{item.quantity} &times; ticket</span>
                           <span className="font-medium text-[#1A1817]">
-                            ${((item.unit_price_cents * item.quantity) / 100).toFixed(2)}
+                            {fmtIDR(item.unit_price_rupiah * item.quantity)}
                           </span>
                         </div>
                       ))}
@@ -411,11 +421,11 @@ export default function DashboardPage() {
                     <p className="text-xs text-[#8B8580] mt-0.5">{fmtShortDate(t.created_at)}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-[#1A1817]">${(t.amount_cents / 100).toFixed(2)}</p>
+                    <p className="font-semibold text-[#1A1817]">{fmtIDR(t.amount_rupiah)}</p>
                     <span className={`badge text-[0.65rem] mt-1 ${
                       t.status === "completed" ? "badge-green" :
-                      t.status === "failed" ? "badge-red" :
-                      t.status === "processing" ? "badge-yellow" : "badge-ink"
+                      t.status === "expired" ? "badge-red" :
+                      t.status === "pending" || t.status === "initiated" ? "badge-yellow" : "badge-ink"
                     }`}>{t.status}</span>
                   </div>
                 </div>

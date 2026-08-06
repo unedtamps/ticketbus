@@ -13,13 +13,25 @@ import (
 )
 
 // sessionWebhookPayload is the Xendit payment session webhook envelope.
+// Real Xendit payloads carry the session id in data.payment_session_id;
+// documented examples use data.id — both are parsed defensively.
 type sessionWebhookPayload struct {
 	Event string `json:"event"`
 	Data  struct {
 		ReferenceID      string `json:"reference_id"`
 		PaymentSessionID string `json:"payment_session_id"`
+		ID               string `json:"id"`
 		Status           string `json:"status"`
 	} `json:"data"`
+}
+
+// sessionID returns the payment session id, preferring the real payload field
+// (data.payment_session_id) over the documented variant (data.id).
+func (p *sessionWebhookPayload) sessionID() string {
+	if p.Data.PaymentSessionID != "" {
+		return p.Data.PaymentSessionID
+	}
+	return p.Data.ID
 }
 
 // HandleSessionWebhook applies a verified gateway webhook directly to the
@@ -43,6 +55,19 @@ func (s *PaymentService) HandleSessionWebhook(
 	txn, err := s.txnRepo.FindByBookingID(ctx, event.Data.ReferenceID)
 	if err != nil {
 		return err
+	}
+
+	// The session referenced by the webhook must be the one stored on the
+	// transaction. A mismatch means the delivery does not belong to this
+	// transaction — acknowledge and ignore instead of retrying forever.
+	if sid := event.sessionID(); sid != "" && sid != txn.ProviderRef {
+		s.logger.Warn(
+			"webhook session mismatch, ignoring",
+			"txn_id", txn.ID,
+			"webhook_session_id", sid,
+			"provider_ref", txn.ProviderRef,
+		)
+		return nil
 	}
 
 	switch event.Event {
@@ -110,7 +135,7 @@ func (s *PaymentService) requestLatePaymentRefund(ctx context.Context, txn *doma
 		BookingID:      txn.BookingID,
 		TransactionID:  txn.ID,
 		CustomerEmail:  txn.CustomerEmail,
-		AmountCents:    int64(txn.AmountCents),
+		AmountRupiah:    int64(txn.AmountRupiah),
 		Currency:       txn.Currency,
 		Status:         domain.RefundPending,
 		Reason:         "late_payment",

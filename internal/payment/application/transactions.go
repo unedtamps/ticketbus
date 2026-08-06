@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,7 +18,7 @@ import (
 func (s *PaymentService) InitiateTxnForBooking(
 	ctx context.Context,
 	bookingID, eventID, userID, email string,
-	amountCents int,
+	amountRupiah int,
 	expiresAt time.Time,
 ) (*domain.Transaction, error) {
 	txn := &domain.Transaction{
@@ -25,7 +26,7 @@ func (s *PaymentService) InitiateTxnForBooking(
 		UserID:        userID,
 		BookingID:     bookingID,
 		EventID:       eventID,
-		AmountCents:   amountCents,
+		AmountRupiah:   amountRupiah,
 		Currency:      "IDR",
 		Status:        domain.StatusInitiated,
 		Provider:      s.provider,
@@ -101,17 +102,22 @@ func (s *PaymentService) ProcessPayment(
 	}
 
 	gatewayExpiresAt := txn.ExpiresAt.Add(-time.Duration(s.gatewayExpiryBufferMin) * time.Minute)
+	if minGatewayExpiry := time.Now().Add(10 * time.Minute); gatewayExpiresAt.Before(minGatewayExpiry) {
+		// Xendit requires the session expiry to be at least 10 minutes in the
+		// future; a late retry of the same booking would otherwise be rejected.
+		gatewayExpiresAt = minGatewayExpiry
+	}
 	result, err := s.processor.CreateSession(
 		ctx,
 		bookingID,
-		txn.AmountCents,
+		txn.AmountRupiah,
 		txn.Currency,
 		gatewayExpiresAt,
 		s.allowedChannels,
 		txn.CustomerEmail,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("%w: %v", domain.ErrGatewayUnavailable, err)
 	}
 
 	// Transition initiated → pending. Guarded on initiated only, so a

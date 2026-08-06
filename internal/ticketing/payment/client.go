@@ -34,7 +34,7 @@ func NewClient(baseURL, apiKey string, timeoutSec int) *Client {
 func (c *Client) InitiateTxnForBooking(
 	ctx context.Context,
 	bookingID, eventID, userID, email string,
-	amountCents int,
+	amountRupiah int,
 	expiresAt time.Time,
 ) error {
 	body, err := json.Marshal(map[string]interface{}{
@@ -42,7 +42,7 @@ func (c *Client) InitiateTxnForBooking(
 		"event_id":     eventID,
 		"user_id":      userID,
 		"email":        email,
-		"amount_cents": amountCents,
+		"amount_rupiah": amountRupiah,
 		"expires_at":   expiresAt.UTC().Format(time.RFC3339),
 	})
 	if err != nil {

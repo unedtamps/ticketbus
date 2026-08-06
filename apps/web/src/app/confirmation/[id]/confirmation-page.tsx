@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { fmtIDR } from "@/lib/format";
 import { api } from "@/lib/api-client";
 import { CheckCircle2, LayoutDashboard, Ticket } from "lucide-react";
 
@@ -10,14 +11,14 @@ interface BookingItemResp {
   id: string;
   ticket_type_id: string;
   quantity: number;
-  unit_price_cents: number;
+  unit_price_rupiah: number;
 }
 
 interface BookingResponse {
   id: string;
   event_id: string;
   status: string;
-  total_cents: number;
+  total_rupiah: number;
   payment_id: string;
   refund_status?: string;
   items: BookingItemResp[];
@@ -110,7 +111,7 @@ export default function ConfirmationPage() {
                   <span className="text-[#8B8580]">{item.quantity} &times;</span> Ticket
                 </span>
                 <span className="font-medium text-[#1A1817]">
-                  ${((item.unit_price_cents * item.quantity) / 100).toFixed(2)}
+                  {fmtIDR(item.unit_price_rupiah * item.quantity)}
                 </span>
               </div>
             ))}
@@ -121,7 +122,7 @@ export default function ConfirmationPage() {
         <div className="border-t border-dashed border-[#E8E3DC] pt-3 flex justify-between items-center">
           <span className="text-sm font-semibold text-[#1A1817]">Total</span>
           <span className="font-[family-name:var(--font-display)] text-xl text-[#1A1817]">
-            ${(booking.total_cents / 100).toFixed(2)}
+            {fmtIDR(booking.total_rupiah)}
           </span>
         </div>
 

@@ -34,12 +34,12 @@ func (r *BookingRepo) Create(ctx context.Context, b *domain.Booking) error {
 	}
 
 	for _, item := range b.Items {
-		totalPrice := item.TotalPrice
+		totalPrice := item.TotalPriceRupiah
 		if totalPrice == 0 {
-			totalPrice = item.UnitPriceCents * item.Quantity
+			totalPrice = item.UnitPriceRupiah * item.Quantity
 		}
 		_, err = tx.Exec(ctx, `
-			INSERT INTO booking_items (id, booking_id, ticket_type_id, quantity, total_price)
+			INSERT INTO booking_items (id, booking_id, ticket_type_id, quantity, total_price_rupiah)
 			VALUES ($1,$2,$3,$4,$5)`,
 			item.ID, item.BookingID, item.TicketTypeID, item.Quantity, totalPrice)
 		if err != nil {
@@ -59,7 +59,7 @@ func (r *BookingRepo) FindByID(ctx context.Context, id string) (*domain.Booking,
 		return nil, err
 	}
 
-	rows, err := r.pool.Query(ctx, `SELECT id, booking_id, ticket_type_id, quantity, total_price FROM booking_items WHERE booking_id=$1`, id)
+	rows, err := r.pool.Query(ctx, `SELECT id, booking_id, ticket_type_id, quantity, total_price_rupiah FROM booking_items WHERE booking_id=$1`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -67,13 +67,13 @@ func (r *BookingRepo) FindByID(ctx context.Context, id string) (*domain.Booking,
 
 	for rows.Next() {
 		var item domain.BookingItem
-		if err := rows.Scan(&item.ID, &item.BookingID, &item.TicketTypeID, &item.Quantity, &item.TotalPrice); err != nil {
+		if err := rows.Scan(&item.ID, &item.BookingID, &item.TicketTypeID, &item.Quantity, &item.TotalPriceRupiah); err != nil {
 			return nil, err
 		}
 		if item.Quantity > 0 {
-			item.UnitPriceCents = item.TotalPrice / item.Quantity
+			item.UnitPriceRupiah = item.TotalPriceRupiah / item.Quantity
 		}
-		b.TotalCents += item.TotalPrice
+		b.TotalRupiah += item.TotalPriceRupiah
 		b.Items = append(b.Items, item)
 	}
 	return &b, nil
@@ -100,20 +100,20 @@ func (r *BookingRepo) ListByUser(ctx context.Context, userID string) ([]domain.B
 	}
 
 	for i := range bookings {
-		itemRows, err := r.pool.Query(ctx, `SELECT id, booking_id, ticket_type_id, quantity, total_price FROM booking_items WHERE booking_id=$1`, bookings[i].ID)
+		itemRows, err := r.pool.Query(ctx, `SELECT id, booking_id, ticket_type_id, quantity, total_price_rupiah FROM booking_items WHERE booking_id=$1`, bookings[i].ID)
 		if err != nil {
 			return nil, err
 		}
 		for itemRows.Next() {
 			var item domain.BookingItem
-			if err := itemRows.Scan(&item.ID, &item.BookingID, &item.TicketTypeID, &item.Quantity, &item.TotalPrice); err != nil {
+			if err := itemRows.Scan(&item.ID, &item.BookingID, &item.TicketTypeID, &item.Quantity, &item.TotalPriceRupiah); err != nil {
 				itemRows.Close()
 				return nil, err
 			}
 			if item.Quantity > 0 {
-				item.UnitPriceCents = item.TotalPrice / item.Quantity
+				item.UnitPriceRupiah = item.TotalPriceRupiah / item.Quantity
 			}
-			bookings[i].TotalCents += item.TotalPrice
+			bookings[i].TotalRupiah += item.TotalPriceRupiah
 			bookings[i].Items = append(bookings[i].Items, item)
 		}
 		itemRows.Close()
@@ -175,7 +175,7 @@ func (r *BookingRepo) Delete(ctx context.Context, bookingID string) error {
 
 // loadItems loads booking_items into a booking and derives compatibility fields.
 func (r *BookingRepo) loadItems(ctx context.Context, b *domain.Booking) error {
-	itemRows, err := r.pool.Query(ctx, `SELECT id, booking_id, ticket_type_id, quantity, total_price FROM booking_items WHERE booking_id=$1`, b.ID)
+	itemRows, err := r.pool.Query(ctx, `SELECT id, booking_id, ticket_type_id, quantity, total_price_rupiah FROM booking_items WHERE booking_id=$1`, b.ID)
 	if err != nil {
 		return err
 	}
@@ -183,13 +183,13 @@ func (r *BookingRepo) loadItems(ctx context.Context, b *domain.Booking) error {
 
 	for itemRows.Next() {
 		var item domain.BookingItem
-		if err := itemRows.Scan(&item.ID, &item.BookingID, &item.TicketTypeID, &item.Quantity, &item.TotalPrice); err != nil {
+		if err := itemRows.Scan(&item.ID, &item.BookingID, &item.TicketTypeID, &item.Quantity, &item.TotalPriceRupiah); err != nil {
 			return err
 		}
 		if item.Quantity > 0 {
-			item.UnitPriceCents = item.TotalPrice / item.Quantity
+			item.UnitPriceRupiah = item.TotalPriceRupiah / item.Quantity
 		}
-		b.TotalCents += item.TotalPrice
+		b.TotalRupiah += item.TotalPriceRupiah
 		b.Items = append(b.Items, item)
 	}
 	return itemRows.Err()
@@ -216,20 +216,20 @@ func (r *BookingRepo) ListByEventID(ctx context.Context, eventID string) ([]doma
 	}
 
 	for i := range bookings {
-		itemRows, err := r.pool.Query(ctx, `SELECT id, booking_id, ticket_type_id, quantity, total_price FROM booking_items WHERE booking_id=$1`, bookings[i].ID)
+		itemRows, err := r.pool.Query(ctx, `SELECT id, booking_id, ticket_type_id, quantity, total_price_rupiah FROM booking_items WHERE booking_id=$1`, bookings[i].ID)
 		if err != nil {
 			return nil, err
 		}
 		for itemRows.Next() {
 			var item domain.BookingItem
-			if err := itemRows.Scan(&item.ID, &item.BookingID, &item.TicketTypeID, &item.Quantity, &item.TotalPrice); err != nil {
+			if err := itemRows.Scan(&item.ID, &item.BookingID, &item.TicketTypeID, &item.Quantity, &item.TotalPriceRupiah); err != nil {
 				itemRows.Close()
 				return nil, err
 			}
 			if item.Quantity > 0 {
-				item.UnitPriceCents = item.TotalPrice / item.Quantity
+				item.UnitPriceRupiah = item.TotalPriceRupiah / item.Quantity
 			}
-			bookings[i].TotalCents += item.TotalPrice
+			bookings[i].TotalRupiah += item.TotalPriceRupiah
 			bookings[i].Items = append(bookings[i].Items, item)
 		}
 		itemRows.Close()

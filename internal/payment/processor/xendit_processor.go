@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -37,7 +36,7 @@ type xenditSessionRequest struct {
 	ReferenceID            string            `json:"reference_id"`
 	SessionType            string            `json:"session_type"`
 	Mode                   string            `json:"mode"`
-	Amount                 string            `json:"amount"`
+	Amount                 int64             `json:"amount"`
 	Currency               string            `json:"currency"`
 	Country                string            `json:"country"`
 	Customer               xenditCustomer    `json:"customer"`
@@ -47,17 +46,24 @@ type xenditSessionRequest struct {
 }
 
 type xenditCustomer struct {
-	ReferenceID string `json:"reference_id"`
-	Type        string `json:"type"`
-	Email       string `json:"email,omitempty"`
+	ReferenceID      string                 `json:"reference_id"`
+	Type             string                 `json:"type"`
+	Email            string                 `json:"email,omitempty"`
+	IndividualDetail *xenditIndividualDetail `json:"individual_detail,omitempty"`
+}
+
+type xenditIndividualDetail struct {
+	GivenNames string `json:"given_names"`
+	Surname    string `json:"surname"`
 }
 
 type xenditSessionResponse struct {
-	ID             string `json:"id"`
-	ReferenceID    string `json:"reference_id"`
-	Status         string `json:"status"`
-	PaymentLinkURL string `json:"payment_link_url"`
-	ExpiresAt      string `json:"expires_at"`
+	PaymentSessionID string `json:"payment_session_id"`
+	ReferenceID      string `json:"reference_id"`
+	Status           string `json:"status"`
+	CheckoutURL      string `json:"checkout_url"`
+	PaymentLinkURL   string `json:"payment_link_url"`
+	ExpiresAt        string `json:"expires_at"`
 }
 
 // CreateSession creates a hosted payment session at Xendit. The booking ID is
@@ -65,31 +71,40 @@ type xenditSessionResponse struct {
 func (p *XenditProcessor) CreateSession(
 	ctx context.Context,
 	refID string,
-	amountCents int,
+	amountRupiah int,
 	currency string,
 	expiresAt time.Time,
 	allowedChannels []string,
 	email string,
 ) (*domain.SessionResult, error) {
+	givenNames := strings.SplitN(email, "@", 2)[0]
+	if givenNames == "" {
+		givenNames = "Customer"
+	}
 	reqBody := xenditSessionRequest{
 		ReferenceID: refID,
 		SessionType: "PAY",
 		Mode:        "PAYMENT_LINK",
-		Amount:      strconv.Itoa(amountCents),
+		Amount:      int64(amountRupiah),
 		Currency:    currency,
 		Country:     "ID",
 		Customer: xenditCustomer{
 			ReferenceID: refID,
 			Type:        "INDIVIDUAL",
 			Email:       email,
+			IndividualDetail: &xenditIndividualDetail{
+				GivenNames: givenNames,
+				Surname:    "-",
+			},
 		},
-		AllowedPaymentChannels: allowedChannels,
-		ExpiresAt:              expiresAt.UTC().Format(time.RFC3339),
-		MerchantMetadata:       map[string]string{"booking_id": refID},
+		// AllowedPaymentChannels is intentionally not sent: Xendit enables all
+		// channels activated for the account when the field is omitted.
+		ExpiresAt:        expiresAt.UTC().Format(time.RFC3339),
+		MerchantMetadata: map[string]string{"booking_id": refID},
 	}
 
 	var out xenditSessionResponse
-	if err := p.do(ctx, http.MethodPost, "/v2/payment_sessions", refID, reqBody, &out); err != nil {
+	if err := p.do(ctx, http.MethodPost, "/sessions", refID, reqBody, &out); err != nil {
 		return nil, err
 	}
 	return p.toResult(&out, expiresAt), nil
@@ -98,7 +113,7 @@ func (p *XenditProcessor) CreateSession(
 // CancelSession expires the payment session at the gateway (idempotent:
 // already-expired sessions are ignored).
 func (p *XenditProcessor) CancelSession(ctx context.Context, providerRef string) error {
-	_, err := p.doRaw(ctx, http.MethodPost, "/v2/payment_sessions/"+providerRef+":cancel", "", nil)
+	_, err := p.doRaw(ctx, http.MethodPost, "/sessions/"+providerRef+"/cancel", "", nil)
 	return err
 }
 
@@ -111,7 +126,7 @@ func (p *XenditProcessor) GetSession(
 	if err := p.do(
 		ctx,
 		http.MethodGet,
-		"/v2/payment_sessions/"+providerRef,
+		"/sessions/"+providerRef,
 		"",
 		nil,
 		&out,
@@ -136,10 +151,19 @@ func (p *XenditProcessor) toResult(
 		}
 	}
 	return &domain.SessionResult{
-		ProviderRef:    out.ID,
-		PaymentLinkURL: out.PaymentLinkURL,
+		ProviderRef:    out.PaymentSessionID,
+		PaymentLinkURL: firstNonEmpty(out.CheckoutURL, out.PaymentLinkURL),
 		ExpiresAt:      expiresAt,
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func (p *XenditProcessor) do(

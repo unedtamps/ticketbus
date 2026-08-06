@@ -244,11 +244,11 @@ func (r *EventRepo) CreateTicketTypes(ctx context.Context, types []domain.Ticket
 	for _, tt := range types {
 		_, err := r.db.Exec(
 			ctx,
-			`INSERT INTO ticket_types (id, event_id, name, price_cents, quantity, max_per_order) VALUES ($1,$2,$3,$4,$5,$6)`,
+			`INSERT INTO ticket_types (id, event_id, name, price_rupiah, quantity, max_per_order) VALUES ($1,$2,$3,$4,$5,$6)`,
 			tt.ID,
 			tt.EventID,
 			tt.Name,
-			tt.PriceCents,
+			tt.PriceRupiah,
 			tt.Quantity,
 			tt.MaxPerOrder,
 		)
@@ -266,7 +266,7 @@ func (r *EventRepo) ListTicketTypesByEvent(
 ) ([]domain.TicketType, error) {
 	rows, err := r.db.Query(
 		ctx,
-		`SELECT id, event_id, name, price_cents, quantity, max_per_order FROM ticket_types WHERE event_id=$1`,
+		`SELECT id, event_id, name, price_rupiah, quantity, max_per_order FROM ticket_types WHERE event_id=$1`,
 		eventID,
 	)
 	if err != nil {
@@ -280,7 +280,7 @@ func (r *EventRepo) ListTicketTypesByEvent(
 			&tt.ID,
 			&tt.EventID,
 			&tt.Name,
-			&tt.PriceCents,
+			&tt.PriceRupiah,
 			&tt.Quantity,
 			&tt.MaxPerOrder,
 		); err != nil {

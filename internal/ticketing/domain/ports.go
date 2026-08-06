@@ -50,7 +50,7 @@ type BookingRepository interface {
 // synchronously during reserve so the transaction always exists before any
 // gateway activity.
 type PaymentClient interface {
-	InitiateTxnForBooking(ctx context.Context, bookingID, eventID, userID, email string, amountCents int, expiresAt time.Time) error
+	InitiateTxnForBooking(ctx context.Context, bookingID, eventID, userID, email string, amountRupiah int, expiresAt time.Time) error
 }
 
 // SeatCounter defines the contract for atomic seat capacity tracking (Redis).

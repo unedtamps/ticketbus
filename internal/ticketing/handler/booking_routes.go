@@ -6,9 +6,8 @@ import (
 	sharedhttp "github.com/nedo/TicketSaas/internal/shared/http"
 )
 
-// Routes returns the booking HTTP routes.
-func (h *BookingHandler) Routes() chi.Router {
-	r := chi.NewRouter()
+// Routes registers the booking HTTP routes onto the provided router.
+func (h *BookingHandler) Routes(r chi.Router) chi.Router {
 
 	// Customer routes (require auth)
 	r.Group(func(r chi.Router) {

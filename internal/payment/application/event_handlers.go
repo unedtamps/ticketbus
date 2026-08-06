@@ -28,7 +28,7 @@ func (s *PaymentService) HandleEventCancelled(ctx context.Context, eventID strin
 				BookingID:      txn.BookingID,
 				TransactionID:  txn.ID,
 				CustomerEmail:  txn.CustomerEmail,
-				AmountCents:    int64(txn.AmountCents),
+				AmountRupiah:    int64(txn.AmountRupiah),
 				Currency:       txn.Currency,
 				Status:         domain.RefundPending,
 				Reason:         "event_cancelled",

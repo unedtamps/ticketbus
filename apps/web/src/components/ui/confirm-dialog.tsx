@@ -8,7 +8,7 @@ interface ConfirmDialogProps {
   title: string;
   message?: string;
   confirmLabel: string;
-  variant?: "danger" | "success";
+  variant?: "danger" | "success" | "warning";
   loading?: boolean;
   requireReason?: boolean;
   reasonLabel?: string;
@@ -39,11 +39,15 @@ export function ConfirmDialog({
   const variantClasses =
     variant === "danger"
       ? "bg-[#D9381E] text-white hover:bg-[#B82E1A]"
-      : "bg-[#2D7A46] text-white hover:bg-[#1F5C30]";
+      : variant === "warning"
+        ? "bg-[#B85C1A] text-white hover:bg-[#8F4713]"
+        : "bg-[#2D7A46] text-white hover:bg-[#1F5C30]";
 
   const icon =
     variant === "danger" ? (
       <AlertTriangle className="w-5 h-5 text-[#D9381E]" />
+    ) : variant === "warning" ? (
+      <AlertTriangle className="w-5 h-5 text-[#B85C1A]" />
     ) : (
       <Check className="w-5 h-5 text-[#2D7A46]" />
     );

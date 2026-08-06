@@ -121,8 +121,8 @@ func main() {
 		sharedhttp.OK(w, map[string]string{"status": "ok", "service": "ticketing-service"})
 	})
 	r.Get("/metrics", promhttp.Handler().ServeHTTP)
-	r.Mount("/", eventHandler.Routes())
-	r.Mount("/", bookingHandler.Routes())
+	eventHandler.Routes(r)
+	bookingHandler.Routes(r)
 
 	srv := &http.Server{Addr: ":" + cfg.Port, Handler: r}
 	go func() {

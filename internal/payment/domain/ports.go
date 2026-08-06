@@ -47,7 +47,7 @@ type SessionResult struct {
 type PaymentProcessor interface {
 	// CreateSession creates a payment session at the gateway. refID is the
 	// caller's idempotency key (the booking ID); email is the customer email.
-	CreateSession(ctx context.Context, refID string, amountCents int, currency string, expiresAt time.Time, allowedChannels []string, email string) (*SessionResult, error)
+	CreateSession(ctx context.Context, refID string, amountRupiah int, currency string, expiresAt time.Time, allowedChannels []string, email string) (*SessionResult, error)
 	// CancelSession closes/expires an existing payment session.
 	CancelSession(ctx context.Context, providerRef string) error
 	// GetSession fetches a payment session.

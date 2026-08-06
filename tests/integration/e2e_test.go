@@ -53,7 +53,7 @@ func Test_FullBookingJourney(t *testing.T) {
 	// 6. Customer reserves tickets
 	_, body, err = doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": 1, "unit_price_cents": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": 1, "unit_price_rupiah": 10000}},
 	}, ch)
 	require.NoError(t, err)
 
@@ -95,7 +95,7 @@ func Test_ConcurrentDuplicateReservation(t *testing.T) {
 			defer wg.Done()
 			resp, _, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 				"event_id": eventID,
-				"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 5, "unit_price_cents": 10000}},
+				"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 5, "unit_price_rupiah": 10000}},
 			}, ch)
 			if resp != nil {
 				results <- resp.StatusCode
@@ -153,7 +153,7 @@ func Test_EventCancelCascade(t *testing.T) {
 	// 4. Customer reserves tickets
 	_, body, err = doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": 2, "unit_price_cents": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": 2, "unit_price_rupiah": 10000}},
 	}, ch)
 	require.NoError(t, err)
 	var rr reserveResp
@@ -235,7 +235,7 @@ func Test_EventCancelCascade_CancelBeforeConfirm(t *testing.T) {
 	// 4. Customer reserves tickets
 	_, body, err = doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": 1, "unit_price_cents": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": 1, "unit_price_rupiah": 10000}},
 	}, ch)
 	require.NoError(t, err)
 	var rr reserveResp

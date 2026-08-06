@@ -10,13 +10,13 @@ import { CalendarPlus, Plus, X } from "lucide-react";
 
 interface TicketTypeInput {
   name: string;
-  price_dollars: string;
+  price_rupiah: string;
   quantity: string;
   max_per_order: string;
 }
 
 function emptyTicketType(): TicketTypeInput {
-  return { name: "", price_dollars: "", quantity: "", max_per_order: "5" };
+  return { name: "", price_rupiah: "", quantity: "", max_per_order: "5" };
 }
 
 export default function CreateEventPage() {
@@ -60,7 +60,8 @@ export default function CreateEventPage() {
     e.preventDefault();
     const tt = ticketTypes.map(t => ({
       name: t.name,
-      price_cents: Math.round(parseFloat(t.price_dollars || "0") * 100),
+      // Input is in rupiah; the backend stores rupiah directly.
+      price_rupiah: Math.round(parseFloat(t.price_rupiah || "0")),
       quantity: parseInt(t.quantity, 10) || 0,
       max_per_order: parseInt(t.max_per_order, 10) || 5,
     }));
@@ -176,10 +177,10 @@ export default function CreateEventPage() {
                       className="input-field text-sm" placeholder="General Admission" />
                   </div>
                   <div>
-                    <label className="block text-xs text-[#8B8580] mb-1">Price ($)</label>
-                    <input type="number" required min="0" step="0.01" value={tt.price_dollars}
-                      onChange={e => updateTicketType(i, "price_dollars", e.target.value)}
-                      className="input-field text-sm" placeholder="25.00" />
+                    <label className="block text-xs text-[#8B8580] mb-1">Price (Rp)</label>
+                    <input type="number" required min="0" step="1" value={tt.price_rupiah}
+                      onChange={e => updateTicketType(i, "price_rupiah", e.target.value)}
+                      className="input-field text-sm" placeholder="120000" />
                   </div>
                   <div>
                     <label className="block text-xs text-[#8B8580] mb-1">Quantity</label>

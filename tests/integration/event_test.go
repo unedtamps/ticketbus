@@ -159,8 +159,8 @@ func createEventRaw(t *testing.T, env *TestEnv, accessToken string) eventResp {
 		"start_at":       future,
 		"end_at":         futureEnd,
 		"ticket_types": []map[string]interface{}{
-			{"name": "VIP", "price_cents": 10000, "quantity": 20, "max_per_order": 5},
-			{"name": "GA", "price_cents": 5000, "quantity": 80, "max_per_order": 10},
+			{"name": "VIP", "price_rupiah": 10000, "quantity": 20, "max_per_order": 5},
+			{"name": "GA", "price_rupiah": 5000, "quantity": 80, "max_per_order": 10},
 		},
 	}, h)
 	require.NoError(t, err)

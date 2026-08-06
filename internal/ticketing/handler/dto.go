@@ -21,7 +21,7 @@ type CreateEventRequest struct {
 // TicketTypeRequest is the DTO for a ticket type in event creation.
 type TicketTypeRequest struct {
 	Name        string `json:"name" validate:"required"`
-	PriceCents  int    `json:"price_cents" validate:"required,min=0"`
+	PriceRupiah  int    `json:"price_rupiah" validate:"required,min=0"`
 	Quantity    int    `json:"quantity" validate:"required,min=1"`
 	MaxPerOrder int    `json:"max_per_order" validate:"omitempty,min=1"`
 }
@@ -65,7 +65,7 @@ type EventDetailResponse struct {
 type TicketTypeResponse struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
-	PriceCents  int    `json:"price_cents"`
+	PriceRupiah  int    `json:"price_rupiah"`
 	Quantity    int    `json:"quantity"`
 	Available   int    `json:"available"`
 	MaxPerOrder int    `json:"max_per_order"`

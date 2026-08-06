@@ -37,7 +37,7 @@ func (s *EventService) ApproveEvent(
 			if err := s.seatInitializer.Init(ctx, eventID, tt.ID, tt.Quantity); err != nil {
 				return nil, err
 			}
-			if err := s.seatInitializer.SetPrice(ctx, eventID, tt.ID, tt.PriceCents); err != nil {
+			if err := s.seatInitializer.SetPrice(ctx, eventID, tt.ID, tt.PriceRupiah); err != nil {
 				return nil, err
 			}
 		}

@@ -8,7 +8,7 @@ type Transaction struct {
 	UserID         string     `json:"user_id"`
 	BookingID      string     `json:"booking_id"`
 	EventID        string     `json:"event_id"`
-	AmountCents    int        `json:"amount_cents"`
+	AmountRupiah    int        `json:"amount_rupiah"`
 	Currency       string     `json:"currency"`
 	Status         string     `json:"status"`
 	Provider       string     `json:"provider"`

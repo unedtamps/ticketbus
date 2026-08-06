@@ -45,7 +45,7 @@ func (h *EventHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		}
 		ticketTypes[i] = domain.TicketType{
 			Name:        tt.Name,
-			PriceCents:  tt.PriceCents,
+			PriceRupiah:  tt.PriceRupiah,
 			Quantity:    tt.Quantity,
 			MaxPerOrder: mpo,
 		}
@@ -276,7 +276,7 @@ func (h *EventHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
 		ttResp[i] = TicketTypeResponse{
 			ID:          tt.ID,
 			Name:        tt.Name,
-			PriceCents:  tt.PriceCents,
+			PriceRupiah:  tt.PriceRupiah,
 			Quantity:    tt.Quantity,
 			Available:   tt.Available,
 			MaxPerOrder: tt.MaxPerOrder,

@@ -3,6 +3,7 @@ package handler
 import (
 	"crypto/subtle"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -54,8 +55,8 @@ func (h *PaymentHandler) InitiateTxnForBooking(w http.ResponseWriter, r *http.Re
 		sharedhttp.BadRequest(w, "invalid request body")
 		return
 	}
-	if req.BookingID == "" || req.UserID == "" || req.EventID == "" || req.AmountCents <= 0 {
-		sharedhttp.BadRequest(w, "booking_id, event_id, user_id and amount_cents are required")
+	if req.BookingID == "" || req.UserID == "" || req.EventID == "" || req.AmountRupiah <= 0 {
+		sharedhttp.BadRequest(w, "booking_id, event_id, user_id and amount_rupiah are required")
 		return
 	}
 
@@ -65,7 +66,7 @@ func (h *PaymentHandler) InitiateTxnForBooking(w http.ResponseWriter, r *http.Re
 		req.EventID,
 		req.UserID,
 		req.Email,
-		req.AmountCents,
+		req.AmountRupiah,
 		req.ExpiresAt,
 	)
 	if err != nil {
@@ -96,7 +97,15 @@ func (h *PaymentHandler) ProcessPayment(w http.ResponseWriter, r *http.Request) 
 			sharedhttp.Error(w, http.StatusConflict, "payment already initiated")
 		case errors.Is(err, domain.ErrTransactionExpired):
 			sharedhttp.Error(w, http.StatusConflict, "booking has expired")
+		case errors.Is(err, domain.ErrGatewayUnavailable):
+			fmt.Println(err)
+			sharedhttp.Error(
+				w,
+				http.StatusBadGateway,
+				"payment provider unavailable, please try again",
+			)
 		default:
+			fmt.Println(err)
 			sharedhttp.InternalServerError(w, "failed to initiate payment")
 		}
 		return
@@ -106,7 +115,7 @@ func (h *PaymentHandler) ProcessPayment(w http.ResponseWriter, r *http.Request) 
 		TransactionID:    txn.ID,
 		PaymentSessionID: result.ProviderRef,
 		PaymentLinkURL:   result.PaymentLinkURL,
-		AmountCents:      txn.AmountCents,
+		AmountRupiah:      txn.AmountRupiah,
 		Currency:         txn.Currency,
 		Status:           txn.Status,
 		ExpiresAt:        formatTime(txn.ExpiresAt),
@@ -129,7 +138,7 @@ func (h *PaymentHandler) GetPaymentStatus(w http.ResponseWriter, r *http.Request
 		TransactionID:  txn.ID,
 		Status:         txn.Status,
 		PaymentLinkURL: txn.PaymentLinkURL,
-		AmountCents:    txn.AmountCents,
+		AmountRupiah:    txn.AmountRupiah,
 		Currency:       txn.Currency,
 	})
 }
@@ -151,7 +160,7 @@ func (h *PaymentHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sharedhttp.OK(w, TransactionResponse{
-		ID: txn.ID, BookingID: txn.BookingID, EventID: txn.EventID, AmountCents: txn.AmountCents,
+		ID: txn.ID, BookingID: txn.BookingID, EventID: txn.EventID, AmountRupiah: txn.AmountRupiah,
 		Currency: txn.Currency, Status: txn.Status, RefundStatus: txn.RefundStatus,
 		CreatedAt: txn.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	})
@@ -174,7 +183,7 @@ func (h *PaymentHandler) CheckoutByBooking(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	sharedhttp.OK(w, TransactionResponse{
-		ID: txn.ID, BookingID: txn.BookingID, EventID: txn.EventID, AmountCents: txn.AmountCents,
+		ID: txn.ID, BookingID: txn.BookingID, EventID: txn.EventID, AmountRupiah: txn.AmountRupiah,
 		Currency: txn.Currency, Status: txn.Status, RefundStatus: txn.RefundStatus,
 		CreatedAt: txn.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	})
@@ -189,9 +198,29 @@ func (h *PaymentHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sharedhttp.OK(w, TransactionResponse{
-		ID: txn.ID, BookingID: txn.BookingID, EventID: txn.EventID, AmountCents: txn.AmountCents,
+		ID: txn.ID, BookingID: txn.BookingID, EventID: txn.EventID, AmountRupiah: txn.AmountRupiah,
 		Currency: txn.Currency, Status: txn.Status, RefundStatus: txn.RefundStatus,
 		CreatedAt: txn.CreatedAt.Format("2006-01-02T15:04:05Z"),
+	})
+}
+
+// GetTransaction handles GET /payments/{txn_id}. Returns the full transaction
+// details (including the stored payment link) for the payment page. Only the
+// transaction owner may read it.
+func (h *PaymentHandler) GetTransaction(w http.ResponseWriter, r *http.Request) {
+	txnID := chi.URLParam(r, "txn_id")
+	userID := sharedhttp.UserIDFromContext(r.Context())
+	txn, err := h.svc.GetTransaction(r.Context(), txnID)
+	if err != nil || txn.UserID != userID {
+		sharedhttp.NotFound(w, "transaction not found")
+		return
+	}
+	sharedhttp.OK(w, TransactionResponse{
+		ID: txn.ID, BookingID: txn.BookingID, EventID: txn.EventID, AmountRupiah: txn.AmountRupiah,
+		Currency: txn.Currency, Status: txn.Status, RefundStatus: txn.RefundStatus,
+		PaymentLinkURL: txn.PaymentLinkURL,
+		ExpiresAt:      formatTime(txn.ExpiresAt),
+		CreatedAt:      txn.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	})
 }
 
@@ -246,7 +275,7 @@ func (h *PaymentHandler) ListTransactions(w http.ResponseWriter, r *http.Request
 	resp := make([]TransactionResponse, 0, len(txns))
 	for _, t := range txns {
 		resp = append(resp, TransactionResponse{
-			ID: t.ID, BookingID: t.BookingID, EventID: t.EventID, AmountCents: t.AmountCents,
+			ID: t.ID, BookingID: t.BookingID, EventID: t.EventID, AmountRupiah: t.AmountRupiah,
 			Currency: t.Currency, Status: t.Status, RefundStatus: t.RefundStatus,
 			CreatedAt: t.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		})

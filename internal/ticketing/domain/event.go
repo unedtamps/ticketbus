@@ -29,7 +29,7 @@ type TicketType struct {
 	ID          string `json:"id"`
 	EventID     string `json:"event_id"`
 	Name        string `json:"name"`
-	PriceCents  int    `json:"price_cents"`
+	PriceRupiah  int    `json:"price_rupiah"`
 	Quantity    int    `json:"quantity"`
 	Available   int    `json:"available"`
 	MaxPerOrder int    `json:"max_per_order"`

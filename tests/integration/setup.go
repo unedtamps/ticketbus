@@ -209,8 +209,8 @@ func startContainers() *TestEnv {
 	eventHandler := eventhandler.NewEventHandler(eventSvc)
 	invHandler := eventhandler.NewBookingHandler(invSvc)
 	ticketingRouter := chi.NewRouter()
-	ticketingRouter.Mount("/", eventHandler.Routes())
-	ticketingRouter.Mount("/", invHandler.Routes())
+	eventHandler.Routes(ticketingRouter)
+	invHandler.Routes(ticketingRouter)
 	ticketingSrv := httptest.NewServer(ticketingRouter)
 
 	ticketingOutboxWorker := outbox.NewWorker(ticketingPool, kafkaProducer, ticketingLogger, 1, 200)

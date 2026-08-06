@@ -23,7 +23,7 @@ func Test_InitiateAndWebhookCompletesPayment(t *testing.T) {
 	_, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
-			{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 10000},
+			{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": 10000},
 		},
 	}, ch)
 	require.NoError(t, err)
@@ -70,7 +70,7 @@ func Test_DuplicateInitiateIsIdempotent(t *testing.T) {
 
 	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": 10000}},
 	}, ch)
 	var rr reserveResp
 	require.NoError(t, json.Unmarshal(body, &rr))
@@ -108,7 +108,7 @@ func Test_PaymentStaysPendingWhenWebhookNotCalled(t *testing.T) {
 
 	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": 10000}},
 	}, ch)
 	var rr reserveResp
 	require.NoError(t, json.Unmarshal(body, &rr))
@@ -141,7 +141,7 @@ func Test_InitiateRejectedWhenLessThanOneMinuteRemains(t *testing.T) {
 
 	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": 10000}},
 	}, ch)
 	var rr reserveResp
 	require.NoError(t, json.Unmarshal(body, &rr))
@@ -157,4 +157,56 @@ func Test_InitiateRejectedWhenLessThanOneMinuteRemains(t *testing.T) {
 	resp, body2, err := doJSON(http.MethodPost, env.payURL+"/api/payments/booking/"+bookingID, nil, ch)
 	require.NoError(t, err)
 	assert.Equal(t, 409, resp.StatusCode, "initiate should be rejected: %s", string(body2))
+}
+
+// Test_GetTransactionByID_Ownership verifies the payment page endpoint returns
+// the full transaction (with payment link) only to its owner.
+func Test_GetTransactionByID_Ownership(t *testing.T) {
+	env := getTestEnv()
+	eventID, ttIDs := setupApprovedEvent(t, env)
+
+	cust := env.registerAndLogin("customer")
+	other := env.registerAndLogin("customer")
+	ch := env.authHeadersWith(cust.AccessToken)
+
+	bookingID, _ := reserveAndInitiate(t, env, eventID, ttIDs[0], 1, ch)
+
+	// Resolve the transaction id from the booking status endpoint.
+	resp, body, err := doJSON(http.MethodGet, env.payURL+"/api/payments/booking/"+bookingID, nil, ch)
+	require.NoError(t, err)
+	require.Equal(t, 200, resp.StatusCode, "%s", string(body))
+	var status struct {
+		Data struct {
+			TransactionID string `json:"transaction_id"`
+		} `json:"data"`
+	}
+	require.NoError(t, jsonData(body, &status))
+	require.NotEmpty(t, status.Data.TransactionID)
+
+	// Owner can read the full transaction including the payment link.
+	resp, body, err = doJSON(http.MethodGet, env.payURL+"/api/payments/"+status.Data.TransactionID, nil, ch)
+	require.NoError(t, err)
+	require.Equal(t, 200, resp.StatusCode, "%s", string(body))
+	var txn struct {
+		Data struct {
+			ID             string `json:"id"`
+			BookingID      string `json:"booking_id"`
+			AmountRupiah    int    `json:"amount_rupiah"`
+			Currency       string `json:"currency"`
+			Status         string `json:"status"`
+			PaymentLinkURL string `json:"payment_link_url"`
+		} `json:"data"`
+	}
+	require.NoError(t, jsonData(body, &txn))
+	assert.Equal(t, status.Data.TransactionID, txn.Data.ID)
+	assert.Equal(t, bookingID, txn.Data.BookingID)
+	assert.Equal(t, 10000, txn.Data.AmountRupiah)
+	assert.Equal(t, "IDR", txn.Data.Currency)
+	assert.Equal(t, "pending", txn.Data.Status)
+	assert.NotEmpty(t, txn.Data.PaymentLinkURL)
+
+	// Another customer cannot read it.
+	resp, _, err = doJSON(http.MethodGet, env.payURL+"/api/payments/"+status.Data.TransactionID, nil, env.authHeadersWith(other.AccessToken))
+	require.NoError(t, err)
+	assert.Equal(t, 404, resp.StatusCode)
 }

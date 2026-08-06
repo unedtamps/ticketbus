@@ -97,7 +97,7 @@ func TestConcurrentBookingConsistency(t *testing.T) {
 						"items": []map[string]interface{}{{
 							"ticket_type_id":   s.TTID,
 							"quantity":         qty,
-							"unit_price_cents": 10000,
+							"unit_price_rupiah": 10000,
 						}},
 					},
 					cust.Headers,

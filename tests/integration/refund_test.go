@@ -48,7 +48,7 @@ func Test_CancelledEventTriggersRefunds(t *testing.T) {
 	_, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
-			{"ticket_type_id": ttID, "quantity": 1, "unit_price_cents": 10000},
+			{"ticket_type_id": ttID, "quantity": 1, "unit_price_rupiah": 10000},
 		},
 	}, ch)
 	require.NoError(t, err)

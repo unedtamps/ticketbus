@@ -97,8 +97,8 @@ func (_c *MockPaymentProcessor_CancelSession_Call) RunAndReturn(run func(ctx con
 }
 
 // CreateSession provides a mock function for the type MockPaymentProcessor
-func (_mock *MockPaymentProcessor) CreateSession(ctx context.Context, refID string, amountCents int, currency string, expiresAt time.Time, allowedChannels []string, email string) (*domain.SessionResult, error) {
-	ret := _mock.Called(ctx, refID, amountCents, currency, expiresAt, allowedChannels, email)
+func (_mock *MockPaymentProcessor) CreateSession(ctx context.Context, refID string, amountRupiah int, currency string, expiresAt time.Time, allowedChannels []string, email string) (*domain.SessionResult, error) {
+	ret := _mock.Called(ctx, refID, amountRupiah, currency, expiresAt, allowedChannels, email)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CreateSession")
@@ -107,17 +107,17 @@ func (_mock *MockPaymentProcessor) CreateSession(ctx context.Context, refID stri
 	var r0 *domain.SessionResult
 	var r1 error
 	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, string, time.Time, []string, string) (*domain.SessionResult, error)); ok {
-		return returnFunc(ctx, refID, amountCents, currency, expiresAt, allowedChannels, email)
+		return returnFunc(ctx, refID, amountRupiah, currency, expiresAt, allowedChannels, email)
 	}
 	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, string, time.Time, []string, string) *domain.SessionResult); ok {
-		r0 = returnFunc(ctx, refID, amountCents, currency, expiresAt, allowedChannels, email)
+		r0 = returnFunc(ctx, refID, amountRupiah, currency, expiresAt, allowedChannels, email)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*domain.SessionResult)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, int, string, time.Time, []string, string) error); ok {
-		r1 = returnFunc(ctx, refID, amountCents, currency, expiresAt, allowedChannels, email)
+		r1 = returnFunc(ctx, refID, amountRupiah, currency, expiresAt, allowedChannels, email)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -132,16 +132,16 @@ type MockPaymentProcessor_CreateSession_Call struct {
 // CreateSession is a helper method to define mock.On call
 //   - ctx context.Context
 //   - refID string
-//   - amountCents int
+//   - amountRupiah int
 //   - currency string
 //   - expiresAt time.Time
 //   - allowedChannels []string
 //   - email string
-func (_e *MockPaymentProcessor_Expecter) CreateSession(ctx any, refID any, amountCents any, currency any, expiresAt any, allowedChannels any, email any) *MockPaymentProcessor_CreateSession_Call {
-	return &MockPaymentProcessor_CreateSession_Call{Call: _e.mock.On("CreateSession", ctx, refID, amountCents, currency, expiresAt, allowedChannels, email)}
+func (_e *MockPaymentProcessor_Expecter) CreateSession(ctx any, refID any, amountRupiah any, currency any, expiresAt any, allowedChannels any, email any) *MockPaymentProcessor_CreateSession_Call {
+	return &MockPaymentProcessor_CreateSession_Call{Call: _e.mock.On("CreateSession", ctx, refID, amountRupiah, currency, expiresAt, allowedChannels, email)}
 }
 
-func (_c *MockPaymentProcessor_CreateSession_Call) Run(run func(ctx context.Context, refID string, amountCents int, currency string, expiresAt time.Time, allowedChannels []string, email string)) *MockPaymentProcessor_CreateSession_Call {
+func (_c *MockPaymentProcessor_CreateSession_Call) Run(run func(ctx context.Context, refID string, amountRupiah int, currency string, expiresAt time.Time, allowedChannels []string, email string)) *MockPaymentProcessor_CreateSession_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -189,7 +189,7 @@ func (_c *MockPaymentProcessor_CreateSession_Call) Return(sessionResult *domain.
 	return _c
 }
 
-func (_c *MockPaymentProcessor_CreateSession_Call) RunAndReturn(run func(ctx context.Context, refID string, amountCents int, currency string, expiresAt time.Time, allowedChannels []string, email string) (*domain.SessionResult, error)) *MockPaymentProcessor_CreateSession_Call {
+func (_c *MockPaymentProcessor_CreateSession_Call) RunAndReturn(run func(ctx context.Context, refID string, amountRupiah int, currency string, expiresAt time.Time, allowedChannels []string, email string) (*domain.SessionResult, error)) *MockPaymentProcessor_CreateSession_Call {
 	_c.Call.Return(run)
 	return _c
 }

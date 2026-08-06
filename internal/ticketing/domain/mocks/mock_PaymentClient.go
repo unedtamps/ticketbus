@@ -39,8 +39,8 @@ func (_m *MockPaymentClient) EXPECT() *MockPaymentClient_Expecter {
 }
 
 // InitiateTxnForBooking provides a mock function for the type MockPaymentClient
-func (_mock *MockPaymentClient) InitiateTxnForBooking(ctx context.Context, bookingID string, eventID string, userID string, email string, amountCents int, expiresAt time.Time) error {
-	ret := _mock.Called(ctx, bookingID, eventID, userID, email, amountCents, expiresAt)
+func (_mock *MockPaymentClient) InitiateTxnForBooking(ctx context.Context, bookingID string, eventID string, userID string, email string, amountRupiah int, expiresAt time.Time) error {
+	ret := _mock.Called(ctx, bookingID, eventID, userID, email, amountRupiah, expiresAt)
 
 	if len(ret) == 0 {
 		panic("no return value specified for InitiateTxnForBooking")
@@ -48,7 +48,7 @@ func (_mock *MockPaymentClient) InitiateTxnForBooking(ctx context.Context, booki
 
 	var r0 error
 	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, string, int, time.Time) error); ok {
-		r0 = returnFunc(ctx, bookingID, eventID, userID, email, amountCents, expiresAt)
+		r0 = returnFunc(ctx, bookingID, eventID, userID, email, amountRupiah, expiresAt)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -66,13 +66,13 @@ type MockPaymentClient_InitiateTxnForBooking_Call struct {
 //   - eventID string
 //   - userID string
 //   - email string
-//   - amountCents int
+//   - amountRupiah int
 //   - expiresAt time.Time
-func (_e *MockPaymentClient_Expecter) InitiateTxnForBooking(ctx any, bookingID any, eventID any, userID any, email any, amountCents any, expiresAt any) *MockPaymentClient_InitiateTxnForBooking_Call {
-	return &MockPaymentClient_InitiateTxnForBooking_Call{Call: _e.mock.On("InitiateTxnForBooking", ctx, bookingID, eventID, userID, email, amountCents, expiresAt)}
+func (_e *MockPaymentClient_Expecter) InitiateTxnForBooking(ctx any, bookingID any, eventID any, userID any, email any, amountRupiah any, expiresAt any) *MockPaymentClient_InitiateTxnForBooking_Call {
+	return &MockPaymentClient_InitiateTxnForBooking_Call{Call: _e.mock.On("InitiateTxnForBooking", ctx, bookingID, eventID, userID, email, amountRupiah, expiresAt)}
 }
 
-func (_c *MockPaymentClient_InitiateTxnForBooking_Call) Run(run func(ctx context.Context, bookingID string, eventID string, userID string, email string, amountCents int, expiresAt time.Time)) *MockPaymentClient_InitiateTxnForBooking_Call {
+func (_c *MockPaymentClient_InitiateTxnForBooking_Call) Run(run func(ctx context.Context, bookingID string, eventID string, userID string, email string, amountRupiah int, expiresAt time.Time)) *MockPaymentClient_InitiateTxnForBooking_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -120,7 +120,7 @@ func (_c *MockPaymentClient_InitiateTxnForBooking_Call) Return(err error) *MockP
 	return _c
 }
 
-func (_c *MockPaymentClient_InitiateTxnForBooking_Call) RunAndReturn(run func(ctx context.Context, bookingID string, eventID string, userID string, email string, amountCents int, expiresAt time.Time) error) *MockPaymentClient_InitiateTxnForBooking_Call {
+func (_c *MockPaymentClient_InitiateTxnForBooking_Call) RunAndReturn(run func(ctx context.Context, bookingID string, eventID string, userID string, email string, amountRupiah int, expiresAt time.Time) error) *MockPaymentClient_InitiateTxnForBooking_Call {
 	_c.Call.Return(run)
 	return _c
 }

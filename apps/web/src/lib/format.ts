@@ -28,3 +28,8 @@ export function fmtTime(iso: string): string {
   const d = new Date(iso);
   return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 }
+
+/** "Rp 120.000" — formats a rupiah amount (already the minor unit for IDR). */
+export function fmtIDR(rupiah: number): string {
+  return "Rp " + rupiah.toLocaleString("id-ID");
+}

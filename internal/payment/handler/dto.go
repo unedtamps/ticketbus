@@ -4,14 +4,16 @@ import "time"
 
 // TransactionResponse is the public transaction data.
 type TransactionResponse struct {
-	ID           string `json:"id"`
-	BookingID    string `json:"booking_id"`
-	EventID      string `json:"event_id"`
-	AmountCents  int    `json:"amount_cents"`
-	Currency     string `json:"currency"`
-	Status       string `json:"status"`
-	RefundStatus string `json:"refund_status,omitempty"`
-	CreatedAt    string `json:"created_at"`
+	ID             string `json:"id"`
+	BookingID      string `json:"booking_id"`
+	EventID        string `json:"event_id"`
+	AmountRupiah    int    `json:"amount_rupiah"`
+	Currency       string `json:"currency"`
+	Status         string `json:"status"`
+	RefundStatus   string `json:"refund_status,omitempty"`
+	PaymentLinkURL string `json:"payment_link_url,omitempty"`
+	ExpiresAt      string `json:"expires_at,omitempty"`
+	CreatedAt      string `json:"created_at"`
 }
 
 // InternalCreateRequest is the internal (service-to-service) payload for
@@ -21,7 +23,7 @@ type InternalCreateRequest struct {
 	EventID     string    `json:"event_id"`
 	UserID      string    `json:"user_id"`
 	Email       string    `json:"email"`
-	AmountCents int       `json:"amount_cents"`
+	AmountRupiah int       `json:"amount_rupiah"`
 	ExpiresAt   time.Time `json:"expires_at"`
 }
 
@@ -36,7 +38,7 @@ type ProcessPaymentResponse struct {
 	TransactionID    string `json:"transaction_id"`
 	PaymentSessionID string `json:"payment_session_id"`
 	PaymentLinkURL   string `json:"payment_link_url"`
-	AmountCents      int    `json:"amount_cents"`
+	AmountRupiah      int    `json:"amount_rupiah"`
 	Currency         string `json:"currency"`
 	Status           string `json:"status"`
 	ExpiresAt        string `json:"expires_at"`
@@ -47,6 +49,6 @@ type PaymentStatusResponse struct {
 	TransactionID  string `json:"transaction_id"`
 	Status         string `json:"status"`
 	PaymentLinkURL string `json:"payment_link_url,omitempty"`
-	AmountCents    int    `json:"amount_cents"`
+	AmountRupiah    int    `json:"amount_rupiah"`
 	Currency       string `json:"currency"`
 }

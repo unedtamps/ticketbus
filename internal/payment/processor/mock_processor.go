@@ -57,7 +57,7 @@ func (p *MockProcessor) SetWebhookURL(url string) {
 func (p *MockProcessor) CreateSession(
 	ctx context.Context,
 	refID string,
-	amountCents int,
+	amountRupiah int,
 	currency string,
 	expiresAt time.Time,
 	allowedChannels []string,
@@ -109,12 +109,16 @@ func (p *MockProcessor) postWebhook(event, referenceID, providerRef string) {
 	if p.webhookURL == "" {
 		return
 	}
+	status := "EXPIRED"
+	if event == "payment_session.completed" {
+		status = "COMPLETED"
+	}
 	body, _ := json.Marshal(map[string]interface{}{
 		"event": event,
 		"data": map[string]string{
 			"reference_id":       referenceID,
 			"payment_session_id": providerRef,
-			"status":             "EXPIRED",
+			"status":             status,
 		},
 	})
 	resp, err := p.httpClient.Post(p.webhookURL+"/mock", "application/json", bytes.NewReader(body))

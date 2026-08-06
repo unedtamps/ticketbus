@@ -67,7 +67,7 @@ func TestReserve_Success_SingleItem(t *testing.T) {
 	res, err := svc.Reserve(ctx, userID, email, eventID, itemsOut)
 	require.NoError(t, err)
 	assert.Equal(t, "pending", res.Status)
-	assert.Equal(t, 20000, res.TotalCents)
+	assert.Equal(t, 20000, res.TotalRupiah)
 	assert.False(t, res.ExpiresAt.IsZero())
 	assert.NotEmpty(t, res.BookingID)
 }
@@ -92,7 +92,7 @@ func TestReserve_Success_MultiItem(t *testing.T) {
 	userID, email, eventID, itemsOut := reserveArgs(items)
 	res, err := svc.Reserve(ctx, userID, email, eventID, itemsOut)
 	require.NoError(t, err)
-	assert.Equal(t, 25000, res.TotalCents)
+	assert.Equal(t, 25000, res.TotalRupiah)
 	assert.Len(t, res.Items, 2)
 }
 

@@ -14,14 +14,14 @@ type ReserveRequest struct {
 type ReserveItemRequest struct {
 	TicketTypeID   string `json:"ticket_type_id" validate:"required"`
 	Quantity       int    `json:"quantity" validate:"required,min=1"`
-	UnitPriceCents int    `json:"unit_price_cents" validate:"required,min=0"`
+	UnitPriceRupiah int    `json:"unit_price_rupiah" validate:"required,min=0"`
 }
 
 // ReservationResponse is the public reservation data.
 type ReservationResponse struct {
 	BookingID  string `json:"booking_id"`
 	EventID    string `json:"event_id"`
-	TotalCents int    `json:"total_cents"`
+	TotalRupiah int    `json:"total_rupiah"`
 	Status     string `json:"status"`
 	ExpiresAt  string `json:"expires_at"`
 }
@@ -33,7 +33,7 @@ type BookingResponse struct {
 	EventID      string            `json:"event_id"`
 	Status       string            `json:"status"`
 	ExpiresAt    string            `json:"expires_at,omitempty"`
-	TotalCents   int               `json:"total_cents"`
+	TotalRupiah   int               `json:"total_rupiah"`
 	PaymentID    string            `json:"payment_id"`
 	RefundStatus string            `json:"refund_status,omitempty"`
 	Items        []BookingItemResp `json:"items"`
@@ -45,8 +45,8 @@ type BookingItemResp struct {
 	ID             string `json:"id"`
 	TicketTypeID   string `json:"ticket_type_id"`
 	Quantity       int    `json:"quantity"`
-	UnitPriceCents int    `json:"unit_price_cents"`
-	TotalPrice     int    `json:"total_price"`
+	UnitPriceRupiah int    `json:"unit_price_rupiah"`
+	TotalPriceRupiah     int    `json:"total_price_rupiah"`
 }
 
 func bookingToResponse(b *domain.Booking) BookingResponse {
@@ -54,7 +54,7 @@ func bookingToResponse(b *domain.Booking) BookingResponse {
 	for i, item := range b.Items {
 		items[i] = BookingItemResp{
 			ID: item.ID, TicketTypeID: item.TicketTypeID,
-			Quantity: item.Quantity, UnitPriceCents: item.UnitPriceCents, TotalPrice: item.TotalPrice,
+			Quantity: item.Quantity, UnitPriceRupiah: item.UnitPriceRupiah, TotalPriceRupiah: item.TotalPriceRupiah,
 		}
 	}
 	expiresAt := ""
@@ -63,7 +63,7 @@ func bookingToResponse(b *domain.Booking) BookingResponse {
 	}
 	return BookingResponse{
 		ID: b.ID, UserID: b.UserID, EventID: b.EventID,
-		Status: b.Status, ExpiresAt: expiresAt, TotalCents: b.TotalCents, PaymentID: b.PaymentID,
+		Status: b.Status, ExpiresAt: expiresAt, TotalRupiah: b.TotalRupiah, PaymentID: b.PaymentID,
 		RefundStatus: b.RefundStatus,
 		Items:        items, CreatedAt: b.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	}

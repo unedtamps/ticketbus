@@ -26,7 +26,7 @@ func Test_ExpiryWebhookExpiresBooking(t *testing.T) {
 	// Reserve + initiate (session exists)
 	_, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 2, "unit_price_cents": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 2, "unit_price_rupiah": 10000}},
 	}, ch)
 	require.NoError(t, err)
 	var rr reserveResp
@@ -83,7 +83,7 @@ func Test_DuplicateExpiryWebhookIsIdempotent(t *testing.T) {
 
 	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": 10000}},
 	}, ch)
 	var rr reserveResp
 	require.NoError(t, jsonData(body, &rr))

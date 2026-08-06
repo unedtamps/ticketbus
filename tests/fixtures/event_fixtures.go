@@ -88,9 +88,9 @@ func WithTicketTypeName(name string) TicketTypeOption {
 	return func(tt *domain.TicketType) { tt.Name = name }
 }
 
-// WithTicketTypePrice overrides the price in cents.
-func WithTicketTypePrice(cents int) TicketTypeOption {
-	return func(tt *domain.TicketType) { tt.PriceCents = cents }
+// WithTicketTypePrice overrides the price in rupiah.
+func WithTicketTypePrice(rupiah int) TicketTypeOption {
+	return func(tt *domain.TicketType) { tt.PriceRupiah = rupiah }
 }
 
 // WithTicketTypeQuantity overrides the quantity.
@@ -109,7 +109,7 @@ func NewTestTicketType(opts ...TicketTypeOption) *domain.TicketType {
 		ID:          uuid.NewString(),
 		EventID:     uuid.NewString(),
 		Name:        "General Admission",
-		PriceCents:  5000,
+		PriceRupiah:  5000,
 		Quantity:    50,
 		MaxPerOrder: 5,
 		Available:   50,

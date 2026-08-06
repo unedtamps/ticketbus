@@ -25,8 +25,12 @@ func (h *PaymentHandler) Routes() chi.Router {
 			Get("/api/payments/booking/{booking_id}", h.GetPaymentStatus)
 		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
 			Post("/api/payments/by-booking/{booking_id}/checkout", h.CheckoutByBooking)
-		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).Get("/api/payments/{id}/status", h.GetStatus)
-		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).Get("/api/payments", h.ListTransactions)
+		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
+			Get("/api/payments/{id}/status", h.GetStatus)
+		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
+			Get("/api/payments/{txn_id}", h.GetTransaction)
+		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
+			Get("/api/payments", h.ListTransactions)
 	})
 
 	return r

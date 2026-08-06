@@ -6,8 +6,9 @@ import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/components/ui/toast";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Calendar, MapPin, Users, Clock, Ticket as TicketIcon, ArrowRight, ChevronLeft, Loader2 } from "lucide-react";
-import { fmtDateTime, fmtTime } from "@/lib/format";
+import { fmtDateTime, fmtIDR, fmtTime } from "@/lib/format";
 import type { EventDetail, ReservationResponse } from "@/types";
 
 type Phase = "selection" | "summary";
@@ -18,6 +19,7 @@ export default function EventPage() {
   const router = useRouter();
 
   const [phase, setPhase] = useState<Phase>("selection");
+  const [confirming, setConfirming] = useState(false);
   const [selectedTickets, setSelectedTickets] = useState<Record<string, number>>({});
 
   const eventQuery = useQuery({
@@ -27,10 +29,10 @@ export default function EventPage() {
   });
 
   const reserveMutation = useMutation({
-    mutationFn: (items: { ticket_type_id: string; quantity: number; unit_price_cents: number }[]) =>
+    mutationFn: (items: { ticket_type_id: string; quantity: number; unit_price_rupiah: number }[]) =>
       api.post<ReservationResponse>("/api/bookings/reserve", { event_id: id, items }),
     onSuccess: (data) => {
-      router.push("/checkout?booking_id=" + data.booking_id);
+      router.push("/checkout/" + data.booking_id);
     },
     onError: (err: Error) => {
       toast.error(err.message);
@@ -49,23 +51,22 @@ export default function EventPage() {
           ticket_type_id: ticketTypeId,
           name: tt?.name || "",
           quantity: qty,
-          unit_price_cents: tt?.price_cents || 0,
+          unit_price_rupiah: tt?.price_rupiah || 0,
         };
       });
   }
 
   const orderItems = getOrderItems();
-  const orderTotal = orderItems.reduce((sum, item) => sum + item.unit_price_cents * item.quantity, 0);
+  const orderTotal = orderItems.reduce((sum, item) => sum + item.unit_price_rupiah * item.quantity, 0);
 
   function handleCheckout() {
     if (!user) { router.push("/login"); return; }
     reserveMutation.mutate(orderItems.map(i => ({
       ticket_type_id: i.ticket_type_id,
       quantity: i.quantity,
-      unit_price_cents: i.unit_price_cents,
+      unit_price_rupiah: i.unit_price_rupiah,
     })));
   }
-
   if (eventQuery.isLoading) {
     return (
       <div className="max-w-2xl mx-auto space-y-5">
@@ -129,7 +130,7 @@ export default function EventPage() {
                   }`}
                 >
                   <p className="text-xs font-semibold text-[#1A1817]">{tt.name}</p>
-                  <p className="text-xs text-[#D9381E] font-medium">${(tt.price_cents / 100).toFixed(2)}</p>
+                  <p className="text-xs text-[#D9381E] font-medium">{fmtIDR(tt.price_rupiah)}</p>
                   <p className="text-[0.6rem] text-[#B0A89E]">
                     {soldOut ? "Sold out" : `${tt.available} left`}
                   </p>
@@ -164,7 +165,7 @@ export default function EventPage() {
                       <div>
                         <p className="text-sm font-semibold text-[#1A1817]">{tt.name}</p>
                         <p className="font-[family-name:var(--font-display)] text-xl text-[#1A1817] mt-0.5">
-                          ${(tt.price_cents / 100).toFixed(2)}
+                          {fmtIDR(tt.price_rupiah)}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -229,15 +230,15 @@ export default function EventPage() {
               {orderItems.map(item => (
                 <div key={item.ticket_type_id} className="flex justify-between text-sm">
                   <span className="text-[#4A4541]">
-                    {item.name} <span className="text-[#B0A89E]">{item.quantity} &times; ${(item.unit_price_cents / 100).toFixed(2)}</span>
+                    {item.name} <span className="text-[#B0A89E]">{item.quantity} &times; {fmtIDR(item.unit_price_rupiah)}</span>
                   </span>
-                  <span className="font-medium text-[#1A1817]">${((item.unit_price_cents * item.quantity) / 100).toFixed(2)}</span>
+                  <span className="font-medium text-[#1A1817]">{fmtIDR(item.unit_price_rupiah * item.quantity)}</span>
                 </div>
               ))}
             </div>
             <div className="border-t border-dashed border-[#E8E3DC] pt-3 flex justify-between items-center">
               <span className="font-semibold text-[#1A1817]">Total</span>
-              <span className="font-[family-name:var(--font-display)] text-xl text-[#1A1817]">${(orderTotal / 100).toFixed(2)}</span>
+              <span className="font-[family-name:var(--font-display)] text-xl text-[#1A1817]">{fmtIDR(orderTotal)}</span>
             </div>
           </div>
           <div className="flex gap-3 mt-6">
@@ -245,7 +246,7 @@ export default function EventPage() {
               <ChevronLeft className="w-4 h-4" /> Back
             </button>
             <button
-              onClick={handleCheckout}
+              onClick={() => setConfirming(true)}
               disabled={reserveMutation.isPending}
               className="btn-accent flex-1"
             >
@@ -256,6 +257,20 @@ export default function EventPage() {
           </div>
         </>
       )}
+
+      <ConfirmDialog
+        open={confirming}
+        title="Reserve Tickets"
+        message="This reservation is time-limited and cannot be cancelled. You'll continue to checkout to complete your payment."
+        confirmLabel="Yes, Reserve"
+        variant="warning"
+        loading={reserveMutation.isPending}
+        onConfirm={() => {
+          setConfirming(false);
+          handleCheckout();
+        }}
+        onClose={() => setConfirming(false)}
+      />
     </div>
   );
 }

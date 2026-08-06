@@ -34,9 +34,10 @@ type Config struct {
 	GatewayExpiryBufferMin int `env:"GATEWAY_EXPIRY_BUFFER_MIN,required,notEmpty"`
 	ExpiryPollSec          int `env:"EXPIRY_POLL_SEC,required,notEmpty"`
 
-	// Enabled payment channels shown on the Xendit hosted checkout page
-	// (comma-separated Xendit channel codes).
-	PaymentMethods string `env:"PAYMENT_METHODS,required,notEmpty"`
+	// Optional payment channel list (comma-separated Xendit channel codes).
+	// Not sent to Xendit anymore — the gateway enables all channels activated
+	// for the account. Kept for the mock provider / future dashboard control.
+	PaymentMethods string `env:"PAYMENT_METHODS"`
 }
 
 // EnabledMethods returns the parsed payment channel list.
@@ -74,9 +75,6 @@ func (c *Config) Validate() error {
 		if c.XenditCallbackTok == "" {
 			return fmt.Errorf("XENDIT_CALLBACK_TOKEN is required when PROVIDER=xendit")
 		}
-	}
-	if len(c.EnabledMethods()) == 0 {
-		return fmt.Errorf("PAYMENT_METHODS must list at least one channel")
 	}
 	if c.GatewayExpiryBufferMin < 0 {
 		return fmt.Errorf("GATEWAY_EXPIRY_BUFFER_MIN must be >= 0, got %d", c.GatewayExpiryBufferMin)

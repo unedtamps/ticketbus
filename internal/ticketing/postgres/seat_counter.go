@@ -73,7 +73,7 @@ func (c *SeatCounter) Available(ctx context.Context, eventID, ticketTypeID strin
 func (c *SeatCounter) SetPrice(ctx context.Context, eventID, ticketTypeID string, price int) error {
 	_, err := c.db.Exec(
 		ctx,
-		`UPDATE ticket_types SET price_cents = $1 WHERE id = $2`,
+		`UPDATE ticket_types SET price_rupiah = $1 WHERE id = $2`,
 		price,
 		ticketTypeID,
 	)
@@ -83,7 +83,7 @@ func (c *SeatCounter) SetPrice(ctx context.Context, eventID, ticketTypeID string
 // GetPrice returns the stored authoritative price for a ticket type.
 func (c *SeatCounter) GetPrice(ctx context.Context, eventID, ticketTypeID string) (int, error) {
 	var price int
-	err := c.db.QueryRow(ctx, `SELECT price_cents FROM ticket_types WHERE id = $1`, ticketTypeID).
+	err := c.db.QueryRow(ctx, `SELECT price_rupiah FROM ticket_types WHERE id = $1`, ticketTypeID).
 		Scan(&price)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, domain.ErrReservationNotFound

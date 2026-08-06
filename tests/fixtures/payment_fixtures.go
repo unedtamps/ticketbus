@@ -25,9 +25,9 @@ func WithTransactionBookingID(bookingID string) TransactionOption {
 	return func(tx *domain.Transaction) { tx.BookingID = bookingID }
 }
 
-// WithTransactionAmount overrides the amount in cents.
-func WithTransactionAmount(cents int) TransactionOption {
-	return func(tx *domain.Transaction) { tx.AmountCents = cents }
+// WithTransactionAmount overrides the amount in rupiah.
+func WithTransactionAmount(rupiah int) TransactionOption {
+	return func(tx *domain.Transaction) { tx.AmountRupiah = rupiah }
 }
 
 // WithTransactionCurrency overrides the currency.
@@ -72,7 +72,7 @@ func NewTestTransaction(opts ...TransactionOption) *domain.Transaction {
 		ID:          uuid.NewString(),
 		UserID:      uuid.NewString(),
 		BookingID:   uuid.NewString(),
-		AmountCents: 10000,
+		AmountRupiah: 10000,
 		Currency:    "USD",
 		Status:      domain.StatusPending,
 		Provider:    "mock",

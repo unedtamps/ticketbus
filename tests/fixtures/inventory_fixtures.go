@@ -48,7 +48,7 @@ func NewTestBooking(opts ...BookingOption) *domain.Booking {
 		UserID:     uuid.NewString(),
 		EventID:    uuid.NewString(),
 		Status:     "confirmed",
-		TotalCents: 10000,
+		TotalRupiah: 10000,
 		PaymentID:  uuid.NewString(),
 		Items: []domain.BookingItem{
 			*NewTestBookingItem(WithBookingItemID(uuid.NewString()), WithBookingItemBookingID(uuid.NewString())),
@@ -85,8 +85,8 @@ func WithBookingItemQuantity(qty int) BookingItemOption {
 }
 
 // WithBookingItemUnitPrice overrides the unit price.
-func WithBookingItemUnitPrice(cents int) BookingItemOption {
-	return func(bi *domain.BookingItem) { bi.UnitPriceCents = cents }
+func WithBookingItemUnitPrice(rupiah int) BookingItemOption {
+	return func(bi *domain.BookingItem) { bi.UnitPriceRupiah = rupiah }
 }
 
 // NewTestBookingItem creates a BookingItem with sensible defaults.
@@ -96,7 +96,7 @@ func NewTestBookingItem(opts ...BookingItemOption) *domain.BookingItem {
 		BookingID:      uuid.NewString(),
 		TicketTypeID:   uuid.NewString(),
 		Quantity:       1,
-		UnitPriceCents: 5000,
+		UnitPriceRupiah: 5000,
 	}
 	for _, o := range opts {
 		o(bi)
@@ -127,9 +127,9 @@ func WithReservationItems(items []domain.BookingItem) ReservationOption {
 	return func(r *domain.Reservation) { r.Items = items }
 }
 
-// WithReservationTotalCents overrides the total.
-func WithReservationTotalCents(cents int) ReservationOption {
-	return func(r *domain.Reservation) { r.TotalCents = cents }
+// WithReservationTotalRupiah overrides the total.
+func WithReservationTotalRupiah(rupiah int) ReservationOption {
+	return func(r *domain.Reservation) { r.TotalRupiah = rupiah }
 }
 
 // WithReservationStatus overrides the status (default: held).
@@ -147,7 +147,7 @@ func NewTestReservation(opts ...ReservationOption) *domain.Reservation {
 		Items: []domain.BookingItem{
 			*NewTestBookingItem(WithBookingItemUnitPrice(5000), WithBookingItemQuantity(2)),
 		},
-		TotalCents: 10000,
+		TotalRupiah: 10000,
 		Status:     "held",
 		CreatedAt:  now,
 	}

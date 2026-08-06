@@ -46,7 +46,7 @@ func (h *BookingHandler) Reserve(w http.ResponseWriter, r *http.Request) {
 		items[i] = domain.BookingItem{
 			TicketTypeID:   item.TicketTypeID,
 			Quantity:       item.Quantity,
-			UnitPriceCents: item.UnitPriceCents,
+			UnitPriceRupiah: item.UnitPriceRupiah,
 		}
 	}
 
@@ -71,7 +71,7 @@ func (h *BookingHandler) Reserve(w http.ResponseWriter, r *http.Request) {
 	sharedhttp.Created(w, ReservationResponse{
 		BookingID:  res.BookingID,
 		EventID:    res.EventID,
-		TotalCents: res.TotalCents,
+		TotalRupiah: res.TotalRupiah,
 		Status:     res.Status,
 		ExpiresAt:  res.ExpiresAt.Format("2006-01-02T15:04:05Z07:00"),
 	})
@@ -91,8 +91,9 @@ func (h *BookingHandler) Release(w http.ResponseWriter, r *http.Request) {
 // GetBooking handles GET /bookings/:id.
 func (h *BookingHandler) GetBooking(w http.ResponseWriter, r *http.Request) {
 	bookingID := chi.URLParam(r, "id")
+	userID := sharedhttp.UserIDFromContext(r.Context())
 	booking, err := h.svc.GetBooking(r.Context(), bookingID)
-	if err != nil {
+	if err != nil || booking.UserID != userID {
 		sharedhttp.NotFound(w, "booking not found")
 		return
 	}

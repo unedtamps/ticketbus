@@ -19,12 +19,12 @@ func NewTransactionRepo(db shareddb.DBTx) *TransactionRepo {
 	return &TransactionRepo{db: db}
 }
 
-const txnColumns = `id, user_id, booking_id, event_id, amount_cents, currency, status, provider, provider_ref, payment_link_url, customer_email, refund_status, expires_at, created_at, updated_at`
+const txnColumns = `id, user_id, booking_id, event_id, amount_rupiah, currency, status, provider, provider_ref, payment_link_url, customer_email, refund_status, expires_at, created_at, updated_at`
 
 func scanTxn(row interface{ Scan(...any) error }) (*domain.Transaction, error) {
 	var t domain.Transaction
 	err := row.Scan(
-		&t.ID, &t.UserID, &t.BookingID, &t.EventID, &t.AmountCents, &t.Currency,
+		&t.ID, &t.UserID, &t.BookingID, &t.EventID, &t.AmountRupiah, &t.Currency,
 		&t.Status, &t.Provider, &t.ProviderRef, &t.PaymentLinkURL, &t.CustomerEmail,
 		&t.RefundStatus, &t.ExpiresAt, &t.CreatedAt, &t.UpdatedAt,
 	)
@@ -37,9 +37,9 @@ func scanTxn(row interface{ Scan(...any) error }) (*domain.Transaction, error) {
 // Create inserts a new transaction.
 func (r *TransactionRepo) Create(ctx context.Context, txn *domain.Transaction) error {
 	_, err := r.db.Exec(ctx, `
-		INSERT INTO transactions (id, user_id, booking_id, event_id, amount_cents, currency, status, provider, provider_ref, payment_link_url, customer_email, refund_status, expires_at)
+		INSERT INTO transactions (id, user_id, booking_id, event_id, amount_rupiah, currency, status, provider, provider_ref, payment_link_url, customer_email, refund_status, expires_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-		txn.ID, txn.UserID, txn.BookingID, txn.EventID, txn.AmountCents, txn.Currency,
+		txn.ID, txn.UserID, txn.BookingID, txn.EventID, txn.AmountRupiah, txn.Currency,
 		txn.Status, txn.Provider, txn.ProviderRef, txn.PaymentLinkURL, txn.CustomerEmail,
 		txn.RefundStatus, txn.ExpiresAt)
 	return err

@@ -1,0 +1,44 @@
+{
+    "event": "payment_session.expired",
+    "business_id": "5781d19b2e2385880609791c",
+    "created": "2020-04-20T16:25:52Z",
+    "data": {
+        "payment_session_id": "ps-{{sessionID}}",
+        "allowed_payment_channels": [
+            "CARD",
+            "OVO",
+            "DANA"
+        ],
+        "amount": 100000,
+        "channel_properties": {
+            "cards": {
+                "bin_whitelist": [
+                    "411100",
+                    "51234567"
+                ],
+                "mid_label": "HALODOC_BNI_5999",
+                "cardonfile_type": "RECURRING"
+            }
+        },
+        "country": "ID",
+        "created": "2020-04-20T16:25:52Z",
+        "currency": "IDR",
+        "customer_id": "cust-e2878b4c-d57e-4a2c-922d-c0313c2800a3",
+        "description": "Example description of your payment session",
+        "expires_at": "2030-02-15T16:23:52Z",
+        "locale": "en",
+        "metadata": {
+            "your_metadata_key": "your_metadata_value"
+        },
+        "mode": "PAYMENT_LINK",
+        "payment_link_url": "https://checkout.xendit.co/latest/65c8b6916b68a555078489a5",
+        "payment_request_id": "pr-8363892-f4d9-421c-dhdy-jdh9e30380",
+        "payment_token_id": "ptkn-6d1c8be4-f4d9-421c-9f0b-ab3b2b6bbc39",
+        "reference_id": "{{bookingID}}",
+        "success_return_url": "https://www.your-website.co/success_page",
+        "cancel_return_url": "https://www.your-website.co/cancel_page",
+        "session_type": "SAVE",
+        "status": "EXPIRED",
+        "updated": "2020-04-20T16:25:52Z"
+    }
+}

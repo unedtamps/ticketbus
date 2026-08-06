@@ -57,7 +57,7 @@ func TestInitiateTxnForBooking_Success(t *testing.T) {
 
 	txnRepo.EXPECT().Create(ctx, mock.MatchedBy(func(tx *domain.Transaction) bool {
 		return tx.BookingID == "book-1" && tx.EventID == "event-1" && tx.UserID == "user-1" &&
-			tx.CustomerEmail == "user@example.com" && tx.AmountCents == 10000 &&
+			tx.CustomerEmail == "user@example.com" && tx.AmountRupiah == 10000 &&
 			tx.Currency == "IDR" && tx.Status == domain.StatusInitiated &&
 			tx.ExpiresAt != nil && tx.ExpiresAt.Equal(expiresAt)
 	})).Return(nil)
@@ -93,7 +93,7 @@ func TestProcessPayment_Success(t *testing.T) {
 	processor := mocks.NewMockPaymentProcessor(t)
 	svc := newPaymentServiceDefaults(t, txnRepo, processor, mocks.NewMockEventConsumer(t))
 	ctx := context.Background()
-	expiresAt := time.Now().Add(15 * time.Minute)
+	expiresAt := time.Now().Add(60 * time.Minute)
 	txn := fixtures.NewTestTransaction(
 		fixtures.WithTransactionID("txn-1"),
 		fixtures.WithTransactionBookingID("book-1"),
@@ -169,7 +169,7 @@ func TestProcessPayment_TransitionRace_CancelsSession(t *testing.T) {
 	processor := mocks.NewMockPaymentProcessor(t)
 	svc := newPaymentServiceDefaults(t, txnRepo, processor, mocks.NewMockEventConsumer(t))
 	ctx := context.Background()
-	expiresAt := time.Now().Add(15 * time.Minute)
+	expiresAt := time.Now().Add(60 * time.Minute)
 	txn := fixtures.NewTestTransaction(
 		fixtures.WithTransactionID("txn-1"),
 		fixtures.WithTransactionBookingID("book-1"),
@@ -358,6 +358,73 @@ func TestHandleSessionWebhook_Expired(t *testing.T) {
 	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusExpired, "ps-1").Return(true, nil)
 
 	err := svc.HandleSessionWebhook(ctx, "mock", webhookPayload("payment_session.expired", "book-1", "ps-1", "EXPIRED"))
+	require.NoError(t, err)
+}
+
+// TestHandleSessionWebhook_RealXenditPayload verifies the handler accepts a
+// payload in the shape Xendit actually delivers: the session id lives in
+// data.id, status is uppercase, and amount is a JSON number.
+func TestHandleSessionWebhook_RealXenditPayload(t *testing.T) {
+	txnRepo := mocks.NewMockTransactionRepository(t)
+	svc := newPaymentServiceDefaults(t, txnRepo, mocks.NewMockPaymentProcessor(t),
+		mocks.NewMockEventConsumer(t))
+	ctx := context.Background()
+	txn := fixtures.NewTestTransaction(
+		fixtures.WithTransactionID("txn-1"),
+		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionProviderRef("ps-579c8d61f23fa4ca35e52da4"),
+		fixtures.WithTransactionStatus(domain.StatusPending),
+	)
+
+	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
+	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusCompleted, "ps-579c8d61f23fa4ca35e52da4").Return(true, nil)
+
+	payload := []byte(`{
+		"event": "payment_session.completed",
+		"business_id": "5781d19b2e2385880609791c",
+		"created": "2020-04-20T16:25:52Z",
+		"data": {
+			"payment_session_id": "ps-579c8d61f23fa4ca35e52da4",
+			"allowed_payment_channels": ["CARD", "OVO", "DANA"],
+			"amount": 100000,
+			"country": "ID",
+			"created": "2020-04-20T16:25:52Z",
+			"currency": "IDR",
+			"customer_id": "cust-e2878b4c-d57e-4a2c-922d-c0313c2800a3",
+			"expires_at": "2030-02-15T16:23:52Z",
+			"mode": "PAYMENT_LINK",
+			"payment_link_url": "https://checkout.xendit.co/latest/65c8b6916b68a555078489a5",
+			"payment_request_id": "pr-8363892-f4d9-421c-dhdy-jdh9e30380",
+			"reference_id": "book-1",
+			"session_type": "SAVE",
+			"status": "COMPLETED",
+			"updated": "2020-04-20T16:25:52Z"
+		}
+	}`)
+
+	err := svc.HandleSessionWebhook(ctx, "xendit", payload)
+	require.NoError(t, err)
+}
+
+// TestHandleSessionWebhook_SessionMismatch_Ignored verifies a webhook whose
+// session id does not match the stored transaction is acknowledged but not
+// applied (no state transition happens).
+func TestHandleSessionWebhook_SessionMismatch_Ignored(t *testing.T) {
+	txnRepo := mocks.NewMockTransactionRepository(t)
+	svc := newPaymentServiceDefaults(t, txnRepo, mocks.NewMockPaymentProcessor(t),
+		mocks.NewMockEventConsumer(t))
+	ctx := context.Background()
+	txn := fixtures.NewTestTransaction(
+		fixtures.WithTransactionID("txn-1"),
+		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionProviderRef("ps-abc"),
+		fixtures.WithTransactionStatus(domain.StatusPending),
+	)
+
+	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
+
+	payload := []byte(`{"event":"payment_session.completed","data":{"payment_session_id":"ps-some-other-session","reference_id":"book-1","status":"COMPLETED"}}`)
+	err := svc.HandleSessionWebhook(ctx, "xendit", payload)
 	require.NoError(t, err)
 }
 

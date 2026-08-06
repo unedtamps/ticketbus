@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS refund_requests (
     booking_id       UUID NOT NULL,
     transaction_id   UUID NOT NULL REFERENCES transactions(id) ON UPDATE CASCADE,
     customer_email   TEXT,
-    amount_cents     BIGINT NOT NULL CHECK (amount_cents >= 0),
+    amount_rupiah    BIGINT NOT NULL CHECK (amount_rupiah >= 0),
     currency         TEXT NOT NULL DEFAULT 'IDR',
     status           TEXT NOT NULL
         CHECK (status IN ('pending', 'processing', 'succeeded', 'failed')),

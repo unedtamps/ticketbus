@@ -117,37 +117,17 @@ func TestConcurrentBookingConsistency(t *testing.T) {
 				}
 				bookingID := rr.Data.BookingID
 
-				// 3b. Poll checkout until transaction is created by payment consumer
-				var txnID string
-				deadline := time.Now().Add(500 * time.Second)
-				for time.Now().Before(deadline) {
-					r, b, _ := doJSON(http.MethodPost,
-						env.payURL+"/api/payments/by-booking/"+bookingID+"/checkout",
-						nil, cust.Headers)
-					if r == nil || r.StatusCode != 200 {
-						time.Sleep(500 * time.Millisecond)
-						continue
-					}
-					var tr struct {
-						Data struct {
-							ID string `json:"id"`
-						} `json:"data"`
-					}
-					if json.Unmarshal(b, &tr) == nil && tr.Data.ID != "" {
-						txnID = tr.Data.ID
-						break
-					}
-					time.Sleep(500 * time.Millisecond)
-				}
-
-				if txnID == "" {
+				// 3b. Initiate payment (session created) and fire the completed webhook
+				r, _, _ := doJSON(http.MethodPost,
+					env.payURL+"/api/payments/booking/"+bookingID,
+					nil, cust.Headers)
+				if r == nil || r.StatusCode != 200 {
 					results <- attempt{ReserveOK: false}
 					continue
 				}
 
-				// 3c. Fire webhook mock immediately
-				doJSON(http.MethodPost, env.payURL+"/api/payments/webhook/mock",
-					map[string]string{"transaction_id": txnID}, nil)
+				// 3c. Fire completed webhook immediately
+				completePaymentWebhook(t, env, bookingID)
 
 				results <- attempt{
 					BookingID: bookingID,
@@ -176,13 +156,6 @@ func TestConcurrentBookingConsistency(t *testing.T) {
 		reservesOK,
 		reservesFail,
 	)
-
-	// Extend reservation TTLs in Redis so they don't expire during settle
-	if keys, err := env.rdb.Keys(ctx, "reservation:*").Result(); err == nil {
-		for _, k := range keys {
-			env.rdb.Expire(ctx, k, 3600*time.Second)
-		}
-	}
 
 	// ── 4. Settle async pipeline ──
 	pools := map[string]*pgxpool.Pool{
@@ -214,7 +187,7 @@ func TestConcurrentBookingConsistency(t *testing.T) {
 	pollFor(t, 500*time.Second, 500*time.Millisecond, func() bool {
 		var completed int
 		env.payPool.QueryRow(ctx,
-			"SELECT COUNT(*) FROM transactions WHERE status = 'success'").Scan(&completed)
+			"SELECT COUNT(*) FROM transactions WHERE status = 'completed'").Scan(&completed)
 
 		var confirmed int
 		env.invPool.QueryRow(ctx,

@@ -62,7 +62,6 @@ func main() {
 	outboxStore := outbox.NewStore(pool)
 	kafkaProducer := sharedkafka.NewProducer(kafkaBrokers)
 	if err := sharedkafka.EnsureTopics(kafkaBrokers, []string{
-		"reservation.cancelled",
 		"event.cancelled",
 		"payment.completed", "payment.expired",
 	}, 4, 3); err != nil {

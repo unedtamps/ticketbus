@@ -12,14 +12,13 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/redis/go-redis/v9"
 
 	bookingpkg "github.com/nedo/TicketSaas/internal/ticketing/application/booking"
 	eventpkg "github.com/nedo/TicketSaas/internal/ticketing/application/event"
 	eventhandler "github.com/nedo/TicketSaas/internal/ticketing/handler"
 	eventkafka "github.com/nedo/TicketSaas/internal/ticketing/kafka"
+	ticketingpayment "github.com/nedo/TicketSaas/internal/ticketing/payment"
 	eventpostgres "github.com/nedo/TicketSaas/internal/ticketing/postgres"
-	eventredis "github.com/nedo/TicketSaas/internal/ticketing/redis"
 
 	"github.com/nedo/TicketSaas/internal/shared/db"
 	sharedhttp "github.com/nedo/TicketSaas/internal/shared/http"
@@ -45,19 +44,12 @@ func main() {
 	}
 	defer pool.Close()
 
-	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
-	if err := rdb.Ping(context.Background()).Err(); err != nil {
-		logger.Error("failed to connect to redis", "error", err)
-		os.Exit(1)
-	}
-	defer rdb.Close()
-
 	eventRepo := eventpostgres.NewEventRepo(pool)
 	bookingRepo := eventpostgres.NewBookingRepo(pool)
 	eventStatusRepo := eventpostgres.NewEventStatusRepo(pool)
-	reservationCache := eventredis.NewReservationCache(rdb)
 	seatCounter := eventpostgres.NewSeatCounter(pool)
 	seatReader := eventpostgres.NewSeatReader(pool)
+	paymentClient := ticketingpayment.NewClient(cfg.PaymentServiceURL, cfg.InternalAPIKey, cfg.PaymentTimeoutSec)
 
 	kafkaBrokers := strings.Split(cfg.KafkaBrokers, ",")
 	consumer := eventkafka.NewTicketingConsumer(
@@ -71,7 +63,7 @@ func main() {
 	kafkaProducer := sharedkafka.NewProducer(kafkaBrokers)
 	if err := sharedkafka.EnsureTopics(kafkaBrokers, []string{
 		"event.cancelled",
-		"reservation.cancelled", "ticket.issued",
+		"ticket.issued",
 		"payment.completed", "payment.expired",
 	}, 4, 3); err != nil {
 		logger.Error("failed to ensure kafka topics", "error", err)
@@ -87,7 +79,7 @@ func main() {
 
 	bookingSvc := bookingpkg.NewBookingService(
 		bookingRepo,
-		reservationCache,
+		paymentClient,
 		seatCounter,
 		consumer,
 		eventStatusRepo,
@@ -109,8 +101,6 @@ func main() {
 		logger.Error("failed to start kafka consumers", "error", err)
 		os.Exit(1)
 	}
-	bookingSvc.StartExpiryListener(ctx)
-	bookingSvc.StartExpiryRecovery(ctx, time.Duration(cfg.ReservationSweepSec)*time.Second)
 
 	eventHandler := eventhandler.NewEventHandler(eventSvc)
 	bookingHandler := eventhandler.NewBookingHandler(bookingSvc)

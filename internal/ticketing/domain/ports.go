@@ -41,15 +41,16 @@ type BookingRepository interface {
 	// TransitionAndReleaseSeats atomically transitions a booking (guarded by its
 	// current status) and releases its seats in a single transaction.
 	TransitionAndReleaseSeats(ctx context.Context, booking *Booking, toStatus string) (bool, error)
-	ListExpiredPending(ctx context.Context, now time.Time, limit int) ([]Booking, error)
+	// Delete removes a pending booking (used to roll back a reserve when the
+	// payment transaction could not be created).
+	Delete(ctx context.Context, bookingID string) error
 }
 
-// ReservationCache triggers reservation expiry through a Redis TTL marker.
-// It stores no business data; PostgreSQL is the single source of truth.
-type ReservationCache interface {
-	Save(ctx context.Context, bookingID string, ttlSeconds int) error
-	Delete(ctx context.Context, bookingID string) error
-	SubscribeExpiry(ctx context.Context) (<-chan string, error)
+// PaymentClient creates the payment transaction for a booking. Called
+// synchronously during reserve so the transaction always exists before any
+// gateway activity.
+type PaymentClient interface {
+	CreateTxnForBooking(ctx context.Context, bookingID, eventID, userID, email string, amountCents int, expiresAt time.Time) error
 }
 
 // SeatCounter defines the contract for atomic seat capacity tracking (Redis).

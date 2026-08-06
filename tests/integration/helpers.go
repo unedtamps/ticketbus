@@ -15,7 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/require"
 
 	authapp "github.com/nedo/TicketSaas/internal/auth/application"
 	"github.com/nedo/TicketSaas/internal/auth/jwt"
@@ -23,42 +23,37 @@ import (
 	sharedkafka "github.com/nedo/TicketSaas/internal/shared/kafka"
 	bookingpkg "github.com/nedo/TicketSaas/internal/ticketing/application/booking"
 	eventpkg "github.com/nedo/TicketSaas/internal/ticketing/application/event"
-	eventredis "github.com/nedo/TicketSaas/internal/ticketing/redis"
 	"github.com/testcontainers/testcontainers-go"
 )
 
 // TestEnv holds all infrastructure, service, and client refs for integration tests.
 type TestEnv struct {
-	authPool  *pgxpool.Pool
-	eventPool *pgxpool.Pool
-	invPool   *pgxpool.Pool
-	payPool   *pgxpool.Pool
-	adminPool *pgxpool.Pool
-	rdb       *redis.Client
-
+	authPool   *pgxpool.Pool
+	eventPool  *pgxpool.Pool
+	invPool    *pgxpool.Pool
+	payPool    *pgxpool.Pool
+	adminPool  *pgxpool.Pool
 	containers containers
 
-	kafkaProducer    *sharedkafka.Producer
-	authSvc          *authapp.AuthService
-	eventSvc         *eventpkg.EventService
-	invSvc           *bookingpkg.BookingService
-	paySvc           *payapp.PaymentService
-	tokenSvc         *jwt.TokenService
-	jwtPublicPEM     string
-	reservationCache *eventredis.ReservationCache
-	authURL          string
-	eventURL         string
-	invURL           string
-	payURL           string
-	cancelBg         context.CancelFunc
-	authSrv          *httptest.Server
-	ticketingSrv     *httptest.Server
-	paySrv           *httptest.Server
+	kafkaProducer *sharedkafka.Producer
+	authSvc       *authapp.AuthService
+	eventSvc      *eventpkg.EventService
+	invSvc        *bookingpkg.BookingService
+	paySvc        *payapp.PaymentService
+	tokenSvc      *jwt.TokenService
+	jwtPublicPEM  string
+	authURL       string
+	eventURL      string
+	invURL        string
+	payURL        string
+	cancelBg      context.CancelFunc
+	authSrv       *httptest.Server
+	ticketingSrv  *httptest.Server
+	paySrv        *httptest.Server
 }
 
 type containers struct {
 	pg    testcontainers.Container
-	redis testcontainers.Container
 	kafka testcontainers.Container
 }
 
@@ -201,4 +196,37 @@ func (env *TestEnv) authHeadersWith(accessToken string) map[string]string {
 	h := env.authHeaders(accessToken)
 	h["Authorization"] = "Bearer " + accessToken
 	return h
+}
+
+// completePaymentWebhook simulates the gateway notifying a payment session
+// completion for a booking.
+func completePaymentWebhook(t *testing.T, env *TestEnv, bookingID string) {
+	t.Helper()
+	payload := map[string]interface{}{
+		"event": "payment_session.completed",
+		"data": map[string]string{
+			"reference_id":       bookingID,
+			"payment_session_id": "ps-" + bookingID,
+			"status":             "COMPLETED",
+		},
+	}
+	resp, body, err := doJSON(http.MethodPost, env.payURL+"/api/payments/webhook/mock", payload, nil)
+	require.NoError(t, err)
+	require.Equal(t, 200, resp.StatusCode, "webhook: %s", string(body))
+}
+
+// initiatePayment creates the payment session for a booking.
+func initiatePayment(t *testing.T, env *TestEnv, bookingID string, ch map[string]string) (sessionID, link string) {
+	t.Helper()
+	resp, body, err := doJSON(http.MethodPost, env.payURL+"/api/payments/booking/"+bookingID, nil, ch)
+	require.NoError(t, err)
+	require.Equal(t, 200, resp.StatusCode, "initiate: %s", string(body))
+	var ir struct {
+		Data struct {
+			PaymentSessionID string `json:"payment_session_id"`
+			PaymentLinkURL   string `json:"payment_link_url"`
+		} `json:"data"`
+	}
+	require.NoError(t, jsonData(body, &ir))
+	return ir.Data.PaymentSessionID, ir.Data.PaymentLinkURL
 }

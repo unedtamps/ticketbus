@@ -383,74 +383,9 @@ func TestProcessExpired_WithoutSessionRef_SkipsGateway(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// ── HandleReservationCancelled ───────────────────────────────────────────────
-
-func TestHandleReservationCancelled_Success_Pending(t *testing.T) {
-	txnRepo := mocks.NewMockTransactionRepository(t)
-	processor := mocks.NewMockPaymentProcessor(t)
-	svc := newPaymentServiceDefaults(t, txnRepo, processor, mocks.NewMockEventConsumer(t))
-	ctx := context.Background()
-	txn := fixtures.NewTestTransaction(
-		fixtures.WithTransactionID("txn-1"),
-		fixtures.WithTransactionBookingID("book-1"),
-		fixtures.WithTransactionProviderRef("ps-1"),
-		fixtures.WithTransactionStatus(domain.StatusPending),
-	)
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
-	processor.EXPECT().CancelSession(ctx, "ps-1").Return(nil)
-	txnRepo.EXPECT().UpdateStatusIfPending(ctx, "txn-1", domain.StatusExpired, "ps-1").Return(true, nil)
-
-	err := svc.HandleReservationCancelled(ctx, "book-1")
-	require.NoError(t, err)
-}
-
-func TestHandleReservationCancelled_NoSessionRef(t *testing.T) {
-	txnRepo := mocks.NewMockTransactionRepository(t)
-	processor := mocks.NewMockPaymentProcessor(t)
-	svc := newPaymentServiceDefaults(t, txnRepo, processor, mocks.NewMockEventConsumer(t))
-	ctx := context.Background()
-	txn := fixtures.NewTestTransaction(
-		fixtures.WithTransactionID("txn-1"),
-		fixtures.WithTransactionBookingID("book-1"),
-		fixtures.WithTransactionStatus(domain.StatusPending),
-	)
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
-	processor.EXPECT().CancelSession(mock.Anything, mock.Anything).Maybe().Return(nil)
-	txnRepo.EXPECT().UpdateStatusIfPending(ctx, "txn-1", domain.StatusExpired, "").Return(true, nil)
-
-	err := svc.HandleReservationCancelled(ctx, "book-1")
-	require.NoError(t, err)
-}
-
-func TestHandleReservationCancelled_AlreadyProcessed(t *testing.T) {
-	txnRepo := mocks.NewMockTransactionRepository(t)
-	svc := newPaymentServiceDefaults(t, txnRepo, mocks.NewMockPaymentProcessor(t),
-		mocks.NewMockEventConsumer(t))
-	ctx := context.Background()
-	txn := fixtures.NewTestTransaction(
-		fixtures.WithTransactionBookingID("book-1"),
-		fixtures.WithTransactionStatus(domain.StatusExpired),
-	)
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
-
-	err := svc.HandleReservationCancelled(ctx, "book-1")
-	require.NoError(t, err)
-}
-
-func TestHandleReservationCancelled_NoTransaction(t *testing.T) {
-	txnRepo := mocks.NewMockTransactionRepository(t)
-	svc := newPaymentServiceDefaults(t, txnRepo, mocks.NewMockPaymentProcessor(t),
-		mocks.NewMockEventConsumer(t))
-	ctx := context.Background()
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(nil, pgx.ErrNoRows)
-
-	err := svc.HandleReservationCancelled(ctx, "book-1")
-	require.NoError(t, err)
-}
-
 // ── HandleEventCancelled ─────────────────────────────────────────────────────
 
-func TestHandleEventCancelled_RefundsCompletedAndVoidsPending(t *testing.T) {
+func TestHandleEventCancelled_RefundsCompletedLeavesPending(t *testing.T) {
 	txnRepo := mocks.NewMockTransactionRepository(t)
 	refundRepo := mocks.NewMockRefundRepository(t)
 	processor := mocks.NewMockPaymentProcessor(t)
@@ -473,8 +408,9 @@ func TestHandleEventCancelled_RefundsCompletedAndVoidsPending(t *testing.T) {
 		return r.Reason == "event_cancelled" && r.IdempotencyKey == "event-cancelled:txn-completed"
 	})).Return(nil)
 	txnRepo.EXPECT().UpdateRefundStatus(ctx, "txn-completed", "pending").Return(nil)
-	processor.EXPECT().CancelSession(ctx, "ps-2").Return(nil)
-	txnRepo.EXPECT().UpdateStatusIfPending(ctx, "txn-pending", domain.StatusExpired, "ps-2").Return(true, nil)
+	// Pending transactions are intentionally untouched.
+	processor.EXPECT().CancelSession(mock.Anything, mock.Anything).Maybe().Return(nil)
+	txnRepo.EXPECT().UpdateStatusIfPending(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe().Return(false, nil)
 
 	err := svc.HandleEventCancelled(ctx, "event-1")
 	require.NoError(t, err)

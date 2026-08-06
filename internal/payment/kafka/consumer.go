@@ -15,8 +15,7 @@ type PaymentConsumer struct {
 	groupID     string
 	concurrency int
 
-	reservationCancelledFn func(context.Context, string) error
-	eventCancelledFn       func(context.Context, string) error
+	eventCancelledFn func(context.Context, string) error
 }
 
 // NewPaymentConsumer creates a new Kafka consumer for payment events.
@@ -24,11 +23,10 @@ func NewPaymentConsumer(brokers []string, groupID string, concurrency int) *Paym
 	return &PaymentConsumer{brokers: brokers, groupID: groupID, concurrency: concurrency}
 }
 
-func (c *PaymentConsumer) OnReservationCancelled(ctx context.Context, fn func(context.Context, string) error) {
-	c.reservationCancelledFn = fn
-}
-
-func (c *PaymentConsumer) OnEventCancelled(ctx context.Context, fn func(context.Context, string) error) {
+func (c *PaymentConsumer) OnEventCancelled(
+	ctx context.Context,
+	fn func(context.Context, string) error,
+) {
 	c.eventCancelledFn = fn
 }
 
@@ -36,35 +34,43 @@ func (c *PaymentConsumer) OnEventCancelled(ctx context.Context, fn func(context.
 func (c *PaymentConsumer) Start(ctx context.Context) error {
 	time.Sleep(500 * time.Millisecond)
 
-	startConsumer(ctx, c.brokers, c.groupID, c.concurrency, "reservation.cancelled", func(ctx context.Context, msg sharedkafka.Message) error {
-		var event sdomain.ReservationCancelled
-		if err := json.Unmarshal(msg.Value, &event); err != nil {
-			return err
-		}
-		if c.reservationCancelledFn != nil {
-			return c.reservationCancelledFn(ctx, event.BookingID)
-		}
-		return nil
-	})
-
-	startConsumer(ctx, c.brokers, c.groupID, c.concurrency, "event.cancelled", func(ctx context.Context, msg sharedkafka.Message) error {
-		var event sdomain.EventCancelled
-		if err := json.Unmarshal(msg.Value, &event); err != nil {
-			return err
-		}
-		if c.eventCancelledFn != nil {
-			return c.eventCancelledFn(ctx, event.EventID)
-		}
-		return nil
-	})
+	startConsumer(
+		ctx,
+		c.brokers,
+		c.groupID,
+		c.concurrency,
+		"event.cancelled",
+		func(ctx context.Context, msg sharedkafka.Message) error {
+			var event sdomain.EventCancelled
+			if err := json.Unmarshal(msg.Value, &event); err != nil {
+				return err
+			}
+			if c.eventCancelledFn != nil {
+				return c.eventCancelledFn(ctx, event.EventID)
+			}
+			return nil
+		},
+	)
 
 	<-ctx.Done()
 	return nil
 }
 
-func startConsumer(ctx context.Context, brokers []string, groupID string, concurrency int, topic string, handler sharedkafka.Handler) {
+func startConsumer(
+	ctx context.Context,
+	brokers []string,
+	groupID string,
+	concurrency int,
+	topic string,
+	handler sharedkafka.Handler,
+) {
 	time.Sleep(500 * time.Millisecond)
-	consumer := sharedkafka.NewConsumer(brokers, topic, groupID, sharedkafka.WithConcurrency(concurrency))
+	consumer := sharedkafka.NewConsumer(
+		brokers,
+		topic,
+		groupID,
+		sharedkafka.WithConcurrency(concurrency),
+	)
 	go func() {
 		defer consumer.Close()
 		_ = consumer.Consume(ctx, handler)

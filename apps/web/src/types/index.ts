@@ -62,3 +62,21 @@ export interface TransactionResponse {
   status: string;
   created_at: string;
 }
+
+export interface PaymentStatusResponse {
+  transaction_id: string;
+  status: string;
+  payment_link_url?: string;
+  amount_cents: number;
+  currency: string;
+}
+
+export interface InitiatePaymentResponse {
+  transaction_id: string;
+  payment_session_id: string;
+  payment_link_url: string;
+  amount_cents: number;
+  currency: string;
+  status: string;
+  expires_at: string;
+}

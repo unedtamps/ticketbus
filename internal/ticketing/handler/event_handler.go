@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
+	sdomain "github.com/nedo/TicketSaas/internal/shared/domain"
 	sharedhttp "github.com/nedo/TicketSaas/internal/shared/http"
 	"github.com/nedo/TicketSaas/internal/ticketing/application/event"
 	"github.com/nedo/TicketSaas/internal/ticketing/domain"
@@ -229,6 +230,36 @@ func (h *EventHandler) CancelEvent(w http.ResponseWriter, r *http.Request) {
 		Status:        event.Status,
 		CreatedAt:     event.CreatedAt,
 		UpdatedAt:     event.UpdatedAt,
+	})
+}
+
+// ReprocessCancellation handles POST /events/:id/cancel-reprocess (EO or
+// admin). It re-publishes event.cancelled so pending bookings and late
+// payments of the cancelled event are reconciled.
+func (h *EventHandler) ReprocessCancellation(w http.ResponseWriter, r *http.Request) {
+	eventID := chi.URLParam(r, "id")
+	userID := sharedhttp.UserIDFromContext(r.Context())
+	var (
+		event *domain.Event
+		err   error
+	)
+	if sharedhttp.UserRoleFromContext(r.Context()) == sdomain.RoleAdmin {
+		event, err = h.svc.ReprocessCancellationAsAdmin(r.Context(), eventID)
+	} else {
+		event, err = h.svc.ReprocessCancellation(r.Context(), eventID, userID)
+	}
+	if err != nil {
+		if errors.Is(err, domain.ErrEventNotFound) {
+			sharedhttp.NotFound(w, err.Error())
+			return
+		}
+		sharedhttp.BadRequest(w, err.Error())
+		return
+	}
+	sharedhttp.OK(w, map[string]interface{}{
+		"event_id":  event.ID,
+		"status":    event.Status,
+		"reprocess": "queued",
 	})
 }
 

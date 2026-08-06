@@ -3,23 +3,23 @@
 package integration
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func Test_CheckoutAndWebhookCompletesPayment(t *testing.T) {
+func Test_InitiateAndWebhookCompletesPayment(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 
 	cust := env.registerAndLogin("customer")
 	ch := env.authHeadersWith(cust.AccessToken)
 
-	// Reserve
+	// Reserve → transaction is created synchronously by the payment service
 	_, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
@@ -29,89 +29,63 @@ func Test_CheckoutAndWebhookCompletesPayment(t *testing.T) {
 	require.NoError(t, err)
 
 	var rr reserveResp
-	json.Unmarshal(body, &rr)
+	require.NoError(t, json.Unmarshal(body, &rr))
 	bookingID := rr.Data.BookingID
 	require.NotEmpty(t, bookingID)
 
-	// Poll checkout until transaction is created by payment consumer
-	var tr struct {
-		Data struct {
-			ID        string `json:"id"`
-			Status    string `json:"status"`
-			BookingID string `json:"booking_id"`
-		} `json:"data"`
-	}
-	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
-		resp, b, _ := doJSON(http.MethodPost, env.payURL+"/api/payments/by-booking/"+bookingID+"/checkout", nil, ch)
-		if resp == nil || resp.StatusCode != 200 {
-			return false
-		}
-		json.Unmarshal(b, &tr)
-		return tr.Data.ID != ""
-	}, "payment transaction init via outbox → Kafka → payment consumer")
+	// The transaction row must exist immediately (sync reserve), pending.
+	var txnStatus string
+	require.NoError(t, env.payPool.QueryRow(
+		context.Background(), `SELECT status FROM transactions WHERE booking_id = $1`, bookingID).Scan(&txnStatus))
+	assert.Equal(t, "pending", txnStatus)
 
-	txnID := tr.Data.ID
-	require.NotEmpty(t, txnID)
+	// Initiate payment → payment session with checkout link
+	sessionID, link := initiatePayment(t, env, bookingID, ch)
+	require.NotEmpty(t, sessionID)
+	require.NotEmpty(t, link)
 
 	// Simulate webhook callback (provider's async POST)
-	resp, body, err := doJSON(http.MethodPost, env.payURL+"/api/payments/webhook/mock", map[string]string{
-		"transaction_id": txnID,
-	}, nil)
-	require.NoError(t, err)
-	require.Equal(t, 200, resp.StatusCode, "webhook: %s", string(body))
+	completePaymentWebhook(t, env, bookingID)
 
-	// Verify status
-	resp, body, err = doJSON(http.MethodGet, env.payURL+"/api/payments/"+txnID+"/status", nil, ch)
+	// Verify transaction status via the booking endpoint
+	resp, body, err := doJSON(http.MethodGet, env.payURL+"/api/payments/booking/"+bookingID, nil, ch)
 	require.NoError(t, err)
-	assert.Equal(t, 200, resp.StatusCode)
+	require.Equal(t, 200, resp.StatusCode)
 
-	var ts struct {
+	var ps struct {
 		Data struct {
 			Status string `json:"status"`
 		} `json:"data"`
 	}
-	json.Unmarshal(body, &ts)
-	assert.Equal(t, "success", ts.Data.Status)
+	require.NoError(t, json.Unmarshal(body, &ps))
+	assert.Equal(t, "completed", ps.Data.Status)
 }
 
-func Test_DuplicateBookingTransactionIsIdempotent(t *testing.T) {
+func Test_DuplicateInitiateIsIdempotent(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 
 	cust := env.registerAndLogin("customer")
 	ch := env.authHeadersWith(cust.AccessToken)
 
-	// Reserve
 	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 10000}},
 	}, ch)
 	var rr reserveResp
-	json.Unmarshal(body, &rr)
+	require.NoError(t, json.Unmarshal(body, &rr))
 	bookingID := rr.Data.BookingID
 	require.NotEmpty(t, bookingID)
 
-	// Poll checkout until transaction is created by Kafka consumer
-	var tr struct {
-		Data struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
-		resp, b, _ := doJSON(http.MethodPost, env.payURL+"/api/payments/by-booking/"+bookingID+"/checkout", nil, ch)
-		if resp == nil || resp.StatusCode != 200 {
-			return false
-		}
-		json.Unmarshal(b, &tr)
-		return tr.Data.ID != ""
-	}, "payment transaction init via outbox → Kafka → payment consumer")
-
-	require.NotEmpty(t, tr.Data.ID, "first checkout returned no transaction ID")
-
-	// Second checkout on same booking should return conflict (already processed)
-	resp, body2, err := doJSON(http.MethodPost, env.payURL+"/api/payments/by-booking/"+bookingID+"/checkout", nil, ch)
+	// First initiate succeeds
+	resp, _, err := doJSON(http.MethodPost, env.payURL+"/api/payments/booking/"+bookingID, nil, ch)
 	require.NoError(t, err)
-	assert.Equal(t, 409, resp.StatusCode, "second checkout should return 409: %s", string(body2))
+	require.Equal(t, 200, resp.StatusCode)
+
+	// Second initiate → conflict (already initiated)
+	resp, body2, err := doJSON(http.MethodPost, env.payURL+"/api/payments/booking/"+bookingID, nil, ch)
+	require.NoError(t, err)
+	assert.Equal(t, 409, resp.StatusCode, "second initiate should return 409: %s", string(body2))
 }
 
 func Test_PaymentForNonexistentBooking(t *testing.T) {
@@ -120,58 +94,67 @@ func Test_PaymentForNonexistentBooking(t *testing.T) {
 	cust := env.registerAndLogin("customer")
 	ch := env.authHeadersWith(cust.AccessToken)
 
-	resp, _, err := doJSON(http.MethodPost, env.payURL+"/api/payments/by-booking/nonexistent-id/checkout", nil, ch)
+	resp, _, err := doJSON(http.MethodPost, env.payURL+"/api/payments/booking/nonexistent-id", nil, ch)
 	require.NoError(t, err)
 	assert.Equal(t, 404, resp.StatusCode)
 }
 
-func Test_PaymentStaysProcessingWhenWebhookNotCalled(t *testing.T) {
+func Test_PaymentStaysPendingWhenWebhookNotCalled(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 
 	cust := env.registerAndLogin("customer")
 	ch := env.authHeadersWith(cust.AccessToken)
 
-	// Reserve
 	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 10000}},
 	}, ch)
 	var rr reserveResp
-	json.Unmarshal(body, &rr)
+	require.NoError(t, json.Unmarshal(body, &rr))
 	bookingID := rr.Data.BookingID
 	require.NotEmpty(t, bookingID)
 
-	// Poll checkout until transaction is created
-	var tr struct {
-		Data struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
-		} `json:"data"`
-	}
-	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
-		resp, b, _ := doJSON(http.MethodPost, env.payURL+"/api/payments/by-booking/"+bookingID+"/checkout", nil, ch)
-		if resp == nil || resp.StatusCode != 200 {
-			return false
-		}
-		json.Unmarshal(b, &tr)
-		return tr.Data.ID != ""
-	}, "payment transaction init via outbox → Kafka → payment consumer")
-
-	txnID := tr.Data.ID
-	require.NotEmpty(t, txnID)
+	// Initiate without paying
+	initiatePayment(t, env, bookingID, ch)
 
 	// NOTE: intentionally NOT calling the webhook.
-	// Status should be "pending" — not "success".
-	resp, body, err := doJSON(http.MethodGet, env.payURL+"/api/payments/"+txnID+"/status", nil, ch)
+	resp, body, err := doJSON(http.MethodGet, env.payURL+"/api/payments/booking/"+bookingID, nil, ch)
 	require.NoError(t, err)
-	assert.Equal(t, 200, resp.StatusCode)
+	require.Equal(t, 200, resp.StatusCode)
 
-	var ts struct {
+	var ps struct {
 		Data struct {
 			Status string `json:"status"`
 		} `json:"data"`
 	}
-	json.Unmarshal(body, &ts)
-	assert.Equal(t, "pending", ts.Data.Status)
+	require.NoError(t, json.Unmarshal(body, &ps))
+	assert.Equal(t, "pending", ps.Data.Status)
+}
+
+func Test_InitiateRejectedWhenLessThanOneMinuteRemains(t *testing.T) {
+	env := getTestEnv()
+	eventID, ttIDs := setupApprovedEvent(t, env)
+
+	cust := env.registerAndLogin("customer")
+	ch := env.authHeadersWith(cust.AccessToken)
+
+	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
+		"event_id": eventID,
+		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_cents": 10000}},
+	}, ch)
+	var rr reserveResp
+	require.NoError(t, json.Unmarshal(body, &rr))
+	bookingID := rr.Data.BookingID
+	require.NotEmpty(t, bookingID)
+
+	// Push the transaction deadline into the near future (< 1 minute left)
+	ctx := t.Context()
+	_, err := env.payPool.Exec(ctx,
+		`UPDATE transactions SET expires_at = NOW() + INTERVAL '30 seconds' WHERE booking_id = $1`, bookingID)
+	require.NoError(t, err)
+
+	resp, body2, err := doJSON(http.MethodPost, env.payURL+"/api/payments/booking/"+bookingID, nil, ch)
+	require.NoError(t, err)
+	assert.Equal(t, 409, resp.StatusCode, "initiate should be rejected: %s", string(body2))
 }

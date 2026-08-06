@@ -9,6 +9,7 @@ var (
 	ErrEventNotEditable    = errors.New("event is not in an editable state")
 	ErrEventNotApprovable  = errors.New("only pending events can be approved or rejected")
 	ErrEventNotCancellable = errors.New("only published events can be cancelled")
+	ErrEventNotCancelled   = errors.New("only cancelled events can be reprocessed")
 	ErrNotEventOwner       = errors.New("you do not own this event")
 	ErrInvalidStatus       = errors.New("invalid event status")
 	ErrTicketTypesEmpty    = errors.New("at least one ticket type is required")
@@ -21,4 +22,5 @@ var (
 	ErrInvalidQuantity     = errors.New("invalid quantity")
 	ErrEventNotActive      = errors.New("event is not active for reservations")
 	ErrPriceMismatch       = errors.New("unit_price_cents does not match ticket type price")
+	ErrPaymentUnavailable  = errors.New("payment service unavailable")
 )

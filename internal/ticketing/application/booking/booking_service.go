@@ -10,20 +10,20 @@ import (
 
 // BookingService orchestrates reservation and booking operations.
 type BookingService struct {
-	bookingRepo      domain.BookingRepository
-	reservationCache domain.ReservationCache
-	seatCounter      domain.SeatCounter
-	consumer         domain.EventConsumer
-	eventStatus      domain.EventStatusRepository
-	outbox           outbox.StoreInterface
-	logger           *slog.Logger
-	reservationTTL   int
+	bookingRepo    domain.BookingRepository
+	paymentClient  domain.PaymentClient
+	seatCounter    domain.SeatCounter
+	consumer       domain.EventConsumer
+	eventStatus    domain.EventStatusRepository
+	outbox         outbox.StoreInterface
+	logger         *slog.Logger
+	reservationTTL int
 }
 
 // NewBookingService creates a new BookingService.
 func NewBookingService(
 	bookingRepo domain.BookingRepository,
-	reservationCache domain.ReservationCache,
+	paymentClient domain.PaymentClient,
 	seatCounter domain.SeatCounter,
 	consumer domain.EventConsumer,
 	eventStatus domain.EventStatusRepository,
@@ -32,14 +32,14 @@ func NewBookingService(
 	reservationTTL int,
 ) *BookingService {
 	return &BookingService{
-		bookingRepo:      bookingRepo,
-		reservationCache: reservationCache,
-		seatCounter:      seatCounter,
-		consumer:         consumer,
-		eventStatus:      eventStatus,
-		outbox:           ob,
-		logger:           logger,
-		reservationTTL:   reservationTTL,
+		bookingRepo:    bookingRepo,
+		paymentClient:  paymentClient,
+		seatCounter:    seatCounter,
+		consumer:       consumer,
+		eventStatus:    eventStatus,
+		outbox:         ob,
+		logger:         logger,
+		reservationTTL: reservationTTL,
 	}
 }
 

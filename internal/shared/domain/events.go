@@ -44,13 +44,6 @@ type BookingItem struct {
 	UnitPriceCents int    `json:"unit_price_cents"`
 }
 
-type ReservationCancelled struct {
-	BookingID string    `json:"booking_id"`
-	EventID   string    `json:"event_id"`
-	UserID    string    `json:"user_id"`
-	At        time.Time `json:"at"`
-}
-
 type PaymentInitiated struct {
 	TransactionID string    `json:"transaction_id"`
 	BookingID     string    `json:"booking_id"`

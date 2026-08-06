@@ -127,52 +127,6 @@ func (_c *MockEventConsumer_OnEventCancelled_Call) RunAndReturn(run func(ctx con
 	return _c
 }
 
-// OnReservationCancelled provides a mock function for the type MockEventConsumer
-func (_mock *MockEventConsumer) OnReservationCancelled(ctx context.Context, fn func(ctx context.Context, bookingID string) error) {
-	_mock.Called(ctx, fn)
-	return
-}
-
-// MockEventConsumer_OnReservationCancelled_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OnReservationCancelled'
-type MockEventConsumer_OnReservationCancelled_Call struct {
-	*mock.Call
-}
-
-// OnReservationCancelled is a helper method to define mock.On call
-//   - ctx context.Context
-//   - fn func(ctx context.Context, bookingID string) error
-func (_e *MockEventConsumer_Expecter) OnReservationCancelled(ctx any, fn any) *MockEventConsumer_OnReservationCancelled_Call {
-	return &MockEventConsumer_OnReservationCancelled_Call{Call: _e.mock.On("OnReservationCancelled", ctx, fn)}
-}
-
-func (_c *MockEventConsumer_OnReservationCancelled_Call) Run(run func(ctx context.Context, fn func(ctx context.Context, bookingID string) error)) *MockEventConsumer_OnReservationCancelled_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 func(ctx context.Context, bookingID string) error
-		if args[1] != nil {
-			arg1 = args[1].(func(ctx context.Context, bookingID string) error)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockEventConsumer_OnReservationCancelled_Call) Return() *MockEventConsumer_OnReservationCancelled_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockEventConsumer_OnReservationCancelled_Call) RunAndReturn(run func(ctx context.Context, fn func(ctx context.Context, bookingID string) error)) *MockEventConsumer_OnReservationCancelled_Call {
-	_c.Run(run)
-	return _c
-}
-
 // Start provides a mock function for the type MockEventConsumer
 func (_mock *MockEventConsumer) Start(ctx context.Context) error {
 	ret := _mock.Called(ctx)

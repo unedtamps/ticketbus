@@ -58,37 +58,21 @@ func Test_CancelledEventTriggersRefunds(t *testing.T) {
 	bookingID := rr.Data.BookingID
 	require.NotEmpty(t, bookingID)
 
-	var tr struct {
-		Data struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
-		resp, b, _ := doJSON(http.MethodPost, env.payURL+"/api/payments/by-booking/"+bookingID+"/checkout", nil, ch)
-		if resp == nil || resp.StatusCode != 200 {
-			return false
-		}
-		json.Unmarshal(b, &tr)
-		return tr.Data.ID != ""
-	}, "payment transaction init via outbox → Kafka → payment consumer")
-
-	txnID := tr.Data.ID
-	require.NotEmpty(t, txnID)
-
-	resp, body, err = doJSON(http.MethodPost, env.payURL+"/api/payments/webhook/mock", map[string]string{
-		"transaction_id": txnID,
-	}, nil)
-	require.NoError(t, err)
-	assert.Equal(t, 200, resp.StatusCode)
+	// Initiate payment and simulate the completed webhook
+	initiatePayment(t, env, bookingID, ch)
+	completePaymentWebhook(t, env, bookingID)
 
 	ctx := context.Background()
 	pollFor(t, 30*time.Second, 500*time.Millisecond, func() bool {
 		var status string
-		if err := env.payPool.QueryRow(ctx, `SELECT status FROM transactions WHERE id = $1`, txnID).Scan(&status); err != nil {
+		if err := env.payPool.QueryRow(ctx, `SELECT status FROM transactions WHERE booking_id = $1`, bookingID).Scan(&status); err != nil {
 			return false
 		}
-		return status == "success"
+		return status == "completed"
 	}, "payment completes after webhook")
+
+	var txnID string
+	require.NoError(t, env.payPool.QueryRow(ctx, `SELECT id FROM transactions WHERE booking_id = $1`, bookingID).Scan(&txnID))
 
 	pollFor(t, 30*time.Second, 500*time.Millisecond, func() bool {
 		var status string

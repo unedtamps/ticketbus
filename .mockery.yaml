@@ -20,10 +20,10 @@ packages:
       EventRepository:
       SeatReader:
       BookingRepository:
-      ReservationCache:
       SeatCounter:
       EventConsumer:
       EventStatusRepository:
+      PaymentClient:
   github.com/nedo/TicketSaas/internal/payment/domain:
     config:
       structname: Mock{{.InterfaceName}}

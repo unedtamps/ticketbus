@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nedo/TicketSaas/internal/ticketing/domain"
@@ -167,36 +166,11 @@ func (r *BookingRepo) TransitionAndReleaseSeats(ctx context.Context, booking *do
 	return true, nil
 }
 
-// ListExpiredPending returns pending bookings whose reservation has expired,
-// including their items so seats can be released.
-func (r *BookingRepo) ListExpiredPending(ctx context.Context, now time.Time, limit int) ([]domain.Booking, error) {
-	rows, err := r.pool.Query(ctx, `
-		SELECT id, user_id, event_id, status, expires_at, created_at
-		FROM bookings WHERE status='pending' AND expires_at <= $1
-		ORDER BY expires_at ASC LIMIT $2`, now, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var bookings []domain.Booking
-	for rows.Next() {
-		var b domain.Booking
-		if err := rows.Scan(&b.ID, &b.UserID, &b.EventID, &b.Status, &b.ExpiresAt, &b.CreatedAt); err != nil {
-			return nil, err
-		}
-		bookings = append(bookings, b)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	for i := range bookings {
-		if err := r.loadItems(ctx, &bookings[i]); err != nil {
-			return nil, err
-		}
-	}
-	return bookings, nil
+// Delete removes a pending booking. Used to roll back a reserve when the
+// payment transaction could not be created.
+func (r *BookingRepo) Delete(ctx context.Context, bookingID string) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM bookings WHERE id=$1 AND status='pending'`, bookingID)
+	return err
 }
 
 // loadItems loads booking_items into a booking and derives compatibility fields.

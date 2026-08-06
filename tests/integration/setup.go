@@ -20,7 +20,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 
 	"github.com/nedo/TicketSaas/internal/auth/application"
 	"github.com/nedo/TicketSaas/internal/auth/bcrypt"
@@ -38,8 +37,8 @@ import (
 	eventpkg "github.com/nedo/TicketSaas/internal/ticketing/application/event"
 	eventhandler "github.com/nedo/TicketSaas/internal/ticketing/handler"
 	eventkafka "github.com/nedo/TicketSaas/internal/ticketing/kafka"
+	ticketingpayment "github.com/nedo/TicketSaas/internal/ticketing/payment"
 	eventpostgres "github.com/nedo/TicketSaas/internal/ticketing/postgres"
-	eventredis "github.com/nedo/TicketSaas/internal/ticketing/redis"
 
 	sharedkafka "github.com/nedo/TicketSaas/internal/shared/kafka"
 	"github.com/testcontainers/testcontainers-go"
@@ -124,38 +123,6 @@ func startContainers() *TestEnv {
 	runMigrations("ticketing", ticketingPool)
 	runMigrations("payment", payPool)
 
-	// ── Redis ──
-	redisReq := testcontainers.ContainerRequest{
-		Image:        "redis:7-alpine",
-		ExposedPorts: []string{"6379/tcp"},
-		Cmd:          []string{"redis-server", "--notify-keyspace-events", "Ex"},
-	}
-	redisContainer, err := testcontainers.GenericContainer(
-		ctx,
-		testcontainers.GenericContainerRequest{
-			ContainerRequest: redisReq,
-			Started:          true,
-		},
-	)
-	if err != nil {
-		panic(fmt.Sprintf("redis: %v", err))
-	}
-
-	redisHost, err := redisContainer.Host(ctx)
-	if err != nil {
-		panic(fmt.Sprintf("redis host: %v", err))
-	}
-	redisPort, err := redisContainer.MappedPort(ctx, "6379")
-	if err != nil {
-		panic(fmt.Sprintf("redis port: %v", err))
-	}
-	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort.Port())
-
-	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
-	if err := rdb.Ping(ctx).Err(); err != nil {
-		panic(fmt.Sprintf("redis ping: %v", err))
-	}
-
 	// ── Kafka ──
 	kafkaContainer, err := tckafka.Run(
 		ctx, "confluentinc/cp-kafka:7.7.0",
@@ -193,36 +160,6 @@ func startContainers() *TestEnv {
 	authHandler := authhandler.NewAuthHandler(authSvc)
 	authSrv := httptest.NewServer(authHandler.Routes())
 
-	// ── Ticketing Service ──
-	ticketingLogger := log.New("ticketing", "warn")
-	eventRepo := eventpostgres.NewEventRepo(ticketingPool)
-	seatReader := eventpostgres.NewSeatReader(ticketingPool)
-	ticketingOutbox := outbox.NewStore(ticketingPool)
-	bookingRepo := eventpostgres.NewBookingRepo(ticketingPool)
-	reservationCache := eventredis.NewReservationCache(rdb)
-	seatCounter := eventpostgres.NewSeatCounter(ticketingPool)
-	eventStatusRepo := eventpostgres.NewEventStatusRepo(ticketingPool)
-	invConsumer := eventkafka.NewTicketingConsumer(brokerList, "ticketing-service-test", 1)
-	invSvc := bookingpkg.NewBookingService(
-		bookingRepo,
-		reservationCache,
-		seatCounter,
-		invConsumer,
-		eventStatusRepo,
-		ticketingOutbox,
-		ticketingLogger,
-		30,
-	)
-	eventSvc := eventpkg.NewEventService(eventRepo, seatReader, seatCounter, ticketingOutbox)
-	eventHandler := eventhandler.NewEventHandler(eventSvc)
-	invHandler := eventhandler.NewBookingHandler(invSvc)
-	ticketingRouter := chi.NewRouter()
-	ticketingRouter.Mount("/", eventHandler.Routes())
-	ticketingRouter.Mount("/", invHandler.Routes())
-	ticketingSrv := httptest.NewServer(ticketingRouter)
-
-	ticketingOutboxWorker := outbox.NewWorker(ticketingPool, kafkaProducer, ticketingLogger, 1, 200)
-
 	// ── Payment Service ──
 	payLogger := log.New("payment", "warn")
 	txnRepo := paypostgres.NewTransactionRepo(payPool)
@@ -248,6 +185,36 @@ func startContainers() *TestEnv {
 
 	payOutboxWorker := outbox.NewWorker(payPool, kafkaProducer, payLogger, 1, 200)
 
+	// ── Ticketing Service ──
+	ticketingLogger := log.New("ticketing", "warn")
+	eventRepo := eventpostgres.NewEventRepo(ticketingPool)
+	seatReader := eventpostgres.NewSeatReader(ticketingPool)
+	ticketingOutbox := outbox.NewStore(ticketingPool)
+	bookingRepo := eventpostgres.NewBookingRepo(ticketingPool)
+	seatCounter := eventpostgres.NewSeatCounter(ticketingPool)
+	eventStatusRepo := eventpostgres.NewEventStatusRepo(ticketingPool)
+	invConsumer := eventkafka.NewTicketingConsumer(brokerList, "ticketing-service-test", 1)
+	paymentClient := ticketingpayment.NewClient(paySrv.URL, "test-internal-key", 5)
+	invSvc := bookingpkg.NewBookingService(
+		bookingRepo,
+		paymentClient,
+		seatCounter,
+		invConsumer,
+		eventStatusRepo,
+		ticketingOutbox,
+		ticketingLogger,
+		30,
+	)
+	eventSvc := eventpkg.NewEventService(eventRepo, seatReader, seatCounter, ticketingOutbox)
+	eventHandler := eventhandler.NewEventHandler(eventSvc)
+	invHandler := eventhandler.NewBookingHandler(invSvc)
+	ticketingRouter := chi.NewRouter()
+	ticketingRouter.Mount("/", eventHandler.Routes())
+	ticketingRouter.Mount("/", invHandler.Routes())
+	ticketingSrv := httptest.NewServer(ticketingRouter)
+
+	ticketingOutboxWorker := outbox.NewWorker(ticketingPool, kafkaProducer, ticketingLogger, 1, 200)
+
 	// ── Seed admin ──
 	n, err := authSvc.SeedAdmins(ctx, []application.AdminSeed{
 		{Email: "admin@test.com", Password: "Admin123!", Name: "Admin"},
@@ -265,9 +232,8 @@ func startContainers() *TestEnv {
 	go payOutboxWorker.Run(ctxBg)
 
 	go func() { _ = invSvc.StartConsumers(ctxBg) }()
-	invSvc.StartExpiryListener(ctxBg)
-	invSvc.StartExpiryRecovery(ctxBg, 5*time.Second)
 	go func() { _ = paySvc.StartConsumer(ctxBg) }()
+	paySvc.StartExpiryPoller(ctxBg, 1)
 
 	time.Sleep(3 * time.Second)
 
@@ -276,11 +242,9 @@ func startContainers() *TestEnv {
 		eventPool: ticketingPool,
 		invPool:   ticketingPool,
 		payPool:   payPool,
-		rdb:       rdb,
 		adminPool: adminPool,
 		containers: containers{
 			pg:    pgContainer,
-			redis: redisContainer,
 			kafka: kafkaContainer,
 		},
 		kafkaProducer:    kafkaProducer,
@@ -298,7 +262,6 @@ func startContainers() *TestEnv {
 		authSrv:          authSrv,
 		ticketingSrv:     ticketingSrv,
 		paySrv:           paySrv,
-		reservationCache: reservationCache,
 	}
 }
 
@@ -306,7 +269,7 @@ func startContainers() *TestEnv {
 func waitForKafka(brokers []string, producer *sharedkafka.Producer) {
 	topics := []string{
 		"event.cancelled",
-		"reservation.cancelled", "ticket.issued",
+		"ticket.issued",
 		"payment.completed", "payment.expired",
 		"test-smoke",
 	}
@@ -410,12 +373,10 @@ func (env *TestEnv) cleanup() {
 	env.ticketingSrv.Close()
 	env.paySrv.Close()
 	_ = env.kafkaProducer.Close()
-	_ = env.rdb.Close()
 	env.authPool.Close()
 	env.eventPool.Close()
 	env.payPool.Close()
 	env.adminPool.Close()
 	_ = env.containers.pg.Terminate(ctx)
-	_ = env.containers.redis.Terminate(ctx)
 	_ = env.containers.kafka.Terminate(ctx)
 }

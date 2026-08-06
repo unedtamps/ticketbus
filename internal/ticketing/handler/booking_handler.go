@@ -39,6 +39,7 @@ func (h *BookingHandler) Reserve(w http.ResponseWriter, r *http.Request) {
 		sharedhttp.Unauthorized(w, "authentication required")
 		return
 	}
+	userEmail := sharedhttp.UserEmailFromContext(r.Context())
 
 	items := make([]domain.BookingItem, len(req.Items))
 	for i, item := range req.Items {
@@ -49,7 +50,7 @@ func (h *BookingHandler) Reserve(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	res, err := h.svc.Reserve(r.Context(), userID, req.EventID, items)
+	res, err := h.svc.Reserve(r.Context(), userID, userEmail, req.EventID, items)
 	if err != nil {
 		if errors.Is(err, domain.ErrNoSeatsAvailable) {
 			sharedhttp.Error(w, http.StatusConflict, "not enough seats available")
@@ -57,6 +58,10 @@ func (h *BookingHandler) Reserve(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, domain.ErrPriceMismatch) {
 			sharedhttp.BadRequest(w, err.Error())
+			return
+		}
+		if errors.Is(err, domain.ErrPaymentUnavailable) {
+			sharedhttp.Error(w, http.StatusBadGateway, "payment service unavailable, please retry")
 			return
 		}
 		sharedhttp.InternalServerError(w, "reservation failed")
@@ -72,14 +77,15 @@ func (h *BookingHandler) Reserve(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Release handles DELETE /api/inventory/reserve/:id.
+// Release handles DELETE /api/bookings/reserve/:id. Reservations cannot be
+// cancelled by the customer: seats are released automatically when the
+// payment expires (or the booking completes).
 func (h *BookingHandler) Release(w http.ResponseWriter, r *http.Request) {
-	bookingID := chi.URLParam(r, "id")
-	if err := h.svc.Release(r.Context(), bookingID); err != nil {
-		sharedhttp.NotFound(w, err.Error())
-		return
-	}
-	sharedhttp.NoContent(w)
+	sharedhttp.Error(
+		w,
+		http.StatusConflict,
+		"reservation cannot be cancelled; seats are released automatically when the payment expires",
+	)
 }
 
 // GetBooking handles GET /bookings/:id.

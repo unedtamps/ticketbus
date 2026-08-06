@@ -33,13 +33,13 @@ type InternalCreateResponse struct {
 
 // InitiateResponse returns the gateway session details to render/redirect.
 type InitiateResponse struct {
-	TransactionID   string `json:"transaction_id"`
+	TransactionID    string `json:"transaction_id"`
 	PaymentSessionID string `json:"payment_session_id"`
-	PaymentLinkURL  string `json:"payment_link_url"`
-	AmountCents     int    `json:"amount_cents"`
-	Currency        string `json:"currency"`
-	Status          string `json:"status"`
-	ExpiresAt       string `json:"expires_at"`
+	PaymentLinkURL   string `json:"payment_link_url"`
+	AmountCents      int    `json:"amount_cents"`
+	Currency         string `json:"currency"`
+	Status           string `json:"status"`
+	ExpiresAt        string `json:"expires_at"`
 }
 
 // PaymentStatusResponse returns the payment status for a booking.

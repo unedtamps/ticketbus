@@ -71,7 +71,12 @@ func (c *SeatCounter) Available(ctx context.Context, eventID, ticketTypeID strin
 
 // SetPrice stores the authoritative price for a ticket type.
 func (c *SeatCounter) SetPrice(ctx context.Context, eventID, ticketTypeID string, price int) error {
-	_, err := c.db.Exec(ctx, `UPDATE ticket_types SET price_cents = $1 WHERE id = $2`, price, ticketTypeID)
+	_, err := c.db.Exec(
+		ctx,
+		`UPDATE ticket_types SET price_cents = $1 WHERE id = $2`,
+		price,
+		ticketTypeID,
+	)
 	return err
 }
 

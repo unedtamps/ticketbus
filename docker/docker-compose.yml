@@ -105,18 +105,6 @@ services:
     networks:
       - ticketsaas-network
 
-  redis:
-    image: redis:7-alpine
-    container_name: ticketsaas-redis
-    ports:
-      - "6379:6379"
-    command: >
-      redis-server --notify-keyspace-events Ex
-    volumes:
-      - redis_data:/data
-    networks:
-      - ticketsaas-network
-
   postgres-auth:
     image: postgres:16-alpine
     container_name: ticketsaas-postgres-auth
@@ -212,7 +200,6 @@ volumes:
   kafka2_data:
   kafka3_data:
   kafka4_data:
-  redis_data:
   pg_auth_data:
   pg_ticketing_data:
   pg_pay_data:

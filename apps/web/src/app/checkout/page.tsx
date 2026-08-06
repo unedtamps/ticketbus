@@ -11,21 +11,23 @@ import {
   Loader2,
   AlertTriangle,
   Ticket,
-  RotateCw,
 } from "lucide-react";
-import type { TransactionResponse } from "@/types";
+import type { InitiatePaymentResponse, PaymentStatusResponse } from "@/types";
 
-type Phase = "checkout" | "status" | "completed" | "failed";
+type Phase = "starting" | "status" | "completed" | "failed";
+
+function formatIDR(cents: number) {
+  return "Rp " + cents.toLocaleString("id-ID");
+}
 
 function CheckoutForm() {
   const params = useSearchParams();
   const bookingId = params.get("booking_id");
   const { user } = useAuth();
   const router = useRouter();
-  const [phase, setPhase] = useState<Phase>("checkout");
-  const [txn, setTxn] = useState<TransactionResponse | null>(null);
+  const [phase, setPhase] = useState<Phase>("starting");
+  const [pay, setPay] = useState<InitiatePaymentResponse | null>(null);
   const [error, setError] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   const stopPolling = useCallback(() => {
@@ -39,106 +41,83 @@ function CheckoutForm() {
     return () => stopPolling();
   }, [stopPolling]);
 
-  // Phase 1: POST /by-booking/{id}/checkout — retry on 404, stop on first 200
-  // Phase 2: GET /{id}/status — poll on 404, stop on first 200
   useEffect(() => {
     if (!bookingId || !user) return;
+
+    // Step 1: initiate the payment session and redirect to the hosted
+    // checkout page (Xendit renders the payment methods).
+    api
+      .post<InitiatePaymentResponse>(`/api/payments/booking/${bookingId}`)
+      .then((res) => {
+        if (res.payment_link_url) {
+          setPay(res);
+          window.location.href = res.payment_link_url;
+          return;
+        }
+        setPhase("status");
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : "";
+        if (msg.includes("already initiated") || msg.includes("already processed")) {
+          // A session already exists — resume by re-fetching its link.
+          api
+            .get<PaymentStatusResponse>(`/api/payments/booking/${bookingId}`)
+            .then((s) => {
+              if (s.payment_link_url) {
+                window.location.href = s.payment_link_url;
+                return;
+              }
+              setPhase("status");
+            })
+            .catch(() => setPhase("status"));
+          return;
+        }
+        if (msg.includes("expired")) {
+          setPhase("failed");
+          setError("This booking has expired. Please make a new reservation.");
+          return;
+        }
+        setError(msg || "Failed to start payment.");
+      });
+  }, [bookingId, user]);
+
+  // Step 2: after the customer returns from the hosted page, poll the
+  // booking status until it settles.
+  useEffect(() => {
+    if (!bookingId || !user || phase !== "status") return;
     const MAX_WAIT = 300_000;
     const start = Date.now();
     let cancelled = false;
 
-    setPhase("checkout");
-
     pollRef.current = setInterval(async () => {
-      const now = Date.now();
       if (cancelled) return;
-
-      if (now - start > MAX_WAIT) {
+      if (Date.now() - start > MAX_WAIT) {
         stopPolling();
-        if (!cancelled) {
-          setError("Transaction not found. Please try again.");
-          toast.error("Transaction timed out after 5 minutes.");
-        }
+        setError("Payment is still being processed. Please check your bookings later.");
         return;
       }
-
       try {
-        const t = await api.post<TransactionResponse>(
-          `/api/payments/by-booking/${bookingId}/checkout`,
+        const s = await api.get<PaymentStatusResponse>(
+          `/api/payments/booking/${bookingId}`,
         );
         if (cancelled) return;
-        stopPolling();
-        setTxn(t);
-
-        if (t.status === "completed") {
-          setPhase("completed");
-        } else if (t.status === "failed") {
-          setPhase("failed");
-        } else {
-          // Processing — poll status until non-404
-          setPhase("status");
-          pollRef.current = setInterval(async () => {
-            if (cancelled) return;
-            try {
-              const latest = await api.get<TransactionResponse>(
-                `/api/payments/${t.id}/status`,
-              );
-              if (cancelled) return;
-              // Stop on first success — update phase from actual status
-              stopPolling();
-              setTxn(latest);
-              if (latest.status === "completed") {
-                setPhase("completed");
-              } else if (latest.status === "failed") {
-                setPhase("failed");
-              } else {
-                setPhase("status");
-              }
-            } catch {
-              // 404 — keep polling
-            }
-          }, 2000);
-        }
-      } catch (err) {
-        // 409 — already paid, redirect to confirmation
-        const msg = err instanceof Error ? err.message : "";
-        if (msg.includes("already processed")) {
-          if (cancelled) return;
-          cancelled = true;
+        if (s.status === "completed") {
           stopPolling();
-          router.push(`/confirmation/${bookingId}`);
-          return;
+          setPhase("completed");
+        } else if (s.status === "expired") {
+          stopPolling();
+          setPhase("failed");
+          setError("Payment expired. Please make a new reservation.");
         }
-        // 404 or network — retry POST next interval tick
+      } catch {
+        // keep polling
       }
-    }, 5000);
+    }, 3000);
 
     return () => {
       cancelled = true;
     };
-  }, [bookingId, user, stopPolling]);
-
-  async function refreshStatus() {
-    if (!txn) return;
-    setRefreshing(true);
-    try {
-      const latest = await api.get<TransactionResponse>(
-        `/api/payments/${txn.id}/status`,
-      );
-      setTxn(latest);
-      if (latest.status === "completed") {
-        setPhase("completed");
-      } else if (latest.status === "failed") {
-        setPhase("failed");
-      } else {
-        setPhase("status");
-      }
-    } catch {
-      // keep current state
-    } finally {
-      setRefreshing(false);
-    }
-  }
+  }, [bookingId, user, phase, stopPolling]);
 
   if (!bookingId) {
     return (
@@ -165,6 +144,21 @@ function CheckoutForm() {
         </p>
       </div>
 
+      {pay && (
+        <div className="card-stub space-y-3 mb-4">
+          <div className="flex items-center justify-between pb-3 border-b border-dashed border-[#E8E3DC]">
+            <span className="text-sm text-[#8B8580]">Amount</span>
+            <span className="font-[family-name:var(--font-display)] text-xl text-[#1A1817]">
+              {formatIDR(pay.amount_cents)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-[#8B8580]">Status</span>
+            <span className="badge badge-yellow">pending</span>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="card text-center border-[#FECACA] bg-[#FFF5F5] space-y-3">
           <p className="text-[#D9381E] text-sm">{error}</p>
@@ -177,8 +171,7 @@ function CheckoutForm() {
         </div>
       )}
 
-      {/* Phase: Checkout — POST retry for eventual consistency */}
-      {phase === "checkout" && !error && (
+      {phase === "starting" && !error && (
         <div className="card text-center py-8">
           <Loader2 className="w-6 h-6 text-[#D9381E] animate-spin mx-auto" />
           <p className="text-sm text-[#4A4541] mt-3">
@@ -187,83 +180,49 @@ function CheckoutForm() {
         </div>
       )}
 
-      {txn && (
-        <div className="space-y-4">
-          <div className="card-stub space-y-3">
-            <div className="flex items-center justify-between pb-3 border-b border-dashed border-[#E8E3DC]">
-              <span className="text-sm text-[#8B8580]">Amount</span>
-              <span className="font-[family-name:var(--font-display)] text-xl text-[#1A1817]">
-                ${(txn.amount_cents / 100).toFixed(2)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[#8B8580]">Status</span>
-              <span
-                className={`badge ${
-                  txn.status === "completed"
-                    ? "badge-green"
-                    : txn.status === "failed"
-                      ? "badge-red"
-                      : "badge-yellow"
-                }`}
-              >
-                {txn.status}
-              </span>
-            </div>
+      {phase === "status" && !error && (
+        <div className="card text-center py-8">
+          <Loader2 className="w-6 h-6 text-[#D9381E] animate-spin mx-auto" />
+          <p className="text-sm text-[#4A4541] mt-3">
+            Waiting for payment&hellip;
+          </p>
+          <p className="text-xs text-[#8B8580] mt-2">
+            Complete the payment on the checkout page, then return here.
+          </p>
+        </div>
+      )}
+
+      {phase === "completed" && (
+        <div className="space-y-3">
+          <div className="card flex items-center gap-3 text-sm text-[#2D7A46] border-[#2D7A46]/20">
+            <CreditCard className="w-4 h-4" />
+            <span>Payment successful</span>
           </div>
+          <button
+            onClick={() => router.push(`/confirmation/${bookingId}`)}
+            className="btn-accent w-full"
+          >
+            View Confirmation <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
-          {/* Status — polling stopped, manual refresh */}
-          {phase === "status" && (
-            <div className="card flex items-center justify-between text-sm">
-              <span className="text-[#B85C1A]">
-                Payment in progress&hellip;
-              </span>
-              <button
-                onClick={refreshStatus}
-                disabled={refreshing}
-                className="btn-outline text-sm flex items-center gap-1.5"
-              >
-                {refreshing ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RotateCw className="w-4 h-4" />
-                )}
-                Refresh
-              </button>
-            </div>
-          )}
-
-          {phase === "completed" && (
-            <div className="space-y-3">
-              <div className="card flex items-center gap-3 text-sm text-[#2D7A46] border-[#2D7A46]/20">
-                <CreditCard className="w-4 h-4" />
-                <span>Payment successful</span>
-              </div>
-              <button
-                onClick={() => router.push(`/confirmation/${bookingId}`)}
-                className="btn-accent w-full"
-              >
-                View Confirmation <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
-          {phase === "failed" && (
-            <div className="space-y-3">
-              <div className="card flex items-center gap-3 text-sm text-[#D9381E] border-[#FECACA]">
-                <Ticket className="w-4 h-4" />
-                <span>Payment failed. Your reservation may have expired.</span>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => router.push("/")}
-                  className="btn-outline flex-1"
-                >
-                  Back to Events
-                </button>
-              </div>
-            </div>
-          )}
+      {phase === "failed" && (
+        <div className="space-y-3">
+          <div className="card flex items-center gap-3 text-sm text-[#D9381E] border-[#FECACA]">
+            <Ticket className="w-4 h-4" />
+            <span>
+              {error || "Payment expired. Your reservation was released."}
+            </span>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => router.push("/")}
+              className="btn-outline flex-1"
+            >
+              Back to Events
+            </button>
+          </div>
         </div>
       )}
     </div>

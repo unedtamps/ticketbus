@@ -51,7 +51,6 @@ type PaymentProcessor interface {
 
 // EventConsumer defines the contract for consuming reservation events.
 type EventConsumer interface {
-	OnReservationCancelled(ctx context.Context, fn func(ctx context.Context, bookingID string) error)
 	OnEventCancelled(ctx context.Context, fn func(ctx context.Context, eventID string) error)
 	Start(ctx context.Context) error
 	Close() error

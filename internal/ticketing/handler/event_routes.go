@@ -23,6 +23,8 @@ func (h *EventHandler) Routes() chi.Router {
 		r.With(sharedhttp.RequireRole(sdomain.RoleEO)).
 			Post("/api/events/{id}/cancel", h.CancelEvent)
 		r.With(sharedhttp.RequireRole(sdomain.RoleEO)).
+			Post("/api/events/{id}/cancel-reprocess", h.ReprocessCancellation)
+		r.With(sharedhttp.RequireRole(sdomain.RoleEO)).
 			Get("/api/events/mine", h.ListMyEvents)
 	})
 
@@ -35,6 +37,8 @@ func (h *EventHandler) Routes() chi.Router {
 			Post("/api/events/{id}/approve", h.ApproveEvent)
 		r.With(sharedhttp.RequireRole(sdomain.RoleAdmin)).
 			Post("/api/events/{id}/reject", h.RejectEvent)
+		r.With(sharedhttp.RequireRole(sdomain.RoleAdmin)).
+			Post("/api/admin/events/{id}/cancel-reprocess", h.ReprocessCancellation)
 	})
 
 	return r

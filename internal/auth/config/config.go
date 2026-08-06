@@ -8,14 +8,14 @@ import (
 
 // Config holds all configuration for the auth service.
 type Config struct {
-	AppEnv         string   `env:"APP_ENV"         envDefault:"development"`
-	Port           string   `env:"PORT"             envDefault:"8081"`
-	DatabaseURL    string   `env:"DATABASE_URL"     envDefault:"postgres://ticketsaas:ticketsaas@localhost:5432/auth_db?sslmode=disable"`
-	JWTPrivateKey  string   `env:"JWT_PRIVATE_KEY"`
-	JWTPublicKey   string   `env:"JWT_PUBLIC_KEY"`
-	AdminEmails    []string `env:"ADMIN_EMAILS"          envDefault:""`
-	AdminPasswords []string `env:"ADMIN_PASSWORDS"       envDefault:""`
-	SeedAdmin      bool     `env:"SEED_ADMIN"            envDefault:"false"`
+	AppEnv         string   `env:"APP_ENV,required,notEmpty"`
+	Port           string   `env:"PORT,required,notEmpty"`
+	DatabaseURL    string   `env:"DATABASE_URL,required,notEmpty"`
+	JWTPrivateKey  string   `env:"JWT_PRIVATE_KEY,required,notEmpty"`
+	JWTPublicKey   string   `env:"JWT_PUBLIC_KEY,required,notEmpty"`
+	AdminEmails    []string `env:"ADMIN_EMAILS"`
+	AdminPasswords []string `env:"ADMIN_PASSWORDS"`
+	SeedAdmin      bool     `env:"SEED_ADMIN"                        envDefault:"false"`
 }
 
 // Load reads configuration from environment variables.

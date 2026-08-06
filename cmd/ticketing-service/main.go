@@ -36,6 +36,10 @@ func main() {
 		logger.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
+	if err := cfg.Validate(); err != nil {
+		logger.Error("invalid config", "error", err)
+		os.Exit(1)
+	}
 
 	pool, err := db.NewPool(cfg.DatabaseURL)
 	if err != nil {

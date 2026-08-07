@@ -2,6 +2,8 @@
 
 package integration
 
+// helpers.go — shared harness: HTTP helpers, auth headers, poll helpers.
+
 import (
 	"context"
 	"encoding/json"
@@ -199,14 +201,21 @@ func (env *TestEnv) authHeadersWith(accessToken string) map[string]string {
 }
 
 // completePaymentWebhook simulates the gateway notifying a payment session
-// completion for a booking.
+// completion for a booking. The session id is read from the stored
+// transaction so it always matches the mock processor's provider ref.
 func completePaymentWebhook(t *testing.T, env *TestEnv, bookingID string) {
 	t.Helper()
+	ctx := context.Background()
+	var providerRef string
+	require.NoError(t, env.payPool.QueryRow(
+		ctx, `SELECT provider_ref FROM transactions WHERE booking_id = $1`, bookingID).Scan(&providerRef))
+	require.NotEmpty(t, providerRef, "transaction has no provider_ref (initiate first)")
+
 	payload := map[string]interface{}{
 		"event": "payment_session.completed",
 		"data": map[string]string{
 			"reference_id":       bookingID,
-			"payment_session_id": "ps-" + bookingID,
+			"payment_session_id": providerRef,
 			"status":             "COMPLETED",
 		},
 	}
@@ -215,6 +224,16 @@ func completePaymentWebhook(t *testing.T, env *TestEnv, bookingID string) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 200, resp.StatusCode, "webhook: %s", string(body))
+}
+
+// ticketPrice returns the authoritative price of a ticket type, so reserve
+// payloads never hardcode a price that may not match the created event.
+func ticketPrice(t *testing.T, env *TestEnv, ttID string) int {
+	t.Helper()
+	var price int
+	require.NoError(t, env.invPool.QueryRow(
+		context.Background(), `SELECT price_rupiah FROM ticket_types WHERE id = $1`, ttID).Scan(&price))
+	return price
 }
 
 // initiatePayment creates the payment session for a booking.

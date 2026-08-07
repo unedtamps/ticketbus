@@ -2,6 +2,8 @@
 
 package integration
 
+// bookings_test.go — TestBooking_*: reservation, seat counting, release (ticketing service).
+
 import (
 	"context"
 	"encoding/json"
@@ -16,14 +18,14 @@ import (
 
 type reserveResp struct {
 	Data struct {
-		BookingID  string `json:"booking_id"`
-		EventID    string `json:"event_id"`
-		Status     string `json:"status"`
+		BookingID   string `json:"booking_id"`
+		EventID     string `json:"event_id"`
+		Status      string `json:"status"`
 		TotalRupiah int    `json:"total_rupiah"`
 	} `json:"data"`
 }
 
-func Test_ReserveTicketsSucceeds(t *testing.T) {
+func TestBooking_Reserve_Succeeds(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 
@@ -33,7 +35,7 @@ func Test_ReserveTicketsSucceeds(t *testing.T) {
 	resp, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
-			{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": 10000},
+			{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": ticketPrice(t, env, ttIDs[0])},
 		},
 	}, ch)
 	require.NoError(t, err)
@@ -47,7 +49,7 @@ func Test_ReserveTicketsSucceeds(t *testing.T) {
 	assert.Equal(t, "pending", rr.Data.Status)
 }
 
-func Test_ReserveWithWrongPriceReturns400(t *testing.T) {
+func TestBooking_Reserve_WrongPrice_400(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 
@@ -66,7 +68,7 @@ func Test_ReserveWithWrongPriceReturns400(t *testing.T) {
 		"error should mention price mismatch")
 }
 
-func Test_OverReserveReturnsConflict(t *testing.T) {
+func TestBooking_Reserve_OverReserve_Conflict(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 
@@ -76,14 +78,14 @@ func Test_OverReserveReturnsConflict(t *testing.T) {
 	resp, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
-			{"ticket_type_id": ttIDs[0], "quantity": 9999, "unit_price_rupiah": 10000},
+			{"ticket_type_id": ttIDs[0], "quantity": 9999, "unit_price_rupiah": ticketPrice(t, env, ttIDs[0])},
 		},
 	}, ch)
 	require.NoError(t, err)
 	assert.Equal(t, 409, resp.StatusCode, "body: %s", string(body))
 }
 
-func Test_ReservationCannotBeCancelled(t *testing.T) {
+func TestBooking_Reserve_CannotBeCancelled(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 
@@ -92,7 +94,7 @@ func Test_ReservationCannotBeCancelled(t *testing.T) {
 
 	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": ticketPrice(t, env, ttIDs[0])}},
 	}, ch)
 	var rr reserveResp
 	require.NoError(t, json.Unmarshal(body, &rr))
@@ -105,7 +107,7 @@ func Test_ReservationCannotBeCancelled(t *testing.T) {
 	assert.Equal(t, 409, resp.StatusCode, "DELETE should be rejected: %s", string(body2))
 }
 
-func Test_ConfirmAndListBookings(t *testing.T) {
+func TestBooking_Confirm_AndList(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 
@@ -116,7 +118,7 @@ func Test_ConfirmAndListBookings(t *testing.T) {
 	_, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
-			{"ticket_type_id": ttIDs[0], "quantity": 2, "unit_price_rupiah": 10000},
+			{"ticket_type_id": ttIDs[0], "quantity": 2, "unit_price_rupiah": ticketPrice(t, env, ttIDs[0])},
 		},
 	}, ch)
 	require.NoError(t, err)
@@ -145,7 +147,7 @@ func Test_ConfirmAndListBookings(t *testing.T) {
 	assert.True(t, strings.Contains(string(body), `"confirmed"`), "booking should be confirmed: %s", string(body))
 }
 
-func Test_ReservationExpiryViaPaymentPoll(t *testing.T) {
+func TestBooking_Expiry_ViaPaymentPoll(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 
@@ -156,7 +158,7 @@ func Test_ReservationExpiryViaPaymentPoll(t *testing.T) {
 	// 1. Snapshot available seats before reservation
 	_, body, _ := doJSON(http.MethodGet, env.eventURL+"/api/events/"+eventID, nil, ch)
 	var detail eventDetailResp
-	require.NoError(t, jsonData(body, &detail))
+	require.NoError(t, decodeDataPayload(body, &detail))
 	require.NotEmpty(t, detail.TicketTypes)
 
 	var availableBefore int
@@ -171,7 +173,7 @@ func Test_ReservationExpiryViaPaymentPoll(t *testing.T) {
 	// 2. Reserve seats (payment never initiated)
 	_, body, _ = doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 5, "unit_price_rupiah": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 5, "unit_price_rupiah": ticketPrice(t, env, ttIDs[0])}},
 	}, ch)
 	var rr reserveResp
 	json.Unmarshal(body, &rr)
@@ -180,7 +182,7 @@ func Test_ReservationExpiryViaPaymentPoll(t *testing.T) {
 
 	// 3. Verify seats decreased
 	_, body, _ = doJSON(http.MethodGet, env.eventURL+"/api/events/"+eventID, nil, ch)
-	require.NoError(t, jsonData(body, &detail))
+	require.NoError(t, decodeDataPayload(body, &detail))
 	for _, tt := range detail.TicketTypes {
 		if tt.ID == ttIDs[0] {
 			assert.Equal(t, availableBefore-5, tt.Available, "seats should be deducted after reserve")
@@ -205,7 +207,7 @@ func Test_ReservationExpiryViaPaymentPoll(t *testing.T) {
 
 	// 6. Verify seats released back to original count
 	_, body, _ = doJSON(http.MethodGet, env.eventURL+"/api/events/"+eventID, nil, ch)
-	require.NoError(t, jsonData(body, &detail))
+	require.NoError(t, decodeDataPayload(body, &detail))
 	for _, tt := range detail.TicketTypes {
 		if tt.ID == ttIDs[0] {
 			assert.Equal(t, availableBefore, tt.Available, "seats should be released after expiry")

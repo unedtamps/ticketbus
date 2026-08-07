@@ -2,6 +2,8 @@
 
 package integration
 
+// auth_test.go — TestAuth_*: registration, login, roles, token refresh (auth service).
+
 import (
 	"net/http"
 	"testing"
@@ -44,7 +46,7 @@ type authRegisterData struct {
 	} `json:"data"`
 }
 
-func Test_CustomerRegistersAndLogsIn(t *testing.T) {
+func TestAuth_RegisterCustomer_AndLogin(t *testing.T) {
 	env := getTestEnv()
 
 	email := "cust_register@test.com"
@@ -85,7 +87,7 @@ func Test_CustomerRegistersAndLogsIn(t *testing.T) {
 	assert.Equal(t, "customer", me.Data.User.Role)
 }
 
-func Test_EORegistersAndLogsIn(t *testing.T) {
+func TestAuth_RegisterEO_AndLogin(t *testing.T) {
 	env := getTestEnv()
 
 	email := "eo_register@test.com"
@@ -120,7 +122,7 @@ func Test_EORegistersAndLogsIn(t *testing.T) {
 	assert.NotEmpty(t, lr.Data.RefreshToken)
 }
 
-func Test_DuplicateEmailRegistrationReturnsConflict(t *testing.T) {
+func TestAuth_Register_DuplicateEmail_Conflict(t *testing.T) {
 	env := getTestEnv()
 
 	email := "dupe@test.com"
@@ -138,7 +140,7 @@ func Test_DuplicateEmailRegistrationReturnsConflict(t *testing.T) {
 	assert.Equal(t, 409, resp.StatusCode)
 }
 
-func Test_UnauthorizedAccessReturns401(t *testing.T) {
+func TestAuth_UnauthorizedAccess_401(t *testing.T) {
 	env := getTestEnv()
 
 	// Auth routes: missing Authorization
@@ -154,7 +156,7 @@ func Test_UnauthorizedAccessReturns401(t *testing.T) {
 	assert.Equal(t, 403, resp.StatusCode)
 }
 
-func Test_AdminLogin(t *testing.T) {
+func TestAuth_LoginAdmin_Success(t *testing.T) {
 	env := getTestEnv()
 
 	resp, body, err := doJSON(http.MethodPost, env.authURL+"/api/auth/login", map[string]string{
@@ -180,7 +182,7 @@ func Test_AdminLogin(t *testing.T) {
 	assert.Equal(t, "admin", me.Data.User.Role)
 }
 
-func Test_TokenRefreshAndOldTokenRotation(t *testing.T) {
+func TestAuth_RefreshToken_Rotation(t *testing.T) {
 	env := getTestEnv()
 
 	email := "refresh_test@test.com"

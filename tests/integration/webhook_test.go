@@ -2,6 +2,8 @@
 
 package integration
 
+// webhook_test.go — TestWebhook_*: gateway webhook delivery with real Xendit payloads.
+
 import (
 	"context"
 	"encoding/json"
@@ -50,22 +52,22 @@ func reserveAndInitiate(t *testing.T, env *TestEnv, eventID, ttID string, qty in
 	t.Helper()
 	_, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": qty, "unit_price_rupiah": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": qty, "unit_price_rupiah": ticketPrice(t, env, ttID)}},
 	}, ch)
 	require.NoError(t, err)
 	var rr reserveResp
 	require.NoError(t, json.Unmarshal(body, &rr))
 	bookingID = rr.Data.BookingID
-	require.NotEmpty(t, bookingID)
+	require.NotEmpty(t, bookingID, "reserve body: %s", string(body))
 	sessionID, _ = initiatePayment(t, env, bookingID, ch)
 	require.NotEmpty(t, sessionID)
 	return bookingID, sessionID
 }
 
-// Test_FixtureWebhook_CompletedRealPayload verifies the handler accepts the
+// TestWebhook_Completed_RealPayload verifies the handler accepts the
 // real Xendit payment_session.completed payload (session id in data.id) and
 // settles the whole flow end-to-end.
-func Test_FixtureWebhook_CompletedRealPayload(t *testing.T) {
+func TestWebhook_Completed_RealPayload(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 	cust := env.registerAndLogin("customer")
@@ -105,10 +107,10 @@ func Test_FixtureWebhook_CompletedRealPayload(t *testing.T) {
 	assert.Equal(t, 1, outboxCount, "duplicate webhook must not republish")
 }
 
-// Test_FixtureWebhook_ExpiredRealPayload verifies the real
+// TestWebhook_Expired_RealPayload verifies the real
 // payment_session.expired payload expires the transaction, releases seats,
 // and idempotently publishes payment.expired.
-func Test_FixtureWebhook_ExpiredRealPayload(t *testing.T) {
+func TestWebhook_Expired_RealPayload(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 	cust := env.registerAndLogin("customer")

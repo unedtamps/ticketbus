@@ -2,6 +2,8 @@
 
 package integration
 
+// refunds_test.go — TestRefund_*: refund requests for cancelled events.
+
 import (
 	"context"
 	"encoding/json"
@@ -13,10 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Test_CancelledEventTriggersRefunds verifies that event cancellation flows
+// TestRefund_CancelledEvent_CreatesRequests verifies that event cancellation flows
 // through the outbox to Kafka and is consumed by both ticketing (booking
 // cancellation) and payment (refund request creation).
-func Test_CancelledEventTriggersRefunds(t *testing.T) {
+func TestRefund_CancelledEvent_CreatesRequests(t *testing.T) {
 	env := getTestEnv()
 
 	// Event owned by EO (kept token so we can cancel as the owner)
@@ -36,7 +38,7 @@ func Test_CancelledEventTriggersRefunds(t *testing.T) {
 	var detail eventDetailResp
 	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
 		_, b, _ := doJSON(http.MethodGet, env.eventURL+"/api/events/"+eventID, nil, ch)
-		if jsonData(b, &detail) != nil {
+		if decodeDataPayload(b, &detail) != nil {
 			return false
 		}
 		return len(detail.TicketTypes) > 0 && detail.TicketTypes[0].Available > 0
@@ -48,7 +50,7 @@ func Test_CancelledEventTriggersRefunds(t *testing.T) {
 	_, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
-			{"ticket_type_id": ttID, "quantity": 1, "unit_price_rupiah": 10000},
+			{"ticket_type_id": ttID, "quantity": 1, "unit_price_rupiah": ticketPrice(t, env, ttID)},
 		},
 	}, ch)
 	require.NoError(t, err)

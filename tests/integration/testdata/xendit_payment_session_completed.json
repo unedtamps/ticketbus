@@ -3,7 +3,7 @@
     "business_id": "5781d19b2e2385880609791c",
     "created": "2020-04-20T16:25:52Z",
     "data": {
-        "payment_session_id": "ps-{{sessionID}}",
+        "payment_session_id": "{{sessionID}}",
         "allowed_payment_channels": [
             "CARD",
             "OVO",

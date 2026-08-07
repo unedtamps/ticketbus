@@ -2,6 +2,8 @@
 
 package integration
 
+// event_test.go — TestEvent_*: event lifecycle, approval flow, ownership (ticketing service).
+
 import (
 	"encoding/json"
 	"net/http"
@@ -27,13 +29,14 @@ type eventDetailResp struct {
 		Title string `json:"title"`
 	} `json:"event"`
 	TicketTypes []struct {
-		ID        string `json:"id"`
-		Name      string `json:"name"`
-		Available int    `json:"available"`
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		Available   int    `json:"available"`
+		PriceRupiah int    `json:"price_rupiah"`
 	} `json:"ticket_types"`
 }
 
-func Test_EOCreatesDraftEvent(t *testing.T) {
+func TestEvent_EO_CreatesDraft(t *testing.T) {
 	env := getTestEnv()
 
 	eo := env.registerAndLogin("eo")
@@ -45,7 +48,7 @@ func Test_EOCreatesDraftEvent(t *testing.T) {
 	assert.Equal(t, "pending", event.Status)
 }
 
-func Test_EOSeesOnlyOwnEvents(t *testing.T) {
+func TestEvent_EO_SeesOnlyOwnEvents(t *testing.T) {
 	env := getTestEnv()
 
 	eo1 := env.registerAndLogin("eo")
@@ -68,7 +71,7 @@ func Test_EOSeesOnlyOwnEvents(t *testing.T) {
 	assert.Empty(t, mine.Data, "EO2 should not see EO1's events")
 }
 
-func Test_AdminApprovesEvent(t *testing.T) {
+func TestEvent_Admin_Approve(t *testing.T) {
 	env := getTestEnv()
 
 	eo := env.registerAndLogin("eo")
@@ -85,13 +88,13 @@ func Test_AdminApprovesEvent(t *testing.T) {
 	assert.Equal(t, 200, resp.StatusCode)
 
 	var approved eventResp
-	if err := jsonData(body, &approved); err != nil {
+	if err := decodeDataPayload(body, &approved); err != nil {
 		t.Fatalf("decode: %v\nbody: %s", err, string(body))
 	}
 	assert.Equal(t, "published", approved.Status)
 }
 
-func Test_CustomerViewsEventWithAvailableSeats(t *testing.T) {
+func TestEvent_Customer_ViewsWithSeats(t *testing.T) {
 	env := getTestEnv()
 
 	eo := env.registerAndLogin("eo")
@@ -108,7 +111,7 @@ func Test_CustomerViewsEventWithAvailableSeats(t *testing.T) {
 	var detail eventDetailResp
 	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
 		_, body, _ := doJSON(http.MethodGet, env.eventURL+"/api/events/"+event.ID, nil, ch)
-		if jsonData(body, &detail) != nil {
+		if decodeDataPayload(body, &detail) != nil {
 			return false
 		}
 		return len(detail.TicketTypes) > 0 && detail.TicketTypes[0].Available > 0
@@ -118,7 +121,7 @@ func Test_CustomerViewsEventWithAvailableSeats(t *testing.T) {
 	assert.Greater(t, detail.TicketTypes[0].Available, 0)
 }
 
-func Test_AdminCannotCreateEvent(t *testing.T) {
+func TestEvent_Admin_CannotCreate(t *testing.T) {
 	env := getTestEnv()
 
 	admin := env.loginAdmin()
@@ -131,7 +134,7 @@ func Test_AdminCannotCreateEvent(t *testing.T) {
 	assert.Equal(t, 403, resp.StatusCode)
 }
 
-func Test_CustomerCannotApproveEvent(t *testing.T) {
+func TestEvent_Customer_CannotApprove(t *testing.T) {
 	env := getTestEnv()
 
 	cust := env.registerAndLogin("customer")
@@ -167,7 +170,7 @@ func createEventRaw(t *testing.T, env *TestEnv, accessToken string) eventResp {
 	require.Equal(t, 201, resp.StatusCode)
 
 	var ev eventResp
-	if err := jsonData(body, &ev); err != nil {
+	if err := decodeDataPayload(body, &ev); err != nil {
 		t.Fatalf("decode: %v\nbody: %s", err, string(body))
 	}
 	return ev
@@ -194,7 +197,7 @@ func setupApprovedEvent(t *testing.T, env *TestEnv) (eventID string, ticketTypeI
 	var detail eventDetailResp
 	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
 		_, body, _ := doJSON(http.MethodGet, env.eventURL+"/api/events/"+eventID, nil, ch)
-		if jsonData(body, &detail) != nil {
+		if decodeDataPayload(body, &detail) != nil {
 			return false
 		}
 		return len(detail.TicketTypes) > 0 && detail.TicketTypes[0].Available > 0
@@ -207,8 +210,12 @@ func setupApprovedEvent(t *testing.T, env *TestEnv) (eventID string, ticketTypeI
 	return eventID, ticketTypeIDs
 }
 
-// jsonData extracts the "data" field from a standard API response.
-func jsonData(respBody []byte, target interface{}) error {
+// decodeDataPayload decodes the standard API envelope and unmarshals only its
+// "data" field into target. target must be an INNER payload struct (the
+// response body shape), NOT the envelope-wrapped variant — envelope fields
+// like "data"/"error" are consumed here. An error envelope returns a non-nil
+// error.
+func decodeDataPayload(respBody []byte, target interface{}) error {
 	var envelope struct {
 		Data  json.RawMessage `json:"data"`
 		Error string          `json:"error"`

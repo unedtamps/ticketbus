@@ -2,11 +2,13 @@
 
 package integration
 
+// e2e_test.go — TestE2E_*: cross-service journeys (register → pay → confirm, cancel cascade).
+
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -14,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_FullBookingJourney(t *testing.T) {
+func TestE2E_FullBookingJourney(t *testing.T) {
 	env := getTestEnv()
 
 	// 1. EO registers
@@ -31,7 +33,7 @@ func Test_FullBookingJourney(t *testing.T) {
 	require.NoError(t, err)
 
 	var approved eventResp
-	jsonData(body, &approved)
+	decodeDataPayload(body, &approved)
 	assert.Equal(t, "published", approved.Status)
 
 	// 4. Poll event detail until seats are initialized (outbox → Kafka → inventory)
@@ -41,7 +43,7 @@ func Test_FullBookingJourney(t *testing.T) {
 	var detail eventDetailResp
 	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
 		_, body, _ := doJSON(http.MethodGet, env.eventURL+"/api/events/"+eventID, nil, ch)
-		if jsonData(body, &detail) != nil {
+		if decodeDataPayload(body, &detail) != nil {
 			return false
 		}
 		return len(detail.TicketTypes) > 0 && detail.TicketTypes[0].Available > 0
@@ -53,7 +55,7 @@ func Test_FullBookingJourney(t *testing.T) {
 	// 6. Customer reserves tickets
 	_, body, err = doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": 1, "unit_price_rupiah": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": 1, "unit_price_rupiah": ticketPrice(t, env, ttID)}},
 	}, ch)
 	require.NoError(t, err)
 
@@ -79,48 +81,7 @@ func Test_FullBookingJourney(t *testing.T) {
 	assert.Contains(t, string(body), `"confirmed"`)
 }
 
-func Test_ConcurrentDuplicateReservation(t *testing.T) {
-	env := getTestEnv()
-	eventID, ttIDs := setupApprovedEvent(t, env)
-
-	cust := env.registerAndLogin("customer")
-	ch := env.authHeadersWith(cust.AccessToken)
-
-	var wg sync.WaitGroup
-	results := make(chan int, 2)
-
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			resp, _, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
-				"event_id": eventID,
-				"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 5, "unit_price_rupiah": 10000}},
-			}, ch)
-			if resp != nil {
-				results <- resp.StatusCode
-			}
-		}()
-	}
-	wg.Wait()
-	close(results)
-
-	var success201, conflict409 int
-	for code := range results {
-		switch code {
-		case 201:
-			success201++
-		case 409:
-			conflict409++
-		}
-	}
-
-	// At least one should succeed, at least one should fail if enough contention
-	assert.GreaterOrEqual(t, success201, 1, "at least one concurrent reserve should succeed")
-	t.Logf("concurrent reserve: 201=%d, 409=%d", success201, conflict409)
-}
-
-func Test_EventCancelCascade(t *testing.T) {
+func TestE2E_EventCancelCascade(t *testing.T) {
 	env := getTestEnv()
 
 	// 1. EO creates event
@@ -141,7 +102,7 @@ func Test_EventCancelCascade(t *testing.T) {
 	var detail eventDetailResp
 	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
 		_, body, _ := doJSON(http.MethodGet, env.eventURL+"/api/events/"+eventID, nil, ch)
-		if jsonData(body, &detail) != nil {
+		if decodeDataPayload(body, &detail) != nil {
 			return false
 		}
 		return len(detail.TicketTypes) > 0 && detail.TicketTypes[0].Available > 0
@@ -153,7 +114,7 @@ func Test_EventCancelCascade(t *testing.T) {
 	// 4. Customer reserves tickets
 	_, body, err = doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": 2, "unit_price_rupiah": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": 2, "unit_price_rupiah": ticketPrice(t, env, ttID)}},
 	}, ch)
 	require.NoError(t, err)
 	var rr reserveResp
@@ -182,15 +143,18 @@ func Test_EventCancelCascade(t *testing.T) {
 		return resp != nil && resp.StatusCode == 200 && strings.Contains(string(b), `"cancelled"`)
 	}, "booking cancelled via event.cancelled → inventory")
 
-	// Verify refund_status is "pending" on cancelled booking
-	resp, body, err = doJSON(http.MethodGet, env.invURL+"/api/bookings", nil, ch)
-	require.NoError(t, err)
-	assert.Contains(t, string(body), `"refund_status":"pending"`)
+	// Verify a refund request was created for the cancelled booking
+	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
+		var count int
+		err := env.payPool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM refund_requests WHERE booking_id = $1`, bookingID).Scan(&count)
+		return err == nil && count > 0
+	}, "refund request created for cancelled event")
 
 	// 8. Verify seats released back to original count
 	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
 		_, body, _ := doJSON(http.MethodGet, env.eventURL+"/api/events/"+eventID, nil, ch)
-		if jsonData(body, &detail) != nil {
+		if decodeDataPayload(body, &detail) != nil {
 			return false
 		}
 		for _, tt := range detail.TicketTypes {
@@ -202,7 +166,7 @@ func Test_EventCancelCascade(t *testing.T) {
 	}, "seats released after event cancel")
 }
 
-func Test_EventCancelCascade_CancelBeforeConfirm(t *testing.T) {
+func TestE2E_EventCancelCascade_CancelBeforeConfirm(t *testing.T) {
 	env := getTestEnv()
 
 	// 1. EO creates event
@@ -223,7 +187,7 @@ func Test_EventCancelCascade_CancelBeforeConfirm(t *testing.T) {
 	var detail eventDetailResp
 	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
 		_, body, _ := doJSON(http.MethodGet, env.eventURL+"/api/events/"+eventID, nil, ch)
-		if jsonData(body, &detail) != nil {
+		if decodeDataPayload(body, &detail) != nil {
 			return false
 		}
 		return len(detail.TicketTypes) > 0 && detail.TicketTypes[0].Available > 0
@@ -235,7 +199,7 @@ func Test_EventCancelCascade_CancelBeforeConfirm(t *testing.T) {
 	// 4. Customer reserves tickets
 	_, body, err = doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": 1, "unit_price_rupiah": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttID, "quantity": 1, "unit_price_rupiah": ticketPrice(t, env, ttID)}},
 	}, ch)
 	require.NoError(t, err)
 	var rr reserveResp
@@ -260,7 +224,7 @@ func Test_EventCancelCascade_CancelBeforeConfirm(t *testing.T) {
 	}
 	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
 		_, body, _ := doJSON(http.MethodGet, env.eventURL+"/api/events/"+eventID, nil, eh)
-		if jsonData(body, &evStatus) != nil {
+		if decodeDataPayload(body, &evStatus) != nil {
 			return false
 		}
 		return evStatus.Event.Status == "cancelled"
@@ -272,18 +236,19 @@ func Test_EventCancelCascade_CancelBeforeConfirm(t *testing.T) {
 	// 7. Webhook fires AFTER cancel — payment completes but Confirm sees cancelled
 	completePaymentWebhook(t, env, bookingID)
 
-	// 8. Poll until booking appears as cancelled with refund pending
+	// 8. Poll until booking is cancelled and a refund request was created
+	// (late completion after cancel → payment refunds, booking stays cancelled)
 	pollFor(t, 30*time.Second, 500*time.Millisecond, func() bool {
-		resp, b, _ := doJSON(http.MethodGet, env.invURL+"/api/bookings", nil, ch)
-		return resp != nil && resp.StatusCode == 200 &&
-			strings.Contains(string(b), `"cancelled"`) &&
-			strings.Contains(string(b), `"refund_status":"pending"`)
+		var count int
+		err := env.payPool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM refund_requests WHERE booking_id = $1`, bookingID).Scan(&count)
+		return err == nil && count > 0
 	}, "booking created as cancelled with refund pending")
 
 	// 9. Verify seats released (never confirmed, so back to original)
 	pollFor(t, 15*time.Second, 500*time.Millisecond, func() bool {
 		_, body, _ := doJSON(http.MethodGet, env.eventURL+"/api/events/"+eventID, nil, ch)
-		if jsonData(body, &detail) != nil {
+		if decodeDataPayload(body, &detail) != nil {
 			return false
 		}
 		for _, tt := range detail.TicketTypes {

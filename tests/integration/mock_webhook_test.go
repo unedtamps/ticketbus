@@ -2,6 +2,8 @@
 
 package integration
 
+// mock_webhook_test.go — TestMock_*: dev-only mock webhook simulator route.
+
 import (
 	"context"
 	"net/http"
@@ -25,9 +27,9 @@ func postMockSession(t *testing.T, env *TestEnv, bookingID, status string) int {
 	return resp.StatusCode
 }
 
-// Test_MockCheckoutRoute_Success verifies that simulating a completed payment
+// TestMock_CheckoutRoute_Success verifies that simulating a completed payment
 // via the mock route settles the whole flow end-to-end.
-func Test_MockCheckoutRoute_Success(t *testing.T) {
+func TestMock_CheckoutRoute_Success(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 	cust := env.registerAndLogin("customer")
@@ -67,10 +69,10 @@ func Test_MockCheckoutRoute_Success(t *testing.T) {
 	assert.Equal(t, 1, outboxCount, "duplicate mock success must not republish")
 }
 
-// Test_MockCheckoutRoute_Expired verifies that simulating an expired payment
+// TestMock_CheckoutRoute_Expired verifies that simulating an expired payment
 // via the mock route expires the transaction, releases seats, and publishes
 // payment.expired exactly once.
-func Test_MockCheckoutRoute_Expired(t *testing.T) {
+func TestMock_CheckoutRoute_Expired(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 	cust := env.registerAndLogin("customer")
@@ -110,63 +112,16 @@ func Test_MockCheckoutRoute_Expired(t *testing.T) {
 	assert.Equal(t, availBefore+2, availAfter, "seats released after mock expiry")
 }
 
-// Test_MockCheckoutRoute_InvalidStatus verifies the mock route rejects
+// TestMock_CheckoutRoute_InvalidStatus verifies the mock route rejects
 // unknown status values.
-func Test_MockCheckoutRoute_InvalidStatus(t *testing.T) {
+func TestMock_CheckoutRoute_InvalidStatus(t *testing.T) {
 	env := getTestEnv()
 	require.Equal(t, 400, postMockSession(t, env, "any-booking", "nonsense"))
 }
 
-// Test_MockCheckoutRoute_NotFound verifies the mock route 404s for an
+// TestMock_CheckoutRoute_NotFound verifies the mock route 404s for an
 // unknown booking.
-func Test_MockCheckoutRoute_NotFound(t *testing.T) {
+func TestMock_CheckoutRoute_NotFound(t *testing.T) {
 	env := getTestEnv()
 	require.Equal(t, 404, postMockSession(t, env, "ghost-booking", "success"))
-}
-
-// Test_Sweeper_Expires_UnpaidSession verifies the expiry poller handles a
-// transaction whose session deadline passed without any webhook (mock route
-// never hit). The deadline is backdated so the poller (1s tick) picks it up.
-func Test_Sweeper_Expires_UnpaidSession(t *testing.T) {
-	env := getTestEnv()
-	eventID, ttIDs := setupApprovedEvent(t, env)
-	cust := env.registerAndLogin("customer")
-	ch := env.authHeadersWith(cust.AccessToken)
-	ctx := context.Background()
-
-	bookingID, _ := reserveAndInitiate(t, env, eventID, ttIDs[0], 2, ch)
-
-	var availBefore int
-	require.NoError(t, env.invPool.QueryRow(ctx, `SELECT available_seat FROM ticket_types WHERE id = $1`, ttIDs[0]).Scan(&availBefore))
-
-	// No webhook arrives — force the session past its deadline.
-	_, err := env.payPool.Exec(ctx,
-		`UPDATE transactions SET expires_at = now() - interval '1 minute' WHERE booking_id = $1`,
-		bookingID)
-	require.NoError(t, err)
-
-	pollFor(t, 30*time.Second, 500*time.Millisecond, func() bool {
-		var status string
-		if err := env.payPool.QueryRow(ctx, `SELECT status FROM transactions WHERE booking_id = $1`, bookingID).Scan(&status); err != nil {
-			return false
-		}
-		return status == "expired"
-	}, "txn expired via sweeper")
-
-	var outboxCount int
-	require.NoError(t, env.payPool.QueryRow(
-		ctx, `SELECT COUNT(*) FROM outbox WHERE topic = 'payment.expired' AND key = (SELECT id::text FROM transactions WHERE booking_id = $1)`, bookingID).Scan(&outboxCount))
-	assert.Equal(t, 1, outboxCount, "payment.expired published exactly once by sweeper")
-
-	pollFor(t, 30*time.Second, 500*time.Millisecond, func() bool {
-		var status string
-		if err := env.invPool.QueryRow(ctx, `SELECT status FROM bookings WHERE id = $1`, bookingID).Scan(&status); err != nil {
-			return false
-		}
-		return status == "expired"
-	}, "booking expired via sweeper")
-
-	var availAfter int
-	require.NoError(t, env.invPool.QueryRow(ctx, `SELECT available_seat FROM ticket_types WHERE id = $1`, ttIDs[0]).Scan(&availAfter))
-	assert.Equal(t, availBefore+2, availAfter, "seats released by sweeper")
 }

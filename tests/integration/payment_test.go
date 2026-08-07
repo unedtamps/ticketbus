@@ -2,6 +2,8 @@
 
 package integration
 
+// payment_test.go — TestPayment_*: initiate session, idempotency, ownership (payment service).
+
 import (
 	"context"
 	"encoding/json"
@@ -12,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_InitiateAndWebhookCompletesPayment(t *testing.T) {
+func TestPayment_Initiate_AndWebhookCompletes(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 
@@ -23,7 +25,7 @@ func Test_InitiateAndWebhookCompletesPayment(t *testing.T) {
 	_, body, err := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
 		"items": []map[string]interface{}{
-			{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": 10000},
+			{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": ticketPrice(t, env, ttIDs[0])},
 		},
 	}, ch)
 	require.NoError(t, err)
@@ -61,7 +63,7 @@ func Test_InitiateAndWebhookCompletesPayment(t *testing.T) {
 	assert.Equal(t, "completed", ps.Data.Status)
 }
 
-func Test_DuplicateInitiateIsIdempotent(t *testing.T) {
+func TestPayment_Initiate_Duplicate_Idempotent(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 
@@ -70,7 +72,7 @@ func Test_DuplicateInitiateIsIdempotent(t *testing.T) {
 
 	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": ticketPrice(t, env, ttIDs[0])}},
 	}, ch)
 	var rr reserveResp
 	require.NoError(t, json.Unmarshal(body, &rr))
@@ -88,7 +90,7 @@ func Test_DuplicateInitiateIsIdempotent(t *testing.T) {
 	assert.Equal(t, 409, resp.StatusCode, "second initiate should return 409: %s", string(body2))
 }
 
-func Test_PaymentForNonexistentBooking(t *testing.T) {
+func TestPayment_Initiate_NonexistentBooking(t *testing.T) {
 	env := getTestEnv()
 
 	cust := env.registerAndLogin("customer")
@@ -99,7 +101,7 @@ func Test_PaymentForNonexistentBooking(t *testing.T) {
 	assert.Equal(t, 404, resp.StatusCode)
 }
 
-func Test_PaymentStaysPendingWhenWebhookNotCalled(t *testing.T) {
+func TestPayment_Initiate_StaysPendingWithoutWebhook(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 
@@ -108,7 +110,7 @@ func Test_PaymentStaysPendingWhenWebhookNotCalled(t *testing.T) {
 
 	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": ticketPrice(t, env, ttIDs[0])}},
 	}, ch)
 	var rr reserveResp
 	require.NoError(t, json.Unmarshal(body, &rr))
@@ -132,7 +134,7 @@ func Test_PaymentStaysPendingWhenWebhookNotCalled(t *testing.T) {
 	assert.Equal(t, "pending", ps.Data.Status)
 }
 
-func Test_InitiateRejectedWhenLessThanOneMinuteRemains(t *testing.T) {
+func TestPayment_Initiate_Rejected_LessThanMinute(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 
@@ -141,7 +143,7 @@ func Test_InitiateRejectedWhenLessThanOneMinuteRemains(t *testing.T) {
 
 	_, body, _ := doJSON(http.MethodPost, env.invURL+"/api/bookings/reserve", map[string]interface{}{
 		"event_id": eventID,
-		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": 10000}},
+		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": ticketPrice(t, env, ttIDs[0])}},
 	}, ch)
 	var rr reserveResp
 	require.NoError(t, json.Unmarshal(body, &rr))
@@ -159,9 +161,9 @@ func Test_InitiateRejectedWhenLessThanOneMinuteRemains(t *testing.T) {
 	assert.Equal(t, 409, resp.StatusCode, "initiate should be rejected: %s", string(body2))
 }
 
-// Test_GetTransactionByID_Ownership verifies the payment page endpoint returns
+// TestPayment_GetTransaction_Ownership verifies the payment page endpoint returns
 // the full transaction (with payment link) only to its owner.
-func Test_GetTransactionByID_Ownership(t *testing.T) {
+func TestPayment_GetTransaction_Ownership(t *testing.T) {
 	env := getTestEnv()
 	eventID, ttIDs := setupApprovedEvent(t, env)
 
@@ -191,7 +193,7 @@ func Test_GetTransactionByID_Ownership(t *testing.T) {
 		Data struct {
 			ID             string `json:"id"`
 			BookingID      string `json:"booking_id"`
-			AmountRupiah    int    `json:"amount_rupiah"`
+			AmountRupiah   int    `json:"amount_rupiah"`
 			Currency       string `json:"currency"`
 			Status         string `json:"status"`
 			PaymentLinkURL string `json:"payment_link_url"`

@@ -1,13 +1,13 @@
 "use client";
 
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Calendar, MapPin, Users, Clock, Ticket as TicketIcon, ArrowRight, ChevronLeft, Loader2 } from "lucide-react";
+import { Calendar, MapPin, Users, Clock, Ticket as TicketIcon, ArrowRight, ChevronLeft, Loader2, X } from "lucide-react";
 import { fmtDateTime, fmtIDR, fmtTime } from "@/lib/format";
 import type { EventDetail, ReservationResponse } from "@/types";
 
@@ -17,9 +17,11 @@ export default function EventPage() {
   const { id } = useParams<{ id: string }>();
   const { user, hydrated, isEO, isAdmin } = useAuth();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const [phase, setPhase] = useState<Phase>("selection");
   const [confirming, setConfirming] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [selectedTickets, setSelectedTickets] = useState<Record<string, number>>({});
 
   const eventQuery = useQuery({
@@ -143,7 +145,16 @@ export default function EventPage() {
 
       {(isEO || isAdmin) && (
         <div className="card text-center py-6">
-          <p className="text-sm text-[#8B8580]">Organizers cannot purchase tickets.</p>
+          <p className="text-sm text-[#8B8580] mb-4">Organizers cannot purchase tickets.</p>
+          {isEO && event?.event.status === "published" && (
+            <button
+              onClick={() => setCancelling(true)}
+              className="flex items-center gap-1.5 mx-auto text-xs font-medium px-3 py-1.5 rounded-md text-[#D9381E] hover:bg-[#FFF5F5] transition-colors duration-150"
+            >
+              <X className="w-3.5 h-3.5" />
+              Cancel Event
+            </button>
+          )}
         </div>
       )}
 
@@ -270,6 +281,26 @@ export default function EventPage() {
           handleCheckout();
         }}
         onClose={() => setConfirming(false)}
+      />
+
+      <ConfirmDialog
+        open={cancelling}
+        title="Cancel Event"
+        message={`Are you sure you want to cancel "${event?.event.title}"? This action cannot be undone. All confirmed bookings will be cancelled and refunds issued.`}
+        confirmLabel="Yes, Cancel"
+        variant="danger"
+        onConfirm={() => {
+          if (!event) return;
+          api.post<void>(`/api/events/${event.event.id}/cancel`)
+            .then(() => {
+              toast.success("Event cancelled");
+              queryClient.invalidateQueries({ queryKey: ["event", id] });
+              queryClient.invalidateQueries({ queryKey: ["myEvents"] });
+            })
+            .catch((err: Error) => toast.error(err.message))
+            .finally(() => setCancelling(false));
+        }}
+        onClose={() => setCancelling(false)}
       />
     </div>
   );

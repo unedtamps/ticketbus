@@ -8,6 +8,7 @@ import { adminApi } from "@/lib/admin-api";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Tooltip } from "@/components/ui/tooltip";
 import {
   LayoutDashboard,
   CalendarPlus,
@@ -20,6 +21,7 @@ import {
   Loader2,
   Check,
   X,
+  RefreshCw,
   Calendar,
   MapPin,
   Users,
@@ -59,6 +61,7 @@ export default function DashboardPage() {
   const [adminFilter, setAdminFilter] = useState<AdminFilter>("pending");
   const [rejecting, setRejecting] = useState<EventItem | null>(null);
   const [cancelling, setCancelling] = useState<EventItem | null>(null);
+  const [reprocessing, setReprocessing] = useState<EventItem | null>(null);
   const [approving, setApproving] = useState<EventItem | null>(null);
 
   // Customer queries
@@ -288,14 +291,27 @@ export default function DashboardPage() {
                   </Link>
                   <div className="flex items-center gap-2 ml-4 flex-shrink-0">
                     <span className={badgeClass(e.status)}>{e.status}</span>
-                    {e.status !== "cancelled" && (
-                      <button
-                        onClick={() => setCancelling(e)}
-                        className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md text-[#D9381E] hover:bg-[#FFF5F5] transition-colors duration-150"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                        Cancel
-                      </button>
+                    {e.status === "published" && (
+                      <Tooltip label="Cancel this event. This action cannot be undone — all confirmed bookings will be cancelled and refunds issued.">
+                        <button
+                          onClick={() => setCancelling(e)}
+                          className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md text-[#D9381E] hover:bg-[#FFF5F5] transition-colors duration-150"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          Cancel
+                        </button>
+                      </Tooltip>
+                    )}
+                    {e.status === "cancelled" && (
+                      <Tooltip label="Re-run the cancellation — issues refunds for payments that completed after cancelling and cancels remaining pending bookings.">
+                        <button
+                          onClick={() => setReprocessing(e)}
+                          className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md text-[#1A5DB8] hover:bg-[#F2F7FF] transition-colors duration-150"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          Reprocess
+                        </button>
+                      </Tooltip>
                     )}
                   </div>
                 </div>
@@ -439,7 +455,7 @@ export default function DashboardPage() {
       <ConfirmDialog
         open={!!cancelling}
         title="Cancel Event"
-        message={`Are you sure you want to cancel "${cancelling?.title}"? This will cancel all bookings and create refunds.`}
+        message={`Are you sure you want to cancel "${cancelling?.title}"? This action cannot be undone. All confirmed bookings will be cancelled and refunds issued.`}
         confirmLabel="Yes, Cancel"
         variant="danger"
         loading={false}
@@ -454,6 +470,26 @@ export default function DashboardPage() {
             .finally(() => setCancelling(null));
         }}
         onClose={() => setCancelling(null)}
+      />
+
+      {/* Reprocess cancellation dialog */}
+      <ConfirmDialog
+        open={!!reprocessing}
+        title="Reprocess Cancellation"
+        message={`Re-run the cancellation for "${reprocessing?.title}"? This will issue refunds for payments that completed after the cancellation and cancel any remaining pending bookings.`}
+        confirmLabel="Yes, Reprocess"
+        variant="warning"
+        onConfirm={() => {
+          if (!reprocessing) return;
+          api.post<void>(`/api/events/${reprocessing.id}/cancel-reprocess`)
+            .then(() => {
+              toast.success("Cancellation reprocessed");
+              queryClient.invalidateQueries({ queryKey: ["myEvents"] });
+            })
+            .catch((err: Error) => toast.error(err.message))
+            .finally(() => setReprocessing(null));
+        }}
+        onClose={() => setReprocessing(null)}
       />
 
       {/* Approve event dialog */}

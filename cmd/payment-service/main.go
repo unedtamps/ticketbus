@@ -81,7 +81,6 @@ func main() {
 		consumer,
 		outboxStore,
 		logger,
-		cfg.WebhookBaseURL,
 		cfg.Provider,
 		cfg.GatewayExpiryBufferMin,
 		cfg.EnabledMethods(),
@@ -93,7 +92,7 @@ func main() {
 	_ = svc.StartConsumer(ctx)
 	svc.StartExpiryPoller(ctx, cfg.ExpiryPollSec)
 
-	h := handler.NewPaymentHandler(svc, cfg.InternalAPIKey, cfg.XenditCallbackTok)
+	h := handler.NewPaymentHandler(svc, cfg.InternalAPIKey, cfg.WebhookCallbackTok)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)

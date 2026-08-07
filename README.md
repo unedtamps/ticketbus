@@ -176,7 +176,7 @@ Each service has its own `.env` file under `cmd/<service>/.env` loaded by `diren
 | Auth Service | 8081 | JWT, ForwardAuth verify |
 | Event Service | 8082 | Event CRUD |
 | Inventory Service | 8083 | Reservations, bookings |
-| Payment Service | 8084 | Checkout, webhooks |
+| Payment Service | 8084 | Webhooks, mock session simulator |
 | Next.js Frontend | 3000 | http://localhost:3000 |
 | Kafka UI | 8080 | http://localhost:8080 |
 | Kafka | 9092 | External (host), 29092 internal (Docker) |

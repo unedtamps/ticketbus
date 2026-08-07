@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
@@ -30,7 +31,7 @@ func Test_ExpiryWebhookExpiresBooking(t *testing.T) {
 	}, ch)
 	require.NoError(t, err)
 	var rr reserveResp
-	require.NoError(t, jsonData(body, &rr))
+	require.NoError(t, json.Unmarshal(body, &rr))
 	bookingID := rr.Data.BookingID
 	require.NotEmpty(t, bookingID)
 	initiatePayment(t, env, bookingID, ch)
@@ -47,7 +48,9 @@ func Test_ExpiryWebhookExpiresBooking(t *testing.T) {
 			"status":             "EXPIRED",
 		},
 	}
-	resp, b, err := doJSON(http.MethodPost, env.payURL+"/api/payments/webhook/mock", payload, nil)
+	resp, b, err := doJSON(http.MethodPost, env.payURL+"/api/payments/webhook", payload, map[string]string{
+		"x-callback-token": "test-webhook-token",
+	})
 	require.NoError(t, err)
 	require.Equal(t, 200, resp.StatusCode, "webhook: %s", string(b))
 
@@ -86,7 +89,7 @@ func Test_DuplicateExpiryWebhookIsIdempotent(t *testing.T) {
 		"items":    []map[string]interface{}{{"ticket_type_id": ttIDs[0], "quantity": 1, "unit_price_rupiah": 10000}},
 	}, ch)
 	var rr reserveResp
-	require.NoError(t, jsonData(body, &rr))
+	require.NoError(t, json.Unmarshal(body, &rr))
 	bookingID := rr.Data.BookingID
 	require.NotEmpty(t, bookingID)
 	initiatePayment(t, env, bookingID, ch)
@@ -100,7 +103,9 @@ func Test_DuplicateExpiryWebhookIsIdempotent(t *testing.T) {
 		},
 	}
 	for i := 0; i < 2; i++ {
-		resp, b, err := doJSON(http.MethodPost, env.payURL+"/api/payments/webhook/mock", payload, nil)
+		resp, b, err := doJSON(http.MethodPost, env.payURL+"/api/payments/webhook", payload, map[string]string{
+			"x-callback-token": "test-webhook-token",
+		})
 		require.NoError(t, err)
 		require.Equal(t, 200, resp.StatusCode, "webhook %d: %s", i, string(b))
 	}
@@ -116,6 +121,6 @@ func Test_DuplicateExpiryWebhookIsIdempotent(t *testing.T) {
 	// Only one payment.expired outbox event should have been published.
 	var outboxCount int
 	require.NoError(t, env.payPool.QueryRow(
-		ctx, `SELECT COUNT(*) FROM outbox WHERE topic = 'payment.expired' AND key = (SELECT id FROM transactions WHERE booking_id = $1)`, bookingID).Scan(&outboxCount))
+		ctx, `SELECT COUNT(*) FROM outbox WHERE topic = 'payment.expired' AND key = (SELECT id::text FROM transactions WHERE booking_id = $1)`, bookingID).Scan(&outboxCount))
 	assert.Equal(t, 1, outboxCount, "payment.expired should be published exactly once")
 }

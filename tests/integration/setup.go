@@ -174,14 +174,14 @@ func startContainers() *TestEnv {
 		payConsumer,
 		payOutbox,
 		payLogger,
-		"",
 		"mock",
 		5,
 		[]string{"ID_QRIS", "ID_BCA_VA"},
 	)
-	payHandler := payhandler.NewPaymentHandler(paySvc, "test-internal-key", "")
+	payHandler := payhandler.NewPaymentHandler(paySvc, "test-internal-key", "test-webhook-token")
 	paySrv := httptest.NewServer(payHandler.Routes())
 	mockProcessor.SetWebhookURL(paySrv.URL + "/api/payments/webhook")
+	mockProcessor.SetCallbackToken("test-webhook-token")
 
 	payOutboxWorker := outbox.NewWorker(payPool, kafkaProducer, payLogger, 1, 200)
 
@@ -203,7 +203,7 @@ func startContainers() *TestEnv {
 		eventStatusRepo,
 		ticketingOutbox,
 		ticketingLogger,
-		30,
+		3600,
 	)
 	eventSvc := eventpkg.NewEventService(eventRepo, seatReader, seatCounter, ticketingOutbox)
 	eventHandler := eventhandler.NewEventHandler(eventSvc)

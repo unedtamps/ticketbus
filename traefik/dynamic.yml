@@ -101,7 +101,7 @@ http:
       priority: 20
 
     payments:
-      rule: PathPrefix(`/api/payments`) && !PathPrefix(`/api/payments/internal`)
+      rule: PathPrefix(`/api/payments`) && !PathPrefix(`/api/payments/internal`) && !PathPrefix(`/api/payments/booking/mock`)
       service: payment
       middlewares:
         - cors

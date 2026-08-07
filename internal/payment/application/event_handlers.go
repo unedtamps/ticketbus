@@ -28,11 +28,12 @@ func (s *PaymentService) HandleEventCancelled(ctx context.Context, eventID strin
 				BookingID:      txn.BookingID,
 				TransactionID:  txn.ID,
 				CustomerEmail:  txn.CustomerEmail,
-				AmountRupiah:    int64(txn.AmountRupiah),
+				AmountRupiah:   int64(txn.AmountRupiah),
 				Currency:       txn.Currency,
 				Status:         domain.RefundPending,
 				Reason:         "event_cancelled",
 				IdempotencyKey: "event-cancelled:" + txn.ID,
+				ProviderRef:    txn.ProviderRef,
 			}
 			if err := s.refundRepo.Create(ctx, refund); err != nil {
 				return err

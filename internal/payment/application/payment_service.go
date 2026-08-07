@@ -2,8 +2,6 @@ package application
 
 import (
 	"log/slog"
-	"net/http"
-	"time"
 
 	"github.com/nedo/TicketSaas/internal/payment/domain"
 	"github.com/nedo/TicketSaas/internal/shared/outbox"
@@ -17,8 +15,6 @@ type PaymentService struct {
 	consumer               domain.EventConsumer
 	outbox                 outbox.StoreInterface
 	logger                 *slog.Logger
-	webhookURL             string
-	httpClient             *http.Client
 	provider               string
 	gatewayExpiryBufferMin int
 	allowedChannels        []string
@@ -32,7 +28,6 @@ func NewPaymentService(
 	consumer domain.EventConsumer,
 	ob outbox.StoreInterface,
 	logger *slog.Logger,
-	webhookURL string,
 	provider string,
 	gatewayExpiryBufferMin int,
 	allowedChannels []string,
@@ -44,8 +39,6 @@ func NewPaymentService(
 		consumer:               consumer,
 		outbox:                 ob,
 		logger:                 logger,
-		webhookURL:             webhookURL,
-		httpClient:             &http.Client{Timeout: 10 * time.Second},
 		provider:               provider,
 		gatewayExpiryBufferMin: gatewayExpiryBufferMin,
 		allowedChannels:        allowedChannels,

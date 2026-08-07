@@ -180,7 +180,7 @@ func Test_GetTransactionByID_Ownership(t *testing.T) {
 			TransactionID string `json:"transaction_id"`
 		} `json:"data"`
 	}
-	require.NoError(t, jsonData(body, &status))
+	require.NoError(t, json.Unmarshal(body, &status))
 	require.NotEmpty(t, status.Data.TransactionID)
 
 	// Owner can read the full transaction including the payment link.
@@ -197,7 +197,7 @@ func Test_GetTransactionByID_Ownership(t *testing.T) {
 			PaymentLinkURL string `json:"payment_link_url"`
 		} `json:"data"`
 	}
-	require.NoError(t, jsonData(body, &txn))
+	require.NoError(t, json.Unmarshal(body, &txn))
 	assert.Equal(t, status.Data.TransactionID, txn.Data.ID)
 	assert.Equal(t, bookingID, txn.Data.BookingID)
 	assert.Equal(t, 10000, txn.Data.AmountRupiah)

@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -30,11 +31,12 @@ func postRawWebhook(t *testing.T, env *TestEnv, body string) {
 	t.Helper()
 	req, err := http.NewRequest(
 		http.MethodPost,
-		env.payURL+"/api/payments/webhook/xendit",
+		env.payURL+"/api/payments/webhook",
 		strings.NewReader(body),
 	)
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-callback-token", "test-webhook-token")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -52,7 +54,7 @@ func reserveAndInitiate(t *testing.T, env *TestEnv, eventID, ttID string, qty in
 	}, ch)
 	require.NoError(t, err)
 	var rr reserveResp
-	require.NoError(t, jsonData(body, &rr))
+	require.NoError(t, json.Unmarshal(body, &rr))
 	bookingID = rr.Data.BookingID
 	require.NotEmpty(t, bookingID)
 	sessionID, _ = initiatePayment(t, env, bookingID, ch)
@@ -84,7 +86,7 @@ func Test_FixtureWebhook_CompletedRealPayload(t *testing.T) {
 
 	var outboxCount int
 	require.NoError(t, env.payPool.QueryRow(
-		ctx, `SELECT COUNT(*) FROM outbox WHERE topic = 'payment.completed' AND key = (SELECT id FROM transactions WHERE booking_id = $1)`, bookingID).Scan(&outboxCount))
+		ctx, `SELECT COUNT(*) FROM outbox WHERE topic = 'payment.completed' AND key = (SELECT id::text FROM transactions WHERE booking_id = $1)`, bookingID).Scan(&outboxCount))
 	assert.Equal(t, 1, outboxCount, "payment.completed published exactly once")
 
 	// Booking confirmed via payment.completed → ticketing consumer
@@ -99,7 +101,7 @@ func Test_FixtureWebhook_CompletedRealPayload(t *testing.T) {
 	// Duplicate delivery is idempotent
 	postRawWebhook(t, env, fixtureWebhook(t, "xendit_payment_session_completed.json", bookingID, sessionID))
 	require.NoError(t, env.payPool.QueryRow(
-		ctx, `SELECT COUNT(*) FROM outbox WHERE topic = 'payment.completed' AND key = (SELECT id FROM transactions WHERE booking_id = $1)`, bookingID).Scan(&outboxCount))
+		ctx, `SELECT COUNT(*) FROM outbox WHERE topic = 'payment.completed' AND key = (SELECT id::text FROM transactions WHERE booking_id = $1)`, bookingID).Scan(&outboxCount))
 	assert.Equal(t, 1, outboxCount, "duplicate webhook must not republish")
 }
 
@@ -131,7 +133,7 @@ func Test_FixtureWebhook_ExpiredRealPayload(t *testing.T) {
 
 	var outboxCount int
 	require.NoError(t, env.payPool.QueryRow(
-		ctx, `SELECT COUNT(*) FROM outbox WHERE topic = 'payment.expired' AND key = (SELECT id FROM transactions WHERE booking_id = $1)`, bookingID).Scan(&outboxCount))
+		ctx, `SELECT COUNT(*) FROM outbox WHERE topic = 'payment.expired' AND key = (SELECT id::text FROM transactions WHERE booking_id = $1)`, bookingID).Scan(&outboxCount))
 	assert.Equal(t, 1, outboxCount, "payment.expired published exactly once")
 
 	pollFor(t, 30*time.Second, 500*time.Millisecond, func() bool {

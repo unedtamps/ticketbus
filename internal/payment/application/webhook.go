@@ -41,7 +41,6 @@ func (p *sessionWebhookPayload) sessionID() string {
 // retries.
 func (s *PaymentService) HandleSessionWebhook(
 	ctx context.Context,
-	provider string,
 	payload []byte,
 ) error {
 	var event sessionWebhookPayload
@@ -135,11 +134,12 @@ func (s *PaymentService) requestLatePaymentRefund(ctx context.Context, txn *doma
 		BookingID:      txn.BookingID,
 		TransactionID:  txn.ID,
 		CustomerEmail:  txn.CustomerEmail,
-		AmountRupiah:    int64(txn.AmountRupiah),
+		AmountRupiah:   int64(txn.AmountRupiah),
 		Currency:       txn.Currency,
 		Status:         domain.RefundPending,
 		Reason:         "late_payment",
 		IdempotencyKey: "late-payment:" + txn.ID,
+		ProviderRef:    txn.ProviderRef,
 	}
 	if err := s.refundRepo.Create(ctx, refund); err != nil {
 		s.logger.Error("failed to create late payment refund", "txn_id", txn.ID, "error", err)

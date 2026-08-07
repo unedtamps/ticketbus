@@ -2,6 +2,7 @@ package handler
 
 import (
 	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -115,7 +116,7 @@ func (h *PaymentHandler) ProcessPayment(w http.ResponseWriter, r *http.Request) 
 		TransactionID:    txn.ID,
 		PaymentSessionID: result.ProviderRef,
 		PaymentLinkURL:   result.PaymentLinkURL,
-		AmountRupiah:      txn.AmountRupiah,
+		AmountRupiah:     txn.AmountRupiah,
 		Currency:         txn.Currency,
 		Status:           txn.Status,
 		ExpiresAt:        formatTime(txn.ExpiresAt),
@@ -138,55 +139,56 @@ func (h *PaymentHandler) GetPaymentStatus(w http.ResponseWriter, r *http.Request
 		TransactionID:  txn.ID,
 		Status:         txn.Status,
 		PaymentLinkURL: txn.PaymentLinkURL,
-		AmountRupiah:    txn.AmountRupiah,
+		AmountRupiah:   txn.AmountRupiah,
 		Currency:       txn.Currency,
 	})
 }
 
-// Checkout handles POST /payments/:id/checkout (mock pay simulation).
-func (h *PaymentHandler) Checkout(w http.ResponseWriter, r *http.Request) {
-	txnID := chi.URLParam(r, "id")
-	txn, err := h.svc.Checkout(r.Context(), txnID)
-	if err != nil {
-		if errors.Is(err, domain.ErrTransactionNotFound) {
-			sharedhttp.NotFound(w, err.Error())
-			return
-		}
-		if errors.Is(err, domain.ErrAlreadyProcessed) {
-			sharedhttp.Error(w, http.StatusConflict, err.Error())
-			return
-		}
-		sharedhttp.BadRequest(w, "payment failed")
-		return
-	}
-	sharedhttp.OK(w, TransactionResponse{
-		ID: txn.ID, BookingID: txn.BookingID, EventID: txn.EventID, AmountRupiah: txn.AmountRupiah,
-		Currency: txn.Currency, Status: txn.Status, RefundStatus: txn.RefundStatus,
-		CreatedAt: txn.CreatedAt.Format("2006-01-02T15:04:05Z"),
-	})
-}
-
-// CheckoutByBooking handles POST /payments/by-booking/:booking_id/checkout.
-func (h *PaymentHandler) CheckoutByBooking(w http.ResponseWriter, r *http.Request) {
+// MockSessionWebhook handles POST /api/payments/booking/mock/{booking_id}/{status}.
+// Dev-only: simulates the gateway webhook for a booking without waiting for the
+// real provider. status must be "success" or "expired". Blocked externally at
+// the gateway (traefik), reachable only on the service port directly.
+func (h *PaymentHandler) MockSessionWebhook(w http.ResponseWriter, r *http.Request) {
 	bookingID := chi.URLParam(r, "booking_id")
-	txn, err := h.svc.CheckoutByBooking(r.Context(), bookingID)
-	if err != nil {
-		if errors.Is(err, domain.ErrTransactionNotFound) {
-			sharedhttp.NotFound(w, err.Error())
-			return
-		}
-		if errors.Is(err, domain.ErrAlreadyProcessed) {
-			sharedhttp.Error(w, http.StatusConflict, err.Error())
-			return
-		}
-		sharedhttp.BadRequest(w, "payment failed")
+	status := chi.URLParam(r, "status")
+
+	var event, sessionStatus string
+	switch status {
+	case "success":
+		event = "payment_session.completed"
+		sessionStatus = "COMPLETED"
+	case "expired":
+		event = "payment_session.expired"
+		sessionStatus = "EXPIRED"
+	default:
+		sharedhttp.BadRequest(w, "status must be 'success' or 'expired'")
 		return
 	}
-	sharedhttp.OK(w, TransactionResponse{
-		ID: txn.ID, BookingID: txn.BookingID, EventID: txn.EventID, AmountRupiah: txn.AmountRupiah,
-		Currency: txn.Currency, Status: txn.Status, RefundStatus: txn.RefundStatus,
-		CreatedAt: txn.CreatedAt.Format("2006-01-02T15:04:05Z"),
+
+	txn, err := h.svc.GetPaymentStatus(r.Context(), bookingID)
+	if err != nil {
+		sharedhttp.NotFound(w, "transaction not found")
+		return
+	}
+
+	payload, _ := json.Marshal(map[string]interface{}{
+		"event": event,
+		"data": map[string]string{
+			"reference_id":       bookingID,
+			"payment_session_id": txn.ProviderRef,
+			"status":             sessionStatus,
+		},
 	})
+	if err := h.svc.HandleSessionWebhook(r.Context(), payload); err != nil {
+		if errors.Is(err, domain.ErrNoRows) {
+			sharedhttp.NotFound(w, "transaction not found")
+			return
+		}
+		sharedhttp.BadRequest(w, "mock webhook failed")
+		return
+	}
+
+	sharedhttp.OK(w, map[string]string{"status": "received"})
 }
 
 // GetStatus handles GET /payments/:id/status.
@@ -224,31 +226,26 @@ func (h *PaymentHandler) GetTransaction(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// Webhook handles POST /webhook/{provider} (called by payment providers).
-// The delivery is verified and applied to the transaction directly; when the
-// transaction does not exist a non-2xx is returned so the gateway retries.
+// Webhook handles POST /api/payments/webhook (called by payment providers).
+// The delivery is verified via the shared x-callback-token and applied to the
+// transaction directly; when the transaction does not exist a non-2xx is
+// returned so the gateway retries.
 func (h *PaymentHandler) Webhook(w http.ResponseWriter, r *http.Request) {
-	provider := chi.URLParam(r, "provider")
-	if provider == "" {
-		sharedhttp.BadRequest(w, "provider is required")
+	if subtle.ConstantTimeCompare(
+		[]byte(r.Header.Get("x-callback-token")),
+		[]byte(h.callbackToken),
+	) != 1 {
+		sharedhttp.Unauthorized(w, "invalid callback token")
 		return
 	}
-	if provider == "xendit" {
-		if subtle.ConstantTimeCompare(
-			[]byte(r.Header.Get("x-callback-token")),
-			[]byte(h.callbackToken),
-		) != 1 {
-			sharedhttp.Unauthorized(w, "invalid callback token")
-			return
-		}
-	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		sharedhttp.BadRequest(w, "failed to read body")
 		return
 	}
-	if err := h.svc.HandleSessionWebhook(r.Context(), provider, body); err != nil {
+	if err := h.svc.HandleSessionWebhook(r.Context(), body); err != nil {
 		if errors.Is(err, domain.ErrNoRows) {
 			sharedhttp.NotFound(w, "transaction not found")
 			return

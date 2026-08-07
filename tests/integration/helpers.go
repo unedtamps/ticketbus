@@ -210,7 +210,9 @@ func completePaymentWebhook(t *testing.T, env *TestEnv, bookingID string) {
 			"status":             "COMPLETED",
 		},
 	}
-	resp, body, err := doJSON(http.MethodPost, env.payURL+"/api/payments/webhook/mock", payload, nil)
+	resp, body, err := doJSON(http.MethodPost, env.payURL+"/api/payments/webhook", payload, map[string]string{
+		"x-callback-token": "test-webhook-token",
+	})
 	require.NoError(t, err)
 	require.Equal(t, 200, resp.StatusCode, "webhook: %s", string(body))
 }
@@ -227,6 +229,6 @@ func initiatePayment(t *testing.T, env *TestEnv, bookingID string, ch map[string
 			PaymentLinkURL   string `json:"payment_link_url"`
 		} `json:"data"`
 	}
-	require.NoError(t, jsonData(body, &ir))
+	require.NoError(t, json.Unmarshal(body, &ir))
 	return ir.Data.PaymentSessionID, ir.Data.PaymentLinkURL
 }

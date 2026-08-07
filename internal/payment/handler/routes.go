@@ -10,8 +10,11 @@ import (
 func (h *PaymentHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
-	// Provider webhook (public — providers authenticate via signature, not user JWT)
-	r.Post("/api/payments/webhook/{provider}", h.Webhook)
+	// Provider webhook (public — providers authenticate via x-callback-token)
+	r.Post("/api/payments/webhook", h.Webhook)
+
+	// Dev-only mock webhook simulator (blocked at the gateway — see traefik/dynamic.yml)
+	r.Post("/api/payments/booking/mock/{booking_id}/{status}", h.MockSessionWebhook)
 
 	// Internal service-to-service routes (protected by X-Internal-Key)
 	r.With(h.requireInternalKey).Post("/api/payments/internal", h.InitiateTxnForBooking)
@@ -23,8 +26,6 @@ func (h *PaymentHandler) Routes() chi.Router {
 			Post("/api/payments/booking/{booking_id}", h.ProcessPayment)
 		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
 			Get("/api/payments/booking/{booking_id}", h.GetPaymentStatus)
-		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
-			Post("/api/payments/by-booking/{booking_id}/checkout", h.CheckoutByBooking)
 		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
 			Get("/api/payments/{id}/status", h.GetStatus)
 		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).

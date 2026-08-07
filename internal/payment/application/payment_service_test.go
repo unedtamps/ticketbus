@@ -32,7 +32,7 @@ func newPaymentService(
 	t.Helper()
 	return application.NewPaymentService(
 		txnRepo, refundRepo, processor, consumer,
-		outbox.NoopStore{}, payLogger, "", "mock", 5, []string{"ID_QRIS"},
+		outbox.NoopStore{}, payLogger, "mock", 5, []string{"ID_QRIS"},
 	)
 }
 
@@ -295,7 +295,7 @@ func TestHandleSessionWebhook_Completed(t *testing.T) {
 	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
 	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusCompleted, "ps-1").Return(true, nil)
 
-	err := svc.HandleSessionWebhook(ctx, "mock", webhookPayload("payment_session.completed", "book-1", "ps-1", "COMPLETED"))
+	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.completed", "book-1", "ps-1", "COMPLETED"))
 	require.NoError(t, err)
 }
 
@@ -319,7 +319,7 @@ func TestHandleSessionWebhook_CompletedAfterExpired_Refund(t *testing.T) {
 	})).Return(nil)
 	txnRepo.EXPECT().UpdateRefundStatus(ctx, "txn-1", "pending").Return(nil)
 
-	err := svc.HandleSessionWebhook(ctx, "mock", webhookPayload("payment_session.completed", "book-1", "ps-1", "COMPLETED"))
+	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.completed", "book-1", "ps-1", "COMPLETED"))
 	require.NoError(t, err)
 }
 
@@ -338,7 +338,7 @@ func TestHandleSessionWebhook_CompletedDuplicate(t *testing.T) {
 	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
 	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusCompleted, "ps-1").Return(false, nil)
 
-	err := svc.HandleSessionWebhook(ctx, "mock", webhookPayload("payment_session.completed", "book-1", "ps-1", "COMPLETED"))
+	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.completed", "book-1", "ps-1", "COMPLETED"))
 	require.NoError(t, err)
 }
 
@@ -357,7 +357,7 @@ func TestHandleSessionWebhook_Expired(t *testing.T) {
 	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
 	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusExpired, "ps-1").Return(true, nil)
 
-	err := svc.HandleSessionWebhook(ctx, "mock", webhookPayload("payment_session.expired", "book-1", "ps-1", "EXPIRED"))
+	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.expired", "book-1", "ps-1", "EXPIRED"))
 	require.NoError(t, err)
 }
 
@@ -402,7 +402,7 @@ func TestHandleSessionWebhook_RealXenditPayload(t *testing.T) {
 		}
 	}`)
 
-	err := svc.HandleSessionWebhook(ctx, "xendit", payload)
+	err := svc.HandleSessionWebhook(ctx, payload)
 	require.NoError(t, err)
 }
 
@@ -424,7 +424,7 @@ func TestHandleSessionWebhook_SessionMismatch_Ignored(t *testing.T) {
 	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
 
 	payload := []byte(`{"event":"payment_session.completed","data":{"payment_session_id":"ps-some-other-session","reference_id":"book-1","status":"COMPLETED"}}`)
-	err := svc.HandleSessionWebhook(ctx, "xendit", payload)
+	err := svc.HandleSessionWebhook(ctx, payload)
 	require.NoError(t, err)
 }
 
@@ -435,7 +435,7 @@ func TestHandleSessionWebhook_TxnMissing_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 
 	txnRepo.EXPECT().FindByBookingID(ctx, "ghost-booking").Return(nil, pgx.ErrNoRows)
-	err := svc.HandleSessionWebhook(ctx, "mock", webhookPayload("payment_session.completed", "ghost-booking", "ps-1", "COMPLETED"))
+	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.completed", "ghost-booking", "ps-1", "COMPLETED"))
 	assert.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
@@ -444,7 +444,7 @@ func TestHandleSessionWebhook_MissingReference(t *testing.T) {
 		mocks.NewMockPaymentProcessor(t), mocks.NewMockEventConsumer(t))
 	ctx := context.Background()
 
-	err := svc.HandleSessionWebhook(ctx, "mock", []byte(`{"event":"payment_session.completed","data":{"status":"COMPLETED"}}`))
+	err := svc.HandleSessionWebhook(ctx, []byte(`{"event":"payment_session.completed","data":{"status":"COMPLETED"}}`))
 	require.Error(t, err)
 }
 
@@ -524,32 +524,4 @@ func TestHandleEventCancelled_RefundsCompletedLeavesPending(t *testing.T) {
 
 	err := svc.HandleEventCancelled(ctx, "event-1")
 	require.NoError(t, err)
-}
-
-// ── Checkout ─────────────────────────────────────────────────────────────────
-
-func TestCheckout_AlreadyProcessed(t *testing.T) {
-	txnRepo := mocks.NewMockTransactionRepository(t)
-	svc := newPaymentServiceDefaults(t, txnRepo, mocks.NewMockPaymentProcessor(t),
-		mocks.NewMockEventConsumer(t))
-	ctx := context.Background()
-	txn := fixtures.NewTestTransaction(
-		fixtures.WithTransactionID("txn-1"),
-		fixtures.WithTransactionStatus(domain.StatusCompleted),
-	)
-
-	txnRepo.EXPECT().FindByID(ctx, "txn-1").Return(txn, nil)
-	_, err := svc.Checkout(ctx, "txn-1")
-	assert.ErrorIs(t, err, domain.ErrAlreadyProcessed)
-}
-
-func TestCheckout_NotFound(t *testing.T) {
-	txnRepo := mocks.NewMockTransactionRepository(t)
-	svc := newPaymentServiceDefaults(t, txnRepo, mocks.NewMockPaymentProcessor(t),
-		mocks.NewMockEventConsumer(t))
-	ctx := context.Background()
-
-	txnRepo.EXPECT().FindByID(ctx, "txn-1").Return(nil, pgx.ErrNoRows)
-	_, err := svc.Checkout(ctx, "txn-1")
-	assert.ErrorIs(t, err, domain.ErrTransactionNotFound)
 }

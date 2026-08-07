@@ -22,9 +22,12 @@ type Config struct {
 	Provider string `env:"PROVIDER,required,notEmpty"`
 
 	// Xendit configuration (required when PROVIDER=xendit).
-	XenditAPIKey      string `env:"XENDIT_API_KEY"`
-	XenditBaseURL     string `env:"XENDIT_BASE_URL,required,notEmpty"`
-	XenditCallbackTok string `env:"XENDIT_CALLBACK_TOKEN"`
+	XenditAPIKey  string `env:"XENDIT_API_KEY"`
+	XenditBaseURL string `env:"XENDIT_BASE_URL,required,notEmpty"`
+
+	// Shared webhook verification token (both providers). Must match the
+	// token the gateway includes as the x-callback-token header.
+	WebhookCallbackTok string `env:"WEBHOOK_CALLBACK_TOKEN,required,notEmpty"`
 
 	// Internal service-to-service auth (must match the ticketing service).
 	InternalAPIKey string `env:"INTERNAL_API_KEY,required,notEmpty"`
@@ -71,9 +74,6 @@ func (c *Config) Validate() error {
 	if c.Provider == "xendit" {
 		if c.XenditAPIKey == "" {
 			return fmt.Errorf("XENDIT_API_KEY is required when PROVIDER=xendit")
-		}
-		if c.XenditCallbackTok == "" {
-			return fmt.Errorf("XENDIT_CALLBACK_TOKEN is required when PROVIDER=xendit")
 		}
 	}
 	if c.GatewayExpiryBufferMin < 0 {

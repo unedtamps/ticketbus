@@ -18,8 +18,9 @@ import (
 // fires a payment_session.expired webhook at the session deadline unless
 // suppressed (used to test the internal expiry poller).
 type MockProcessor struct {
-	webhookURL string
-	httpClient *http.Client
+	webhookURL     string
+	callbackToken  string
+	httpClient     *http.Client
 
 	mu             sync.Mutex
 	sessions       map[string]*domain.SessionResult
@@ -50,6 +51,14 @@ func (p *MockProcessor) SetWebhookURL(url string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.webhookURL = strings.TrimSuffix(url, "/")
+}
+
+// SetCallbackToken sets the shared webhook verification token the processor
+// sends as the x-callback-token header.
+func (p *MockProcessor) SetCallbackToken(token string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.callbackToken = token
 }
 
 // CreateSession creates a simulated payment session and schedules the expiry
@@ -121,7 +130,14 @@ func (p *MockProcessor) postWebhook(event, referenceID, providerRef string) {
 			"status":             status,
 		},
 	})
-	resp, err := p.httpClient.Post(p.webhookURL+"/mock", "application/json", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, p.webhookURL, bytes.NewReader(body))
+	if err != nil {
+		fmt.Printf("mock webhook request failed: %v\n", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-callback-token", p.callbackToken)
+	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		fmt.Printf("mock webhook POST failed: %v\n", err)
 		return

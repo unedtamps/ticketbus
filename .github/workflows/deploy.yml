@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [auth, event, inventory, payment]
+        service: [auth, payment]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -93,54 +93,3 @@ jobs:
           file: docker/migrate.Dockerfile
           push: true
           tags: ${{ steps.tags.outputs.TAGS }}
-
-  deploy-frontend:
-    name: Deploy Frontend to S3
-    if: |
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 0
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: "pnpm"
-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter web run build
-        env:
-          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Deploy to S3 + CloudFront
-        run: |
-          HEAD="${{ github.event.workflow_run.head_sha }}"
-          TAG=$(git tag --points-at "$HEAD" --list "v*" | head -1)
-
-          if [[ -n "$TAG" ]]; then
-            BUCKET="${{ vars.S3_BUCKET_PROD }}"
-            CF_ID="${{ vars.CF_DISTRIBUTION_ID_PROD }}"
-          else
-            BUCKET="${{ vars.S3_BUCKET_DEV }}"
-            CF_ID="${{ vars.CF_DISTRIBUTION_ID_DEV }}"
-          fi
-
-          aws s3 sync apps/web/out/ "s3://$BUCKET" --delete
-
-          if [[ -n "$CF_ID" ]]; then
-            aws cloudfront create-invalidation \
-              --distribution-id "$CF_ID" --paths "/*"
-          fi

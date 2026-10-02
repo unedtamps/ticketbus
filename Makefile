@@ -5,6 +5,12 @@
         test lint format direnv-allow integration-test integration-test-race \
         k6-smoke k6-load k6-stress
 
+# Pin the Go toolchain for all recipes. The locally installed go1.27.1-X build
+# writes export data format v4, which no released golang.org/x/tools reads
+# (max v3), breaking mockery/golangci-lint/gopls. Released go1.26.4 writes v2.
+GOTOOLCHAIN ?= go1.26.4
+export GOTOOLCHAIN
+
 # Default target
 help:
 	@echo "TicketSaas development commands:"
@@ -60,73 +66,81 @@ dev:
 	wait
 
 # Services
+# .env and .envrc live next to the entrypoint. direnv exec loads them but keeps
+# the working directory at the repo root, so the package path stays root-relative.
 dev-auth:
-	direnv exec cmd/auth-service  go run ./cmd/auth-service
+	direnv exec service/auth/cmd/api go run ./service/auth/cmd/api
 
 dev-ticketing:
-	direnv exec cmd/ticketing-service go run ./cmd/ticketing-service
+	direnv exec service/ticketing/cmd/api go run ./service/ticketing/cmd/api
 
 dev-payment:
-	direnv exec cmd/payment-service go run ./cmd/payment-service
+	direnv exec service/payment/cmd/api go run ./service/payment/cmd/api
 
 dev-web:
 	pnpm run dev
 
 direnv-allow:
-	direnv allow cmd/auth-service
-	direnv allow cmd/ticketing-service
-	direnv allow cmd/payment-service
+	direnv allow service/auth/cmd/api
+	direnv allow service/ticketing/cmd/api
+	direnv allow service/payment/cmd/api
 
 # Builds
 build: build-auth build-ticketing build-payment
 
 build-auth:
 	@mkdir -p bin
-	go build -o bin/auth-service ./cmd/auth-service
+	go build -o bin/auth-service ./service/auth/cmd/api
 
 build-ticketing:
 	@mkdir -p bin
-	go build -o bin/ticketing-service ./cmd/ticketing-service
+	go build -o bin/ticketing-service ./service/ticketing/cmd/api
 
 build-payment:
 	@mkdir -p bin
-	go build -o bin/payment-service ./cmd/payment-service
+	go build -o bin/payment-service ./service/payment/cmd/api
 
 clean:
 	rm -rf bin
 
 # Docker image builds
+# SERVICE is the service name, matching the build path in docker/Dockerfile.
 docker-build-auth:
-	docker build -f docker/Dockerfile --build-arg SERVICE=auth-service -t nedotick/auth-service:latest .
+	docker build -f docker/Dockerfile --build-arg SERVICE=auth -t ticketbus/auth-service:latest .
 
 docker-build-ticketing:
-	docker build -f docker/Dockerfile --build-arg SERVICE=ticketing-service -t nedotick/ticketing-service:latest .
+	docker build -f docker/Dockerfile --build-arg SERVICE=ticketing -t ticketbus/ticketing-service:latest .
 
 docker-build-payment:
-	docker build -f docker/Dockerfile --build-arg SERVICE=payment-service -t nedotick/payment-service:latest .
+	docker build -f docker/Dockerfile --build-arg SERVICE=payment -t ticketbus/payment-service:latest .
 
 docker-build: docker-build-auth docker-build-ticketing docker-build-payment
 
 # Docker migration image build (single image for all services)
 docker-migrate-build:
-	docker build -f docker/migrate.Dockerfile -t nedotick/ticketbus-migrations:latest .
+	docker build -f docker/migrate.Dockerfile -t ticketbus/ticketbus-migrations:latest .
 
 # Docker migration run (requires DB to be running, --network=host for localhost access)
 docker-migrate-run-auth:
-	docker run --rm --network=host nedotick/ticketbus-migrations auth "$(DATABASE_URL_AUTH)" up
+	docker run --rm --network=host ticketbus/ticketbus-migrations auth "$(DATABASE_URL_AUTH)" up
 
 docker-migrate-run-ticketing:
-	docker run --rm --network=host nedotick/ticketbus-migrations ticketing "$(DATABASE_URL_TICKETING)" up
+	docker run --rm --network=host ticketbus/ticketbus-migrations ticketing "$(DATABASE_URL_TICKETING)" up
 
 docker-migrate-run-payment:
-	docker run --rm --network=host nedotick/ticketbus-migrations payment "$(DATABASE_URL_PAYMENT)" up
+	docker run --rm --network=host ticketbus/ticketbus-migrations payment "$(DATABASE_URL_PAYMENT)" up
 
 docker-migrate-run: docker-migrate-run-auth docker-migrate-run-ticketing docker-migrate-run-payment
 
-# Migrations (override via env var, e.g. DATABASE_URL_AUTH=... make migrate-auth-up)
-DATABASE_URL_AUTH ?= postgres://ticketsaas:ticketsaas@localhost:5432/auth_db?sslmode=disable
-DATABASE_URL_TICKETING ?= postgres://ticketsaas:ticketsaas@localhost:5433/ticketing_db?sslmode=disable
-DATABASE_URL_PAYMENT ?= postgres://ticketsaas:ticketsaas@localhost:5435/payment_db?sslmode=disable
+# Migrations. Each connection string is read from that service's .env through
+# direnv, so the .env stays the single source of truth and no URL is duplicated
+# here. Run `make direnv-allow` once first, otherwise direnv refuses to load the
+# .env and these expand to empty.
+# Override for a one-off run by exporting the variable:
+#   DATABASE_URL_AUTH=postgres://... make migrate-auth-up
+DATABASE_URL_AUTH      ?= $(shell direnv exec service/auth/cmd/api sh -c 'echo $$DATABASE_URL')
+DATABASE_URL_TICKETING ?= $(shell direnv exec service/ticketing/cmd/api sh -c 'echo $$DATABASE_URL')
+DATABASE_URL_PAYMENT   ?= $(shell direnv exec service/payment/cmd/api sh -c 'echo $$DATABASE_URL')
 
 migrate-auth-up:
 	migrate -path migrations/auth -database "$(DATABASE_URL_AUTH)" up
@@ -156,18 +170,33 @@ test-coverage:
 	go tool cover -html=coverage.out -o bin/coverage.html
 
 test-race:
-	go test -race -count=10 ./internal/inventory/application/ ./internal/payment/application/
+	go test -race -count=10 ./service/payment/internal/application/... ./service/ticketing/internal/application/...
 
 # Mock generation
 mocks:
 	mockery
 
-# Integration tests (testcontainers-go — needs Docker daemon)
+# Integration tests (testcontainers-go — needs Docker daemon).
+# Each suite boots its own Postgres (plus Kafka, except auth), applies only its
+# own migrations, and imports nothing from the other services.
+#
+# The suites run sequentially and fail fast: the first failure aborts the loop,
+# so the remaining suites are skipped. Make's -j does not help here because all
+# three live in a single recipe; running them concurrently would require
+# splitting them into separate targets.
+INTEGRATION_SUITES := service/auth/tests/integration service/ticketing/tests/integration service/payment/tests/integration
+
 integration-test:
-	go test -tags=integration -count=1 -v ./tests/integration/...
+	@for suite in $(INTEGRATION_SUITES); do \
+		echo "==> $$suite"; \
+		go test -tags=integration -count=1 -v ./$$suite/... || exit 1; \
+	done
 
 integration-test-race:
-	go test -tags=integration -race -count=1 -v ./tests/integration/...
+	@for suite in $(INTEGRATION_SUITES); do \
+		echo "==> $$suite"; \
+		go test -tags=integration -race -count=1 -v ./$$suite/... || exit 1; \
+	done
 
 # Linting
 lint:

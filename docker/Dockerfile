@@ -11,7 +11,7 @@ RUN go mod download
 COPY . .
 
 ARG SERVICE
-RUN CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/${SERVICE}
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/server ./service/${SERVICE}/cmd/api
 
 # Runtime stage
 FROM alpine:latest

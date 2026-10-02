@@ -1,0 +1,150 @@
+package application
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"time"
+
+	"github.com/google/uuid"
+
+	sdomain "github.com/nedo/TicketSaas/pkg/dto"
+	"github.com/nedo/TicketSaas/service/payment/internal/domain"
+)
+
+// sessionWebhookPayload is the Xendit payment session webhook envelope.
+// Real Xendit payloads carry the session id in data.payment_session_id;
+// documented examples use data.id — both are parsed defensively.
+type sessionWebhookPayload struct {
+	Event string `json:"event"`
+	Data  struct {
+		ReferenceID      string `json:"reference_id"`
+		PaymentSessionID string `json:"payment_session_id"`
+		ID               string `json:"id"`
+		Status           string `json:"status"`
+	} `json:"data"`
+}
+
+// sessionID returns the payment session id, preferring the real payload field
+// (data.payment_session_id) over the documented variant (data.id).
+func (p *sessionWebhookPayload) sessionID() string {
+	if p.Data.PaymentSessionID != "" {
+		return p.Data.PaymentSessionID
+	}
+	return p.Data.ID
+}
+
+// HandleSessionWebhook applies a verified gateway webhook directly to the
+// transaction row. Terminal transitions are guarded by TransitionIfActive,
+// so duplicates and concurrent deliveries are idempotent. When the
+// transaction does not exist yet the caller returns a non-2xx so the gateway
+// retries.
+func (s *PaymentService) HandleSessionWebhook(
+	ctx context.Context,
+	payload []byte,
+) error {
+	var event sessionWebhookPayload
+	if err := json.Unmarshal(payload, &event); err != nil {
+		return err
+	}
+	if event.Data.ReferenceID == "" {
+		return errors.New("webhook missing reference_id")
+	}
+
+	txn, err := s.txnRepo.FindByBookingID(ctx, event.Data.ReferenceID)
+	if err != nil {
+		return err
+	}
+
+	// The session referenced by the webhook must be the one stored on the
+	// transaction. A mismatch means the delivery does not belong to this
+	// transaction — acknowledge and ignore instead of retrying forever.
+	if sid := event.sessionID(); sid != "" && sid != txn.ProviderRef {
+		s.logger.Warn(
+			"webhook session mismatch, ignoring",
+			"txn_id", txn.ID,
+			"webhook_session_id", sid,
+			"provider_ref", txn.ProviderRef,
+		)
+		return nil
+	}
+
+	switch event.Event {
+	case "payment_session.completed":
+		applied, err := s.txnRepo.TransitionIfActive(
+			ctx,
+			txn.ID,
+			domain.StatusCompleted,
+			txn.ProviderRef,
+		)
+		if err != nil {
+			return err
+		}
+		if applied {
+			_ = s.outbox.Insert(ctx, "payment.completed", txn.ID, sdomain.PaymentCompleted{
+				TransactionID: txn.ID,
+				BookingID:     txn.BookingID,
+				EventID:       txn.EventID,
+				UserID:        txn.UserID,
+				At:            time.Now(),
+			})
+			s.logger.Info("payment completed", "txn_id", txn.ID)
+			return nil
+		}
+		// Not pending: either a duplicate delivery or the booking was already
+		// expired when the money arrived — the latter needs an auto refund.
+		if txn.Status == domain.StatusExpired {
+			s.requestLatePaymentRefund(ctx, txn)
+		}
+
+	case "payment_session.expired":
+		applied, err := s.txnRepo.TransitionIfActive(
+			ctx,
+			txn.ID,
+			domain.StatusExpired,
+			txn.ProviderRef,
+		)
+		if err != nil {
+			return err
+		}
+		if applied {
+			_ = s.outbox.Insert(ctx, "payment.expired", txn.ID, sdomain.PaymentExpired{
+				TransactionID: txn.ID,
+				BookingID:     txn.BookingID,
+				EventID:       txn.EventID,
+				UserID:        txn.UserID,
+				Reason:        domain.GatewayExpiredReason,
+				At:            time.Now(),
+			})
+			s.logger.Info("payment expired (gateway)", "txn_id", txn.ID)
+		}
+
+	default:
+		s.logger.Info("ignoring webhook event", "event", event.Event, "txn_id", txn.ID)
+	}
+	return nil
+}
+
+// requestLatePaymentRefund creates a refund request when a payment completed
+// after the booking was already expired. Idempotent per transaction.
+func (s *PaymentService) requestLatePaymentRefund(ctx context.Context, txn *domain.Transaction) {
+	refund := &domain.RefundRequest{
+		ID:             uuid.NewString(),
+		EventID:        txn.EventID,
+		BookingID:      txn.BookingID,
+		TransactionID:  txn.ID,
+		CustomerEmail:  txn.CustomerEmail,
+		AmountRupiah:   int64(txn.AmountRupiah),
+		Currency:       txn.Currency,
+		Status:         domain.RefundPending,
+		Reason:         "late_payment",
+		IdempotencyKey: "late-payment:" + txn.ID,
+		ProviderRef:    txn.ProviderRef,
+	}
+	if err := s.refundRepo.Create(ctx, refund); err != nil {
+		s.logger.Error("failed to create late payment refund", "txn_id", txn.ID, "error", err)
+		return
+	}
+	_ = s.txnRepo.UpdateRefundStatus(ctx, txn.ID, "pending")
+	s.logger.Warn("late payment refunded", "txn_id", txn.ID)
+}

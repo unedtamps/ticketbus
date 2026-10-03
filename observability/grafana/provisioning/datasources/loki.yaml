@@ -1,0 +1,15 @@
+apiVersion: 1
+
+# Provisioned so Grafana is immediately usable — no clicking through
+# "Add data source" after `make obs-up`.
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: true
+    editable: false
+    jsonData:
+      # Querying from Grafana's browser needs the datasource to follow links
+      # between logs and traces once traces land in Tempo.
+      maxLines: 1000

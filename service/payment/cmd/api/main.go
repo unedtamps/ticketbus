@@ -23,7 +23,6 @@ import (
 	paykafka "github.com/nedo/TicketSaas/service/payment/internal/kafka"
 	"github.com/nedo/TicketSaas/service/payment/internal/postgres"
 	"github.com/nedo/TicketSaas/service/payment/internal/processor"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -95,15 +94,12 @@ func main() {
 	h := handler.NewPaymentHandler(svc, cfg.InternalAPIKey, cfg.WebhookCallbackTok)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(middleware.Logger)
+	r.Use(sharedhttp.RequestLogger(logger))
 	r.Use(middleware.Recoverer)
-	r.Use(sharedhttp.NewMetricsMiddleware("payment-service"))
 
 	r.Get("/api/payments/health", func(w http.ResponseWriter, r *http.Request) {
 		sharedhttp.OK(w, map[string]string{"status": "ok", "service": "payment-service"})
 	})
-
-	r.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	r.Mount("/", h.Routes())
 

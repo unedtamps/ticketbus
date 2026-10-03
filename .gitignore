@@ -53,6 +53,9 @@ coverage/
 coverage.out
 coverage.html
 
+# Local service logs, tailed by the observability collector (make obs-up)
+logs/
+
 # Local data volumes
 volumes/
 

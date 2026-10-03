@@ -1,0 +1,78 @@
+# OpenTelemetry Collector — logs pipeline only (phase 1a).
+#
+# Dev services run as host processes via `make dev-*`, which tee their slog JSON
+# output into logs/<service>.log. The collector tails those files instead of
+# listening to the apps, so no Go change is required.
+#
+# The `otlp` receiver is declared but not wired to the logs pipeline yet; it is
+# here so later phases (traces, HTTP metrics) can push to it without editing
+# this file's receiver list.
+#
+# Adding Docker container logs (infra + the e2e stack) is deliberately left out
+# for now — that needs a root-only bind mount, so it is a separate step.
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+  # Host-run service logs. These files are bare slog JSON, so there is no
+  # container envelope to unwrap — only the JSON body needs parsing.
+  #
+  # `on_error: drop` is load-bearing, not defensive noise. Because `tee` merges
+  # stderr into the same file, the stream also contains non-JSON lines: direnv's
+  # "loading .envrc" notice, `exit status N` from `go run`, and chi's plain-text
+  # access log. Without drop, the first such line fails json_parser, the
+  # following move operator then fails too, and the file consumer stops reading
+  # that file entirely — taking every valid log line down with it.
+  file_log:
+    include:
+      - /repo/logs/*.log
+    # Read from the start of each file. This costs a duplicate re-ingest of the
+    # retained logs every time the collector restarts, but the alternative is
+    # worse: with `start_at: end`, a file whose content was already written
+    # before the poller discovered it is skipped entirely — so a service that
+    # crashes during startup logs nothing at all, which is precisely the case
+    # you most want to see. Duplicates are cheap in Loki; missing logs are not.
+    # Use `make obs-clean` to discard the Loki volume and start fresh.
+    start_at: beginning
+    poll_interval: 200ms
+    operators:
+      - type: json_parser
+        parse_from: body
+        parse_to: attributes
+        on_error: drop
+      # slog attaches the service name as an attribute; promote it to a
+      # resource attribute so Loki exposes it as the `service_name` index
+      # label, matching what Grafana's Explore expects.
+      - type: move
+        from: attributes["service"]
+        to: resource["service.name"]
+        on_error: drop
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+  batch: {}
+
+exporters:
+  # Loki's native OTLP endpoint. Anything not promoted to an index label is kept
+  # as structured metadata, so log fields stay queryable without re-parsing.
+  otlp_http:
+    endpoint: http://loki:3100/otlp
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp, file_log]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http]

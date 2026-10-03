@@ -1,0 +1,59 @@
+# Observability stack — logs only, phase 1a.
+#
+# Deliberately standalone: it shares no network with docker-compose.yml because
+# the collector reads the host filesystem rather than talking to your services.
+# Bring it up whenever you want logs; `make dev` does not depend on it.
+#
+#   make obs-up      start collector + Loki + Grafana
+#   make obs-down    stop and discard
+#
+# Host ports are chosen to avoid collisions with the app stack. Note Grafana is
+# on 3300, NOT 3000: the Next.js dev server already binds 3000 (see
+# traefik/dynamic.yml).
+#
+# Phase 1b (not yet enabled here) will add a second filelog receiver plus a
+# read-only mount of /var/lib/docker/containers so infra and e2e container logs
+# are captured too. That mount is root-only, which is why the collector is
+# pinned to uid 0 in this file's comment below.
+
+services:
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.161.0
+    command: ["--config=/etc/otelcol-contrib/collector.yaml"]
+    volumes:
+      - ../observability/collector.yaml:/etc/otelcol-contrib/collector.yaml:ro
+      - ../logs:/repo/logs:ro
+    ports:
+      - "4317:4317"    # OTLP gRPC (used from phase 2 onward)
+      - "4318:4318"    # OTLP HTTP
+      - "13133:13133"  # health_check extension
+    # No healthcheck: this image is distroless, so there is no shell or curl
+    # inside it for Docker to run. `make obs-up` waits on Loki's /ready instead.
+
+  loki:
+    image: grafana/loki:3.7.8
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ../observability/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+
+  grafana:
+    image: grafana/grafana:13.2.3
+    environment:
+      # Dev-only defaults. GF_AUTH_ANONYMOUS is left off so the datasource
+      # provisioning cannot be edited by an unauthenticated browser; log in
+      # with admin/admin on first run.
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_DEFAULT_THEME: dark
+      GF_FEATURE_LOGS_IN_EXPLORER: "true"
+    volumes:
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3300:3000"
+
+volumes:
+  loki-data:
+  grafana-data:

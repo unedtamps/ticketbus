@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	bookingpkg "github.com/nedo/TicketSaas/service/ticketing/internal/application/booking"
 	eventpkg "github.com/nedo/TicketSaas/service/ticketing/internal/application/event"
@@ -110,9 +109,8 @@ func main() {
 	bookingHandler := eventhandler.NewBookingHandler(bookingSvc)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(middleware.Logger)
+	r.Use(sharedhttp.RequestLogger(logger))
 	r.Use(middleware.Recoverer)
-	r.Use(sharedhttp.NewMetricsMiddleware("ticketing-service"))
 
 	r.Get("/api/events/health", func(w http.ResponseWriter, r *http.Request) {
 		sharedhttp.OK(w, map[string]string{"status": "ok", "service": "ticketing-service"})
@@ -120,7 +118,6 @@ func main() {
 	r.Get("/api/bookings/health", func(w http.ResponseWriter, r *http.Request) {
 		sharedhttp.OK(w, map[string]string{"status": "ok", "service": "ticketing-service"})
 	})
-	r.Get("/metrics", promhttp.Handler().ServeHTTP)
 	eventHandler.Routes(r)
 	bookingHandler.Routes(r)
 

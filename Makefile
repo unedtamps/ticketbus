@@ -4,6 +4,7 @@
         migrate migrate-auth-up migrate-ticketing-up migrate-payment-up \
         test lint format direnv-allow integration-test integration-test-race \
         e2e-keys e2e-up e2e-down e2e-status e2e-logs e2e \
+        obs-up obs-down obs-clean obs-status obs-logs \
         k6-smoke k6-load k6-stress
 
 # Pin the Go toolchain for all recipes. The locally installed go1.27.1-X build
@@ -16,6 +17,12 @@ export GOTOOLCHAIN
 # so the e2e stack can run alongside `make dev`.
 E2E_COMPOSE := docker/docker-compose.e2e.yml
 E2E_KEYS    := docker/e2e/keys
+
+# Observability stack (logs only). Standalone compose file; `make dev` does not
+# depend on it. Logs written here are tailed by the collector's file_log receiver
+# and shipped to Loki without any application change.
+OBS_COMPOSE := docker/docker-compose.obs.yml
+LOGS_DIR    := logs
 
 # Default target
 help:
@@ -52,6 +59,12 @@ help:
 	@echo "  make e2e-logs              Tail e2e logs"
 	@echo "  make e2e                   Start the e2e stack, run tests/e2e, tear it down"
 	@echo ""
+	@echo "  make obs-up                Start collector + Loki + Grafana (logs only)"
+	@echo "  make obs-down              Stop the observability stack"
+	@echo "  make obs-clean             Stop it and delete the Loki/Grafana volumes"
+	@echo "  make obs-status            Show observability container status"
+	@echo "  make obs-logs              Tail collector / Loki / Grafana logs"
+	@echo ""
 	@echo "  make k6-smoke              Run k6 smoke test (5 VUs, 1m)"
 	@echo "  make k6-load               Run k6 load test (50 VUs, 5m)"
 	@echo "  make k6-stress             Run k6 stress test (10→300 VUs, 10m)"
@@ -80,14 +93,22 @@ dev:
 # Services
 # .env and .envrc live next to the entrypoint. direnv exec loads them but keeps
 # the working directory at the repo root, so the package path stays root-relative.
+#
+# Output is teed to $(LOGS_DIR)/<service>.log so the observability collector can
+# tail it. `bash -o pipefail` is required: without it the pipeline's exit status
+# is tee's, and a crashed service would still report success. Make's default
+# shell is /bin/sh, which is dash on Debian/Ubuntu and has no pipefail.
 dev-auth:
-	direnv exec service/auth/cmd/api go run ./service/auth/cmd/api
+	@mkdir -p $(LOGS_DIR)
+	@bash -o pipefail -c 'direnv exec service/auth/cmd/api go run ./service/auth/cmd/api 2>&1 | tee $(LOGS_DIR)/auth.log'
 
 dev-ticketing:
-	direnv exec service/ticketing/cmd/api go run ./service/ticketing/cmd/api
+	@mkdir -p $(LOGS_DIR)
+	@bash -o pipefail -c 'direnv exec service/ticketing/cmd/api go run ./service/ticketing/cmd/api 2>&1 | tee $(LOGS_DIR)/ticketing.log'
 
 dev-payment:
-	direnv exec service/payment/cmd/api go run ./service/payment/cmd/api
+	@mkdir -p $(LOGS_DIR)
+	@bash -o pipefail -c 'direnv exec service/payment/cmd/api go run ./service/payment/cmd/api 2>&1 | tee $(LOGS_DIR)/payment.log'
 
 dev-web:
 	pnpm run dev
@@ -184,6 +205,44 @@ e2e: e2e-up
 	echo; echo "==> tearing down e2e stack"; \
 	$(MAKE) --no-print-directory e2e-down >/dev/null; \
 	exit $$status
+
+# Observability (logs only). The collector tails $(LOGS_DIR)/*.log written by the
+# dev-* targets and ships them to Loki, so log aggregation needs no application
+# change. Grafana is published on :3300 because the Next.js dev server already
+# occupies :3000.
+#
+# obs-up creates $(LOGS_DIR) before starting the collector on purpose: the
+# collector bind-mounts it, and if the host path does not exist Docker creates it
+# owned by root — which then stops the host-side `tee` in the dev-* targets from
+# writing into it.
+obs-up:
+	@mkdir -p $(LOGS_DIR)
+	docker compose -f $(OBS_COMPOSE) up -d
+	@echo "==> waiting for loki"
+	@for i in $$(seq 1 30); do \
+		if curl -fsS http://localhost:3100/ready >/dev/null 2>&1; then \
+			echo "loki ready"; break; \
+		fi; \
+		if [ $$i -eq 30 ]; then echo "loki did not become ready"; exit 1; fi; \
+		sleep 1; \
+	done
+	@echo "grafana  http://localhost:3300  (admin/admin)"
+	@echo "loki     http://localhost:3100"
+
+obs-down:
+	docker compose -f $(OBS_COMPOSE) down
+
+# Discards the Loki index and Grafana state. Also the way to clear the duplicate
+# lines that appear in Loki after `make obs-up` re-reads the retained log files.
+obs-clean:
+	docker compose -f $(OBS_COMPOSE) down -v
+	rm -rf $(LOGS_DIR)
+
+obs-status:
+	docker compose -f $(OBS_COMPOSE) ps
+
+obs-logs:
+	docker compose -f $(OBS_COMPOSE) logs -f
 
 # Migrations. Each connection string is read from that service's .env through
 # direnv, so the .env stays the single source of truth and no URL is duplicated

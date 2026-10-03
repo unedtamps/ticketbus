@@ -19,7 +19,6 @@ import (
 	"github.com/nedo/TicketSaas/service/auth/internal/handler"
 	"github.com/nedo/TicketSaas/service/auth/internal/jwt"
 	"github.com/nedo/TicketSaas/service/auth/internal/postgres"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
@@ -97,16 +96,13 @@ func main() {
 	// Router
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(middleware.Logger)
+	r.Use(sharedhttp.RequestLogger(logger))
 	r.Use(middleware.Recoverer)
 	r.Use(sharedhttp.WithUserContext)
-	r.Use(sharedhttp.NewMetricsMiddleware("auth-service"))
 
 	r.Get("/api/auth/health", func(w http.ResponseWriter, r *http.Request) {
 		sharedhttp.OK(w, map[string]string{"status": "ok", "service": "auth-service"})
 	})
-
-	r.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	r.Mount("/", authHandler.Routes())
 

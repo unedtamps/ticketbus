@@ -1,0 +1,75 @@
+# Loki — single-binary config for local development.
+#
+# Derived from Loki's own loki-local-config.yaml, trimmed for a logs-only dev
+# stack:
+#   - pattern_ingester removed: it aggregates Prometheus metrics, and we have no
+#     metrics backend in this phase.
+#   - ruler removed: it expects an Alertmanager (its default target is
+#     localhost:9093, which does not exist here and would only log errors).
+#   - analytics disabled: this is a throwaway dev stack, so there is no reason
+#     to send usage stats to Grafana Labs.
+#
+# TSDB + schema v13 is required by the native OTLP endpoint for structured
+# metadata. `allow_structured_metadata` defaults to true on Loki 3.x.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+  grpc_server_max_concurrent_streams: 1000
+
+common:
+  instance_addr: 127.0.0.1
+  # Backed by a named volume so the index survives `make obs-down` / `obs-up`.
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  tsdb_shipper:
+    active_index_directory: /loki/tsdb-index
+    cache_location: /loki/tsdb-cache
+
+limits_config:
+  # Reject oversized structured metadata rather than silently dropping logs.
+  reject_old_samples: false
+
+compactor:
+  working_directory: /loki/compactor
+
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100
+
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /loki/rules
+
+analytics:
+  reporting_enabled: false
+
+frontend:
+  encoding: protobuf

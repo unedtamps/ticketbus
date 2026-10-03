@@ -219,7 +219,74 @@ Notable values:
 | PostgreSQL ticketing | 5433 | `ticketing_db` |
 | PostgreSQL payment | 5435 | `payment_db` |
 
-Each service also exposes Prometheus metrics on `GET /metrics`.
+OpenTelemetry metrics (replacing the former `/metrics` endpoint) are not wired up yet.
+
+## Observability (logs)
+
+Log aggregation runs on an [OpenTelemetry Collector](https://opentelemetry.io/) that
+tails the files written by the `dev-*` targets and ships them to Loki. **No application
+change is involved** — the services keep using `slog` exactly as before.
+
+```bash
+make obs-up      # collector + Loki + Grafana
+make obs-status  # container status
+make obs-logs    # tail the stack
+make obs-down    # stop, keep data
+make obs-clean   # stop and delete the Loki/Grafana volumes
+```
+
+Open Grafana at **http://localhost:3300** (`admin` / `admin`) → Explore → Loki, or query
+the API directly:
+
+```bash
+curl -s 'http://localhost:3100/loki/api/v1/labels'
+```
+
+### How it works
+
+```
+make dev-ticketing ──> logs/ticketing.log ──> collector (file_log) ──> Loki ──> Grafana
+```
+
+`make dev-*` tees each service's stdout **and stderr** into `logs/<service>.log`; the
+collector tails those files. Because `slog` emits JSON, the collector promotes `service`
+to the `service_name` index label and keeps every other field as queryable metadata.
+
+Loki distinguishes **index labels** (stream selectors, low cardinality) from **structured
+metadata** (everything else). Only `service_name` is a label, so filter on fields in the
+pipeline, not the selector:
+
+```logql
+{service_name="ticketing-service"}                        # by label
+{service_name="ticketing-service"} | level="ERROR"        # by field
+{service_name="ticketing-service"} | booking_id="abc123"  # by domain id
+```
+
+### Known limitations
+
+- **No `trace_id` on log lines yet.** Logs reach Loki, but they are not correlated to
+  traces. That needs the `ctx`-carrying log call sites, which is deferred.
+- **HTTP access logs are structured JSON.** `sharedhttp.RequestLogger` replaced chi's
+  `middleware.Logger`, which wrote plain text the collector could not index. Each request
+  now emits one slog line carrying `method`, `path` (the chi route pattern, so
+  `/api/bookings/{id}` stays one value), `status`, `bytes`, `duration_ms`, and `request_id`.
+  `/health` is skipped so container healthchecks do not flood the index.
+- **Request counters and latency histograms are gone.** Prometheus instrumentation was
+  removed along with the `/metrics` endpoint; OpenTelemetry metrics are the intended
+  replacement but are not wired up yet. Until then, `status` and `duration_ms` in the
+  access log are the substitute.
+- **Non-JSON lines are dropped on purpose.** `2>&1` means the file also receives direnv's
+  "loading .envrc" notice and `exit status N` from `go run`. Without `on_error: drop`, the
+  first such line fails `json_parser` and the collector stops reading that file entirely,
+  taking every valid line with it.
+- **Restarting the collector re-ingests retained files.** `start_at: beginning` is
+  deliberate: with `end`, a service that crashes during startup logs nothing at all.
+  Duplicate lines are cheaper than missing ones; `make obs-clean` clears them.
+- **Docker container logs are not captured yet.** Only host-run `make dev-*` output is
+  tailed. Adding the infra and e2e containers needs a second receiver plus a read-only
+  mount of `/var/lib/docker/containers`, and the collector must run as `uid 0` because
+  that tree is `root:root` mode `710`. This is the planned phase 1b.
+- **Linux host only.** That mount path does not exist on Docker Desktop.
 
 ## API Endpoints
 
@@ -233,7 +300,6 @@ Each service also exposes Prometheus metrics on `GET /metrics`.
 | GET | `/api/auth/verify` | Bearer | ForwardAuth target for Traefik |
 | GET | `/api/auth/me` | Bearer | Any |
 | GET | `/api/auth/health` | No | — |
-| GET | `/metrics` | No | — |
 
 ### Events (`/api/events`, `/api/admin/events`)
 | Method | Path | Auth | Role |

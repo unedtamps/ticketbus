@@ -4,6 +4,8 @@ apiVersion: 1
 # "Add data source" after `make obs-up`.
 datasources:
   - name: Loki
+    # Explicit uid so the Tempo datasource can point its trace-to-logs link here.
+    uid: loki
     type: loki
     access: proxy
     url: http://loki:3100

@@ -1,0 +1,21 @@
+apiVersion: 1
+
+# Provisioned so a trace in Grafana can jump straight to the log lines for the
+# same request, which is what makes the access log's trace_id useful rather than
+# decorative.
+datasources:
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: false
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: "-1h"
+        spanEndTimeShift: "1h"
+        filterByTraceID: true
+        filterBySpanID: false
+        tags:
+          - service_name

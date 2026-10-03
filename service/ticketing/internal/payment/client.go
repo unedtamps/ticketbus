@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // Client talks to the payment service' internal API to create the payment
@@ -23,9 +24,15 @@ type Client struct {
 // NewClient creates a new payment service client.
 func NewClient(baseURL, apiKey string, timeoutSec int) *Client {
 	return &Client{
-		baseURL:    strings.TrimSuffix(baseURL, "/"),
-		apiKey:     apiKey,
-		httpClient: &http.Client{Timeout: time.Duration(timeoutSec) * time.Second},
+		baseURL: strings.TrimSuffix(baseURL, "/"),
+		apiKey:  apiKey,
+		// otelhttp.NewTransport creates a CLIENT span per call and forwards the
+		// traceparent header, so the payment service's server span nests under
+		// this one. It is a no-op when no tracer provider is installed.
+		httpClient: &http.Client{
+			Timeout:   time.Duration(timeoutSec) * time.Second,
+			Transport: otelhttp.NewTransport(nil),
+		},
 	}
 }
 
@@ -38,12 +45,12 @@ func (c *Client) InitiateTxnForBooking(
 	expiresAt time.Time,
 ) error {
 	body, err := json.Marshal(map[string]interface{}{
-		"booking_id":   bookingID,
-		"event_id":     eventID,
-		"user_id":      userID,
-		"email":        email,
+		"booking_id":    bookingID,
+		"event_id":      eventID,
+		"user_id":       userID,
+		"email":         email,
 		"amount_rupiah": amountRupiah,
-		"expires_at":   expiresAt.UTC().Format(time.RFC3339),
+		"expires_at":    expiresAt.UTC().Format(time.RFC3339),
 	})
 	if err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrPaymentUnavailable, err)

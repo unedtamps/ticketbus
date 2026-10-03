@@ -1,0 +1,32 @@
+# OpenTelemetry Collector for the e2e stack — traces only.
+#
+# Deliberately separate from observability/collector.yaml: this one has no
+# file_log receiver and therefore no need to mount /var/lib/docker/containers or
+# run as uid 0. The e2e services run in containers, so their logs stay in
+# `docker compose logs` and only trace propagation is asserted here.
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+  batch: {}
+
+exporters:
+  otlp_http/tempo:
+    endpoint: http://tempo:4318
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/tempo]

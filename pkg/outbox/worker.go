@@ -9,6 +9,10 @@ import (
 
 	shareddb "github.com/nedo/TicketSaas/pkg/db"
 	"github.com/nedo/TicketSaas/pkg/kafka"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Worker polls the outbox table and publishes undelivered events to Kafka.
@@ -16,6 +20,7 @@ type Worker struct {
 	store        *Store
 	producer     *kafka.Producer
 	logger       *slog.Logger
+	tracer       trace.Tracer
 	concurrency  int
 	pollInterval time.Duration
 }
@@ -36,7 +41,10 @@ func NewWorker(
 		pollInterval = 200 * time.Millisecond
 	}
 	return &Worker{
-		store:        NewStore(db),
+		store: NewStore(db),
+		// Captured after telemetry.Init has run in main, so the worker publishes
+		// under the same provider as the rest of the process.
+		tracer:       otel.Tracer("github.com/nedo/TicketSaas/pkg/outbox"),
 		producer:     producer,
 		logger:       logger,
 		concurrency:  concurrency,
@@ -45,10 +53,11 @@ func NewWorker(
 }
 
 type outboxRow struct {
-	ID      int64
-	Topic   string
-	Key     string
-	Payload []byte
+	ID           int64
+	Topic        string
+	Key          string
+	Payload      []byte
+	TraceContext *string
 }
 
 // Run polls the outbox table and publishes undelivered events.
@@ -69,7 +78,7 @@ func (w *Worker) Run(ctx context.Context) {
 
 func (w *Worker) processBatch(ctx context.Context) {
 	rows, err := w.store.db.Query(ctx,
-		`SELECT id, topic, key, payload FROM outbox WHERE delivered = false ORDER BY id LIMIT 100`)
+		`SELECT id, topic, key, payload, trace_context FROM outbox WHERE delivered = false ORDER BY id LIMIT 100`)
 	if err != nil {
 		w.logger.Error("outbox worker query failed", "error", err)
 		return
@@ -79,7 +88,7 @@ func (w *Worker) processBatch(ctx context.Context) {
 	var batch []outboxRow
 	for rows.Next() {
 		var r outboxRow
-		if err := rows.Scan(&r.ID, &r.Topic, &r.Key, &r.Payload); err != nil {
+		if err := rows.Scan(&r.ID, &r.Topic, &r.Key, &r.Payload, &r.TraceContext); err != nil {
 			w.logger.Error("outbox worker scan failed", "error", err)
 			continue
 		}
@@ -97,12 +106,7 @@ func (w *Worker) processBatch(ctx context.Context) {
 		go func() {
 			defer wg.Done()
 			for row := range jobs {
-				if err := w.producer.Produce(
-					ctx,
-					row.Topic,
-					row.Key,
-					json.RawMessage(row.Payload),
-				); err != nil {
+				if err := w.publish(ctx, row); err != nil {
 					w.logger.Warn("outbox publish failed, will retry",
 						"id", row.ID, "topic", row.Topic, "error", err)
 					continue
@@ -120,4 +124,26 @@ func (w *Worker) processBatch(ctx context.Context) {
 	}
 	close(jobs)
 	wg.Wait()
+}
+
+// publish emits one outbox row, restoring the trace of the request that created
+// it before starting the producer span. That restored parent is what keeps the
+// consumer's span in the same trace across the Kafka hop.
+func (w *Worker) publish(ctx context.Context, row outboxRow) error {
+	publishCtx := ctx
+	if row.TraceContext != nil && *row.TraceContext != "" {
+		publishCtx = otel.GetTextMapPropagator().Extract(ctx,
+			propagation.MapCarrier{"traceparent": *row.TraceContext})
+	}
+
+	publishCtx, span := w.tracer.Start(publishCtx, row.Topic+" publish",
+		trace.WithSpanKind(trace.SpanKindProducer),
+		trace.WithAttributes(
+			semconv.MessagingSystemKafka,
+			semconv.MessagingDestinationName(row.Topic),
+			semconv.MessagingKafkaMessageKey(row.Key),
+		))
+	defer span.End()
+
+	return w.producer.Produce(publishCtx, row.Topic, row.Key, json.RawMessage(row.Payload))
 }

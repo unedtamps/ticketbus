@@ -1,0 +1,45 @@
+# Tempo — single-binary trace storage for local development.
+#
+# Ingested over OTLP from the collector's traces pipeline; queried through the
+# HTTP API (see the Observability section of the README) and the Grafana
+# datasource.
+#
+# Everything is in-memory / on-disk local: no object store, no compaction
+# tuning beyond a short retention, because this only has to survive a dev
+# session.
+
+stream_over_http_enabled: true
+
+server:
+  http_listen_port: 3200
+  log_level: warn
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+ingester:
+  # Flush to the backend quickly so traces become searchable almost
+  # immediately; an E2E assertion polls for them right after a booking.
+  max_block_duration: 1m
+  complete_block_timeout: 1m
+
+compactor:
+  compaction:
+    block_retention: 1h
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+usage_report:
+  reporting_enabled: false

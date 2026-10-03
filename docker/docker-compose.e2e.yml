@@ -178,6 +178,7 @@ services:
     environment:
       APP_ENV: e2e
       PORT: "8081"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4318
       DATABASE_URL: postgres://ticketsaas:ticketsaas@postgres-auth:5432/auth_db?sslmode=disable
       ADMIN_SEEDS: '[{"email":"admin@test.com","password":"Admin123!","name":"Admin"}]'
     depends_on:
@@ -205,6 +206,7 @@ services:
       PORT: "8082"
       DATABASE_URL: postgres://ticketsaas:ticketsaas@postgres-ticketing:5432/ticketing_db?sslmode=disable
       KAFKA_BROKERS: kafka:29092
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4318
       RESERVATION_TTL: "3600"
       CONSUMER_CONCURRENCY: "1"
       OUTBOX_CONCURRENCY: "1"
@@ -239,6 +241,7 @@ services:
       PORT: "8083"
       DATABASE_URL: postgres://ticketsaas:ticketsaas@postgres-payment:5432/payment_db?sslmode=disable
       KAFKA_BROKERS: kafka:29092
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4318
       # Routed back through Traefik, exactly as dev does, so the mock gateway
       # exercises the real webhook router instead of calling itself.
       WEBHOOK_BASE_URL: http://traefik:8000/api/payments/webhook
@@ -283,6 +286,31 @@ services:
         condition: service_healthy
     networks: [e2e-net]
 
+  # Traces only. The e2e services export OTLP here; logs stay readable through
+  # `docker compose logs` so this stack needs no /var/lib/docker mount.
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.161.0
+    container_name: e2e-collector
+    command: ["--config=/etc/otelcol-contrib/collector.yaml"]
+    volumes:
+      - ../observability/collector.e2e.yaml:/etc/otelcol-contrib/collector.yaml:ro
+    networks: [e2e-net]
+
+  tempo:
+    image: grafana/tempo:2.10.8
+    container_name: e2e-tempo
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ../observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      # Offset from the dev stack's 3200 so both can run at once.
+      - "13200:3200"
+    networks: [e2e-net]
+
 networks:
   e2e-net:
     driver: bridge
+
+volumes:
+  tempo-data:

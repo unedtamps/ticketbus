@@ -16,6 +16,7 @@ import (
 	sharedkafka "github.com/nedo/TicketSaas/pkg/kafka"
 	"github.com/nedo/TicketSaas/pkg/log"
 	"github.com/nedo/TicketSaas/pkg/outbox"
+	"github.com/nedo/TicketSaas/pkg/telemetry"
 	"github.com/nedo/TicketSaas/service/payment/internal/application"
 	"github.com/nedo/TicketSaas/service/payment/internal/config"
 	"github.com/nedo/TicketSaas/service/payment/internal/domain"
@@ -35,6 +36,18 @@ func main() {
 	}
 	if err := cfg.Validate(); err != nil {
 		logger.Error("invalid config", "error", err)
+		os.Exit(1)
+	}
+
+	// Before db.NewPool: the pgx tracer captures the global providers by
+	// reference and would stay a no-op if built first.
+	shutdownTelemetry, err := telemetry.Init(context.Background(), telemetry.Config{
+		ServiceName:    "payment-service",
+		ServiceVersion: "dev",
+		Environment:    cfg.AppEnv,
+	})
+	if err != nil {
+		logger.Error("failed to init telemetry", "error", err)
 		os.Exit(1)
 	}
 
@@ -94,6 +107,7 @@ func main() {
 	h := handler.NewPaymentHandler(svc, cfg.InternalAPIKey, cfg.WebhookCallbackTok)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
+	r.Use(sharedhttp.OTelMiddleware())
 	r.Use(sharedhttp.RequestLogger(logger))
 	r.Use(middleware.Recoverer)
 
@@ -122,4 +136,7 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 	_ = srv.Shutdown(shutdownCtx)
+	if err := shutdownTelemetry(shutdownCtx); err != nil {
+		logger.Error("failed to flush telemetry", "error", err)
+	}
 }

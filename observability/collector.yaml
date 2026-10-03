@@ -70,9 +70,18 @@ exporters:
   otlp_http:
     endpoint: http://loki:3100/otlp
 
+  # Traces produced by the services. Tempo is reached over the observability
+  # network, so its OTLP ports are never published to the host.
+  otlp_http/tempo:
+    endpoint: http://tempo:4318
+
 service:
   pipelines:
     logs:
       receivers: [otlp, file_log]
       processors: [memory_limiter, batch]
       exporters: [otlp_http]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/tempo]

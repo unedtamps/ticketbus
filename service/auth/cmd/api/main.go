@@ -13,6 +13,7 @@ import (
 	shareddb "github.com/nedo/TicketSaas/pkg/db"
 	sharedhttp "github.com/nedo/TicketSaas/pkg/http"
 	"github.com/nedo/TicketSaas/pkg/log"
+	"github.com/nedo/TicketSaas/pkg/telemetry"
 	"github.com/nedo/TicketSaas/service/auth/internal/application"
 	"github.com/nedo/TicketSaas/service/auth/internal/bcrypt"
 	"github.com/nedo/TicketSaas/service/auth/internal/config"
@@ -36,6 +37,18 @@ func main() {
 	}
 	if err := cfg.Validate(); err != nil {
 		logger.Error("invalid config", "error", err)
+		os.Exit(1)
+	}
+
+	// Before db.NewPool: the pgx tracer captures the global providers by
+	// reference and would stay a no-op if built first.
+	shutdownTelemetry, err := telemetry.Init(context.Background(), telemetry.Config{
+		ServiceName:    "auth-service",
+		ServiceVersion: "dev",
+		Environment:    cfg.AppEnv,
+	})
+	if err != nil {
+		logger.Error("failed to init telemetry", "error", err)
 		os.Exit(1)
 	}
 
@@ -96,6 +109,7 @@ func main() {
 	// Router
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
+	r.Use(sharedhttp.OTelMiddleware())
 	r.Use(sharedhttp.RequestLogger(logger))
 	r.Use(middleware.Recoverer)
 	r.Use(sharedhttp.WithUserContext)
@@ -124,4 +138,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
+	if err := shutdownTelemetry(ctx); err != nil {
+		logger.Error("failed to flush telemetry", "error", err)
+	}
 }

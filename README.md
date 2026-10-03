@@ -218,33 +218,93 @@ Notable values:
 | PostgreSQL auth | 5432 | `auth_db` |
 | PostgreSQL ticketing | 5433 | `ticketing_db` |
 | PostgreSQL payment | 5435 | `payment_db` |
+| Grafana (observability) | 3300 | http://localhost:3300 — `admin`/`admin` |
+| Tempo (trace query API) | 3200 | http://localhost:3200 |
+| Loki (log query API) | 3100 | http://localhost:3100 |
+| OTel collector OTLP | 4317 / 4318 | gRPC / HTTP, both published |
+
+Grafana is on **3300**, not 3000, because the Next.js dev server already binds 3000.
+The e2e stack offsets the observability ports (13200, 14318) so both stacks can run
+at once.
 
 OpenTelemetry metrics (replacing the former `/metrics` endpoint) are not wired up yet.
 
-## Observability (logs)
+## Observability
 
-Log aggregation runs on an [OpenTelemetry Collector](https://opentelemetry.io/) that
-tails the files written by the `dev-*` targets and ships them to Loki. **No application
-change is involved** — the services keep using `slog` exactly as before.
+An [OpenTelemetry Collector](https://opentelemetry.io/) sits in front of Tempo (traces)
+and Loki (logs), with Grafana on top for both.
 
 ```bash
-make obs-up      # collector + Loki + Grafana
+make obs-up      # collector + Tempo + Loki + Grafana
 make obs-status  # container status
 make obs-logs    # tail the stack
 make obs-down    # stop, keep data
-make obs-clean   # stop and delete the Loki/Grafana volumes
+make obs-clean   # stop and delete the Tempo/Loki/Grafana volumes
 ```
 
-Open Grafana at **http://localhost:3300** (`admin` / `admin`) → Explore → Loki, or query
-the API directly:
+| UI | URL | Credentials |
+|---|---|---|
+| Grafana | http://localhost:3300 | `admin` / `admin` |
+| Tempo | http://localhost:3200 | — |
+| Loki | http://localhost:3100 | — |
+
+### Traces
+
+Tracing is **off unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set** — with the variable
+unset the SDK installs no tracer provider and every span is a no-op, which keeps
+the test suites free of telemetry overhead. To enable it locally, add this to each
+`service/<svc>/cmd/api/.env`:
 
 ```bash
-curl -s 'http://localhost:3100/loki/api/v1/labels'
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 ```
 
-### How it works
+The e2e stack sets it for you. The standard `OTEL_*` variables are honoured
+throughout, so pointing at a hosted backend later needs no code change.
+
+A booking produces **two** traces, because the reservation and the payment
+webhook are separate inbound requests:
 
 ```
+POST /api/bookings/reserve          SERVER   ticketing-service
+├─ SELECT / INSERT / pool.acquire   CLIENT   postgres
+└─ POST /api/payments/internal      CLIENT   ticketing-service
+   └─ SERVER /api/payments/internal SERVER   payment-service
+      └─ SELECT / INSERT            CLIENT   postgres
+```
+
+```
+POST /api/payments/webhook          SERVER   payment-service
+└─ publish payment.completed        PRODUCER payment-service   ← parent restored from outbox.trace_context
+   └─ payment.completed process     CONSUMER ticketing-service
+      └─ UPDATE / INSERT            CLIENT   postgres
+      └─ publish ticket.issued      PRODUCER ticketing-service
+```
+
+The two are tied together by `booking_id` / `txn_id` span attributes rather than
+being one trace. `tests/e2e/trace_test.go` asserts both shapes, including the
+cross-service parent links.
+
+```bash
+# list recent traces, then dump one with its span/parent IDs per service
+curl -s -G localhost:3200/api/search --data-urlencode 'tags=service.name=payment-service'
+curl -s "localhost:3200/api/traces/<traceID>" | jq -r '
+  .batches[].scopeSpans[].spans[]
+  | "\(.name)\tspan=\(.spanId)\tparent=\(.parentSpanId)"'
+```
+
+Note: omit `start`/`end` on `/api/traces/<id>` — supplying a range restricts the
+search and can return a partial or missing trace.
+
+Every HTTP access log line carries the `trace_id` of its request, so Grafana's
+trace view can jump straight to the matching log lines.
+
+### Logs
+
+Log aggregation needs **no application change** — the services keep using `slog`
+and the collector tails the files written by the `dev-*` targets.
+
+```bash
 make dev-ticketing ──> logs/ticketing.log ──> collector (file_log) ──> Loki ──> Grafana
 ```
 
@@ -264,8 +324,11 @@ pipeline, not the selector:
 
 ### Known limitations
 
-- **No `trace_id` on log lines yet.** Logs reach Loki, but they are not correlated to
-  traces. That needs the `ctx`-carrying log call sites, which is deferred.
+- **`trace_id` reaches HTTP access logs, not every log line.** `RequestLogger` logs with
+  `InfoContext`, so each access log carries its request's `trace_id`. The other ~171
+  `slog` call sites use the non-`ctx` variants and therefore have no trace attached.
+  Application-level logs are still reachable from a trace via the `booking_id` /
+  `txn_id` span attributes.
 - **HTTP access logs are structured JSON.** `sharedhttp.RequestLogger` replaced chi's
   `middleware.Logger`, which wrote plain text the collector could not index. Each request
   now emits one slog line carrying `method`, `path` (the chi route pattern, so

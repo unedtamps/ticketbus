@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,6 +30,16 @@ func NewPool(dsn string) (*pgxpool.Pool, error) {
 	config.MinConns = 5
 	config.MaxConnLifetime = time.Hour
 	config.MaxConnIdleTime = time.Minute * 30
+
+	// Emits a CLIENT span per query (plus pool.acquire) so a slow handler can be
+	// attributed to the statement that caused it. otelpgx captures the global
+	// tracer provider by reference, so telemetry.Init must already have run.
+	// With no provider installed this is a no-op.
+	//
+	// Query parameters are deliberately not recorded: the repositories are fully
+	// parameterised, so db.query.text holds SQL text only and never leaks emails,
+	// token hashes or keys into spans.
+	config.ConnConfig.Tracer = otelpgx.NewTracer()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

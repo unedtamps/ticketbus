@@ -49,6 +49,11 @@ func (p *Producer) Produce(
 		Value: data,
 	}
 
+	// Carry the current trace into the message headers. Injecting is a no-op
+	// when there is no span in ctx, so producers that are not instrumented send
+	// plain messages.
+	injectContext(ctx, &msg.Headers)
+
 	if err := p.writer.WriteMessages(ctx, msg); err != nil {
 		return fmt.Errorf("failed to write kafka message to %s: %w", topic, err)
 	}
@@ -100,13 +105,18 @@ func NewConsumer(brokers []string, topic, groupID string, opts ...ConsumerOption
 
 // Message represents a consumed Kafka message.
 type Message struct {
-	Topic  string
-	Key    string
-	Value  []byte
-	Offset int64
+	Topic   string
+	Key     string
+	Value   []byte
+	Offset  int64
+	Headers []kafkago.Header
 }
 
 // Handler is a function that processes a Kafka message.
+//
+// The ctx passed in carries the CONSUMER span for this specific message, which
+// makes trace.SpanFromContext and logger.*Context calls work as expected. It is
+// derived per message rather than being the consumer's root context.
 type Handler func(ctx context.Context, msg Message) error
 
 // Consume starts consuming messages and passes them to the handler.
@@ -120,7 +130,15 @@ func (c *Consumer) Consume(ctx context.Context, handler Handler) error {
 		go func() {
 			defer wg.Done()
 			for msg := range jobs {
-				if err := handler(ctx, msg); err != nil {
+				// Derive the span per message: Extract() pulls out whatever the
+				// producer injected, so the handler continues that trace instead
+				// of starting an unrelated one under the consumer's root context.
+				msgCtx, span := startConsumerSpan(ctx, msg)
+				err := handler(msgCtx, msg)
+				recordConsumerError(span, err)
+				span.End()
+
+				if err != nil {
 					fmt.Printf("handler error for topic %s: %v\n", msg.Topic, err)
 				}
 			}
@@ -140,10 +158,11 @@ func (c *Consumer) Consume(ctx context.Context, handler Handler) error {
 
 		select {
 		case jobs <- Message{
-			Topic:  m.Topic,
-			Key:    string(m.Key),
-			Value:  m.Value,
-			Offset: m.Offset,
+			Topic:   m.Topic,
+			Key:     string(m.Key),
+			Value:   m.Value,
+			Offset:  m.Offset,
+			Headers: m.Headers,
 		}:
 		case <-ctx.Done():
 			close(jobs)

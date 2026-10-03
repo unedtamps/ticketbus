@@ -218,15 +218,17 @@ e2e: e2e-up
 obs-up:
 	@mkdir -p $(LOGS_DIR)
 	docker compose -f $(OBS_COMPOSE) up -d
-	@echo "==> waiting for loki"
-	@for i in $$(seq 1 30); do \
-		if curl -fsS http://localhost:3100/ready >/dev/null 2>&1; then \
-			echo "loki ready"; break; \
+	@echo "==> waiting for loki and tempo"
+	@for i in $$(seq 1 60); do \
+		if curl -fsS http://localhost:3100/ready >/dev/null 2>&1 \
+			&& curl -fsS http://localhost:3200/ready >/dev/null 2>&1; then \
+			echo "loki and tempo ready"; break; \
 		fi; \
-		if [ $$i -eq 30 ]; then echo "loki did not become ready"; exit 1; fi; \
+		if [ $$i -eq 60 ]; then echo "loki/tempo did not become ready"; exit 1; fi; \
 		sleep 1; \
 	done
 	@echo "grafana  http://localhost:3300  (admin/admin)"
+	@echo "tempo    http://localhost:3200"
 	@echo "loki     http://localhost:3100"
 
 obs-down:

@@ -1,0 +1,115 @@
+# Traefik dynamic configuration for the e2e stack (docker/docker-compose.e2e.yml).
+#
+# Identical routers, rules, priorities and middlewares as traefik/dynamic.yml.
+# The only difference is the upstream addresses: services are reached by compose
+# service name over e2e-net instead of host.docker.internal, because in the e2e
+# stack they run in containers rather than on the host.
+
+http:
+  middlewares:
+    cors:
+      headers:
+        accessControlAllowOriginList:
+          - http://localhost:3000
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - PATCH
+        accessControlAllowHeaders:
+          - Content-Type
+          - Authorization
+        accessControlAllowCredentials: true
+        accessControlMaxAge: 86400
+
+    ratelimit:
+      rateLimit:
+        average: 30000
+        period: 1m
+        burst: 6000
+
+    forward-auth:
+      forwardAuth:
+        address: http://auth:8081/api/auth/verify
+        authResponseHeaders:
+          - X-Authenticated-User-ID
+          - X-Authenticated-User-Role
+          - X-Authenticated-User-Email
+
+  services:
+    auth:
+      loadBalancer:
+        servers:
+          - url: http://auth:8081
+
+    ticketing:
+      loadBalancer:
+        servers:
+          - url: http://ticketing:8082
+
+    payment:
+      loadBalancer:
+        servers:
+          - url: http://payment:8083
+
+  routers:
+    auth:
+      rule: PathPrefix(`/api/auth`)
+      service: auth
+      middlewares:
+        - cors
+        - ratelimit
+      priority: 20
+
+    event-protected:
+      rule: PathPrefix(`/api/events`)
+      service: ticketing
+      middlewares:
+        - cors
+        - ratelimit
+        - forward-auth
+      priority: 10
+
+    event-public:
+      rule: PathPrefix(`/api/events`) && Method(`GET`) && !Path(`/api/events/mine`) && !Path(`/api/events/pending`) && !Path(`/api/events/organizers`) && !Path(`/api/events/organizers/me`)
+      service: ticketing
+      middlewares:
+        - cors
+        - ratelimit
+      priority: 20
+
+    bookings:
+      rule: PathPrefix(`/api/bookings`)
+      service: ticketing
+      middlewares:
+        - cors
+        - ratelimit
+        - forward-auth
+      priority: 20
+
+    payment-webhook:
+      rule: PathPrefix(`/api/payments/webhook`)
+      service: payment
+      middlewares:
+        - cors
+        - ratelimit
+      priority: 30
+
+    admin-events:
+      rule: PathPrefix(`/api/admin/events`)
+      service: ticketing
+      middlewares:
+        - cors
+        - ratelimit
+        - forward-auth
+      priority: 20
+
+    payments:
+      rule: PathPrefix(`/api/payments`) && !PathPrefix(`/api/payments/internal`) && !PathPrefix(`/api/payments/booking/mock`)
+      service: payment
+      middlewares:
+        - cors
+        - ratelimit
+        - forward-auth
+      priority: 20

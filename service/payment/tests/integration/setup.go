@@ -85,7 +85,7 @@ func startContainers() *TestEnv {
 
 	txnRepo := paypostgres.NewTransactionRepo(infra.Pool)
 	refundRepo := paypostgres.NewRefundRepo(infra.Pool)
-	mockProcessor := processor.NewMockProcessor("")
+	mockProcessor := processor.NewMockProcessor()
 	payConsumer := paykafka.NewPaymentConsumer(infra.Brokers, consumerGroup, 1)
 	payOutbox := outbox.NewStore(infra.Pool)
 
@@ -96,11 +96,6 @@ func startContainers() *TestEnv {
 
 	handler := payhandler.NewPaymentHandler(svc, internalKey, webhookToken)
 	srv := httptest.NewServer(handler.Routes())
-
-	// The mock processor delivers its webhook over HTTP, so it needs the
-	// server's address, which only exists once the server is listening.
-	mockProcessor.SetWebhookURL(srv.URL + "/api/payments/webhook")
-	mockProcessor.SetCallbackToken(webhookToken)
 
 	ctxBg, cancelBg := context.WithCancel(context.Background())
 

@@ -3,6 +3,7 @@ package kafka
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -157,13 +158,33 @@ func (c *Consumer) Close() error {
 	return c.reader.Close()
 }
 
-// EnsureTopics creates topics if they do not exist (best-effort for dev).
+// EnsureTopics creates topics if they do not exist.
+//
+// replicas is treated as an upper bound and clamped to the number of brokers
+// actually present in the cluster. A single-broker dev or test cluster would
+// otherwise reject every create with ErrInvalidReplicationFactor, leaving the
+// topic missing and its consumer silently starved of events.
+//
+// Already-exists is the only outcome swallowed. Every other error is returned so
+// the caller can fail startup instead of running with topics that were never
+// created.
 func EnsureTopics(brokers []string, topics []string, partitions, replicas int) error {
 	conn, err := kafkago.Dial("tcp", brokers[0])
 	if err != nil {
 		return fmt.Errorf("failed to dial kafka: %w", err)
 	}
 	defer conn.Close()
+
+	clusterBrokers, err := conn.Brokers()
+	if err != nil {
+		return fmt.Errorf("failed to list kafka brokers: %w", err)
+	}
+	if len(clusterBrokers) == 0 {
+		return fmt.Errorf("kafka cluster reported no live brokers, cannot create topics")
+	}
+	if replicas > len(clusterBrokers) {
+		replicas = len(clusterBrokers)
+	}
 
 	controller, err := conn.Controller()
 	if err != nil {
@@ -186,7 +207,10 @@ func EnsureTopics(brokers []string, topics []string, partitions, replicas int) e
 			ReplicationFactor: replicas,
 		}
 		if err := controllerConn.CreateTopics(topicConfig); err != nil {
-			fmt.Printf("topic %s may already exist: %v\n", topic, err)
+			if errors.Is(err, kafkago.TopicAlreadyExists) {
+				continue
+			}
+			return fmt.Errorf("failed to create topic %s: %w", topic, err)
 		}
 	}
 

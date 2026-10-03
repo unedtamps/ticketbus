@@ -1,12 +1,8 @@
 package processor
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -14,55 +10,24 @@ import (
 )
 
 // MockProcessor implements domain.PaymentProcessor with a simulated gateway.
-// It stores payment sessions in memory, exposes them via GetSession, and
-// fires a payment_session.expired webhook at the session deadline unless
-// suppressed (used to test the internal expiry poller).
+// It stores payment sessions in memory and exposes them via GetSession.
+//
+// It makes no outbound calls. Provider webhooks are delivered explicitly by
+// whoever drives the flow, so tests choose the exact event and observe the
+// result immediately instead of waiting on a timer.
 type MockProcessor struct {
-	webhookURL     string
-	callbackToken  string
-	httpClient     *http.Client
-
-	mu             sync.Mutex
-	sessions       map[string]*domain.SessionResult
-	timers         map[string]*time.Timer
-	suppressExpiry bool
+	mu       sync.Mutex
+	sessions map[string]*domain.SessionResult
 }
 
 // NewMockProcessor creates a new mock payment processor.
-func NewMockProcessor(webhookURL string) *MockProcessor {
+func NewMockProcessor() *MockProcessor {
 	return &MockProcessor{
-		webhookURL: strings.TrimSuffix(webhookURL, "/"),
-		httpClient: &http.Client{Timeout: 10 * time.Second},
-		sessions:   make(map[string]*domain.SessionResult),
-		timers:     make(map[string]*time.Timer),
+		sessions: make(map[string]*domain.SessionResult),
 	}
 }
 
-// SuppressExpiryWebhook disables the automatic expiry webhook (test helper).
-func (p *MockProcessor) SuppressExpiryWebhook(suppress bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.suppressExpiry = suppress
-}
-
-// SetWebhookURL updates the webhook endpoint (used once the test server URL
-// is known).
-func (p *MockProcessor) SetWebhookURL(url string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.webhookURL = strings.TrimSuffix(url, "/")
-}
-
-// SetCallbackToken sets the shared webhook verification token the processor
-// sends as the x-callback-token header.
-func (p *MockProcessor) SetCallbackToken(token string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.callbackToken = token
-}
-
-// CreateSession creates a simulated payment session and schedules the expiry
-// webhook at the session deadline.
+// CreateSession creates a simulated payment session.
 func (p *MockProcessor) CreateSession(
 	ctx context.Context,
 	refID string,
@@ -81,24 +46,15 @@ func (p *MockProcessor) CreateSession(
 
 	p.mu.Lock()
 	p.sessions[providerRef] = result
-	if !p.suppressExpiry {
-		p.timers[providerRef] = time.AfterFunc(time.Until(expiresAt), func() {
-			p.postWebhook("payment_session.expired", refID, providerRef)
-		})
-	}
 	p.mu.Unlock()
 
 	return result, nil
 }
 
-// CancelSession cancels the pending expiry timer.
+// CancelSession satisfies domain.PaymentProcessor. The mock has no gateway-side
+// session to close, so this is a no-op that keeps the stored session readable
+// through GetSession.
 func (p *MockProcessor) CancelSession(ctx context.Context, providerRef string) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if timer, ok := p.timers[providerRef]; ok {
-		timer.Stop()
-		delete(p.timers, providerRef)
-	}
 	return nil
 }
 
@@ -111,36 +67,4 @@ func (p *MockProcessor) GetSession(ctx context.Context, providerRef string) (*do
 		return nil, fmt.Errorf("mock session %s not found", providerRef)
 	}
 	return result, nil
-}
-
-// postWebhook simulates the gateway notifying our webhook endpoint.
-func (p *MockProcessor) postWebhook(event, referenceID, providerRef string) {
-	if p.webhookURL == "" {
-		return
-	}
-	status := "EXPIRED"
-	if event == "payment_session.completed" {
-		status = "COMPLETED"
-	}
-	body, _ := json.Marshal(map[string]interface{}{
-		"event": event,
-		"data": map[string]string{
-			"reference_id":       referenceID,
-			"payment_session_id": providerRef,
-			"status":             status,
-		},
-	})
-	req, err := http.NewRequest(http.MethodPost, p.webhookURL, bytes.NewReader(body))
-	if err != nil {
-		fmt.Printf("mock webhook request failed: %v\n", err)
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-callback-token", p.callbackToken)
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		fmt.Printf("mock webhook POST failed: %v\n", err)
-		return
-	}
-	defer resp.Body.Close()
 }

@@ -56,7 +56,7 @@ func main() {
 	case "mock":
 		fallthrough
 	default:
-		payProcessor = processor.NewMockProcessor(cfg.WebhookBaseURL)
+		payProcessor = processor.NewMockProcessor()
 	}
 
 	kafkaBrokers := strings.Split(cfg.KafkaBrokers, ",")

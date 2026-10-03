@@ -26,7 +26,7 @@ func (s *PaymentService) InitiateTxnForBooking(
 		UserID:        userID,
 		BookingID:     bookingID,
 		EventID:       eventID,
-		AmountRupiah:   amountRupiah,
+		AmountRupiah:  amountRupiah,
 		Currency:      "IDR",
 		Status:        domain.StatusInitiated,
 		Provider:      s.provider,

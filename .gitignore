@@ -4,6 +4,9 @@ bin/
 # Auto-generated JWT keys (dev mode)
 cmd/auth-service/keys/
 
+# Generated e2e stack signing keys (make e2e-keys)
+docker/e2e/keys/
+
 *.exe~
 *.dll
 *.so

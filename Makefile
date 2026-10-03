@@ -3,6 +3,7 @@
         build build-auth build-ticketing build-payment clean \
         migrate migrate-auth-up migrate-ticketing-up migrate-payment-up \
         test lint format direnv-allow integration-test integration-test-race \
+        e2e-keys e2e-up e2e-down e2e-status e2e-logs e2e \
         k6-smoke k6-load k6-stress
 
 # Pin the Go toolchain for all recipes. The locally installed go1.27.1-X build
@@ -10,6 +11,11 @@
 # (max v3), breaking mockery/golangci-lint/gopls. Released go1.26.4 writes v2.
 GOTOOLCHAIN ?= go1.26.4
 export GOTOOLCHAIN
+
+# End-to-end stack. Host ports are deliberately different from docker-compose.yml
+# so the e2e stack can run alongside `make dev`.
+E2E_COMPOSE := docker/docker-compose.e2e.yml
+E2E_KEYS    := docker/e2e/keys
 
 # Default target
 help:
@@ -39,6 +45,12 @@ help:
 	@echo "  make mocks                 Regenerate mockery mocks"
 	@echo "  make lint                  Run Go linter"
 	@echo "  make format                Format Go code"
+	@echo ""
+	@echo "  make e2e-up                Start the e2e stack (Traefik on :8100)"
+	@echo "  make e2e-down              Stop the e2e stack and delete its volumes"
+	@echo "  make e2e-status            Show e2e container status"
+	@echo "  make e2e-logs              Tail e2e logs"
+	@echo "  make e2e                   Start the e2e stack, run tests/e2e, tear it down"
 	@echo ""
 	@echo "  make k6-smoke              Run k6 smoke test (5 VUs, 1m)"
 	@echo "  make k6-load               Run k6 load test (50 VUs, 5m)"
@@ -131,6 +143,47 @@ docker-migrate-run-payment:
 	docker run --rm --network=host ticketbus/ticketbus-migrations payment "$(DATABASE_URL_PAYMENT)" up
 
 docker-migrate-run: docker-migrate-run-auth docker-migrate-run-ticketing docker-migrate-run-payment
+
+# End-to-end stack (docker/docker-compose.e2e.yml)
+# Brings up zookeeper, kafka, three postgres instances, runs all migrations,
+# starts auth/ticketing/payment, and puts Traefik in front on :8100 so tests can
+# exercise the real forward-auth gateway. Reuses docker/migrate.Dockerfile for
+# the one-shot migration steps.
+
+# e2e-keys generates the RSA keypair the auth service signs and verifies with.
+# Only auth needs it — ticketing and payment trust the X-Authenticated-* headers
+# Traefik injects, never a JWT — so the files stay inside the auth container via
+# an entrypoint that exports them. Idempotent.
+e2e-keys:
+	@mkdir -p $(E2E_KEYS)
+	@test -f $(E2E_KEYS)/jwt_private.pem || \
+		openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+			-out $(E2E_KEYS)/jwt_private.pem 2>/dev/null
+	@test -f $(E2E_KEYS)/jwt_public.pem || \
+		openssl pkey -in $(E2E_KEYS)/jwt_private.pem -pubout \
+			-out $(E2E_KEYS)/jwt_public.pem 2>/dev/null
+	@echo "e2e keys ready in $(E2E_KEYS)"
+
+e2e-up: e2e-keys
+	docker compose -f $(E2E_COMPOSE) up -d --build --wait
+
+e2e-down:
+	docker compose -f $(E2E_COMPOSE) down -v
+
+e2e-status:
+	docker compose -f $(E2E_COMPOSE) ps
+
+e2e-logs:
+	docker compose -f $(E2E_COMPOSE) logs -f
+
+# e2e brings the stack up, runs the black-box suite in tests/e2e, and always
+# tears the stack down again — preserving the test exit status.
+e2e: e2e-up
+	@go -C tests/e2e test -tags=e2e -count=1 -timeout 20m -v ./...; \
+	status=$$?; \
+	echo; echo "==> tearing down e2e stack"; \
+	$(MAKE) --no-print-directory e2e-down >/dev/null; \
+	exit $$status
 
 # Migrations. Each connection string is read from that service's .env through
 # direnv, so the .env stays the single source of truth and no URL is duplicated

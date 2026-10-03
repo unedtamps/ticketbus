@@ -1,0 +1,288 @@
+# End-to-end stack: infra -> migrations -> services -> Traefik gateway.
+#
+# Runs alongside the dev stack in docker-compose.yml, so every host port differs:
+# Traefik :8100 (dev uses :8000), Kafka :19092 (:9092), Postgres :15432/:15433/:15435
+# (:5432/:5433/:5435).
+#
+# Everything talks over the e2e-net network by service name, so the Traefik
+# config in traefik/e2e.yml addresses http://auth:8081 rather than
+# host.docker.internal. Only the auth service needs JWT keys — ticketing and
+# payment trust the X-Authenticated-* headers Traefik injects — so the keys are
+# mounted into the auth container and exported by its entrypoint.
+#
+# Usage: make e2e-up / make e2e-down (see Makefile).
+name: ticketsaas-e2e
+
+x-kafka-common: &kafka-common
+  image: confluentinc/cp-kafka:7.7.0
+  environment: &kafka-env
+    KAFKA_BROKER_ID: 1
+    KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+    KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:19092
+    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+    KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+    # Single broker, so replication factors must be 1 or topic creation fails
+    # with partitions that can never elect a leader.
+    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+    KAFKA_NUM_PARTITIONS: 1
+    KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+x-postgres-common: &postgres-common
+  image: postgres:16-alpine
+  environment: &postgres-env
+    POSTGRES_USER: ticketsaas
+    POSTGRES_PASSWORD: ticketsaas
+
+x-migrations-build: &migrations-build
+  context: ..
+  dockerfile: docker/migrate.Dockerfile
+
+x-service-build: &service-build
+  context: ..
+  dockerfile: docker/Dockerfile
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.7.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks: [e2e-net]
+
+  kafka:
+    <<: *kafka-common
+    container_name: e2e-kafka
+    ports:
+      - "19092:9092"
+    depends_on:
+      - zookeeper
+    healthcheck:
+      # Must bootstrap via the in-network advertised address. localhost:9092 is
+      # the container's own listener, but the broker advertises
+      # localhost:19092 (the host mapping), which is unreachable from inside.
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "kafka:29092", "--list"]
+      interval: 3s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    networks: [e2e-net]
+
+  postgres-auth:
+    <<: *postgres-common
+    container_name: e2e-postgres-auth
+    ports:
+      - "15432:5432"
+    environment:
+      <<: *postgres-env
+      POSTGRES_DB: auth_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticketsaas -d auth_db"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [e2e-net]
+
+  postgres-ticketing:
+    <<: *postgres-common
+    container_name: e2e-postgres-ticketing
+    ports:
+      - "15433:5432"
+    environment:
+      <<: *postgres-env
+      POSTGRES_DB: ticketing_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticketsaas -d ticketing_db"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [e2e-net]
+
+  postgres-payment:
+    <<: *postgres-common
+    container_name: e2e-postgres-payment
+    ports:
+      - "15435:5432"
+    environment:
+      <<: *postgres-env
+      POSTGRES_DB: payment_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticketsaas -d payment_db"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [e2e-net]
+
+  # One-shot migrations. The image's entrypoint takes <service> <database_url>
+  # <command>; compose `command` supplies those three arguments.
+  migrate-auth:
+    build: *migrations-build
+    image: ticketbus/e2e-migrations
+    container_name: e2e-migrate-auth
+    command:
+      - auth
+      - postgres://ticketsaas:ticketsaas@postgres-auth:5432/auth_db?sslmode=disable
+      - up
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+    networks: [e2e-net]
+
+  migrate-ticketing:
+    build: *migrations-build
+    image: ticketbus/e2e-migrations
+    container_name: e2e-migrate-ticketing
+    command:
+      - ticketing
+      - postgres://ticketsaas:ticketsaas@postgres-ticketing:5432/ticketing_db?sslmode=disable
+      - up
+    depends_on:
+      postgres-ticketing:
+        condition: service_healthy
+    networks: [e2e-net]
+
+  migrate-payment:
+    build: *migrations-build
+    image: ticketbus/e2e-migrations
+    container_name: e2e-migrate-payment
+    command:
+      - payment
+      - postgres://ticketsaas:ticketsaas@postgres-payment:5432/payment_db?sslmode=disable
+      - up
+    depends_on:
+      postgres-payment:
+        condition: service_healthy
+    networks: [e2e-net]
+
+  auth:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: auth
+    image: ticketbus/e2e-auth
+    container_name: e2e-auth
+    ports:
+      - "18081:8081"
+    volumes:
+      - ./e2e/keys:/run/keys:ro
+    # A PEM key is multi-line and Docker passes env values verbatim, so the
+    # escaped \n form in a .env file would not survive. Read the files instead.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        export JWT_PRIVATE_KEY="$$(cat /run/keys/jwt_private.pem)"
+        export JWT_PUBLIC_KEY="$$(cat /run/keys/jwt_public.pem)"
+        exec /app/server
+    environment:
+      APP_ENV: e2e
+      PORT: "8081"
+      DATABASE_URL: postgres://ticketsaas:ticketsaas@postgres-auth:5432/auth_db?sslmode=disable
+      ADMIN_SEEDS: '[{"email":"admin@test.com","password":"Admin123!","name":"Admin"}]'
+    depends_on:
+      migrate-auth:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/api/auth/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+    networks: [e2e-net]
+
+  ticketing:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: ticketing
+    image: ticketbus/e2e-ticketing
+    container_name: e2e-ticketing
+    ports:
+      - "18082:8082"
+    environment:
+      APP_ENV: e2e
+      PORT: "8082"
+      DATABASE_URL: postgres://ticketsaas:ticketsaas@postgres-ticketing:5432/ticketing_db?sslmode=disable
+      KAFKA_BROKERS: kafka:29092
+      RESERVATION_TTL: "3600"
+      CONSUMER_CONCURRENCY: "1"
+      OUTBOX_CONCURRENCY: "1"
+      OUTBOX_POLL_MS: "200"
+      PAYMENT_SERVICE_URL: http://payment:8083
+      PAYMENT_TIMEOUT_SEC: "5"
+      INTERNAL_API_KEY: e2e-internal-key
+    depends_on:
+      migrate-ticketing:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/api/events/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+    networks: [e2e-net]
+
+  payment:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: payment
+    image: ticketbus/e2e-payment
+    container_name: e2e-payment
+    ports:
+      - "18083:8083"
+    environment:
+      APP_ENV: e2e
+      PORT: "8083"
+      DATABASE_URL: postgres://ticketsaas:ticketsaas@postgres-payment:5432/payment_db?sslmode=disable
+      KAFKA_BROKERS: kafka:29092
+      # Routed back through Traefik, exactly as dev does, so the mock gateway
+      # exercises the real webhook router instead of calling itself.
+      WEBHOOK_BASE_URL: http://traefik:8000/api/payments/webhook
+      CONSUMER_CONCURRENCY: "1"
+      OUTBOX_CONCURRENCY: "1"
+      OUTBOX_POLL_MS: "200"
+      PROVIDER: mock
+      XENDIT_BASE_URL: https://api.xendit.co
+      WEBHOOK_CALLBACK_TOKEN: e2e-callback-token
+      INTERNAL_API_KEY: e2e-internal-key
+      GATEWAY_EXPIRY_BUFFER_MIN: "5"
+      EXPIRY_POLL_SEC: "1"
+      PAYMENT_METHODS: ID_QRIS,ID_BCA_VA
+    depends_on:
+      migrate-payment:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/api/payments/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+    networks: [e2e-net]
+
+  traefik:
+    image: traefik:v3.3
+    container_name: e2e-traefik
+    ports:
+      - "8100:8000"
+      - "8185:8085"
+    volumes:
+      - ../traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ../traefik/e2e.yml:/etc/traefik/dynamic/e2e.yml:ro
+    depends_on:
+      auth:
+        condition: service_healthy
+      ticketing:
+        condition: service_healthy
+      payment:
+        condition: service_healthy
+    networks: [e2e-net]
+
+networks:
+  e2e-net:
+    driver: bridge

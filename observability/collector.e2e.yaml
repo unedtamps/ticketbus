@@ -24,9 +24,19 @@ exporters:
   otlp_http/tempo:
     endpoint: http://tempo:4318
 
+  # The e2e services export metrics too, and a receiver with no metrics pipeline
+  # logs an error on every export. Nothing here asserts on metrics, so they are
+  # routed to the debug exporter rather than to a scrape endpoint nobody reads.
+  debug:
+    verbosity: basic
+
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
       exporters: [otlp_http/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]

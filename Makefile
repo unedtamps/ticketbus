@@ -59,9 +59,9 @@ help:
 	@echo "  make e2e-logs              Tail e2e logs"
 	@echo "  make e2e                   Start the e2e stack, run tests/e2e, tear it down"
 	@echo ""
-	@echo "  make obs-up                Start collector + Loki + Grafana (logs only)"
+	@echo "  make obs-up                Start collector + Tempo + Loki + Prometheus + Grafana"
 	@echo "  make obs-down              Stop the observability stack"
-	@echo "  make obs-clean             Stop it and delete the Loki/Grafana volumes"
+	@echo "  make obs-clean             Stop it and delete the Tempo/Loki/Prometheus/Grafana volumes"
 	@echo "  make obs-status            Show observability container status"
 	@echo "  make obs-logs              Tail collector / Loki / Grafana logs"
 	@echo ""
@@ -218,18 +218,20 @@ e2e: e2e-up
 obs-up:
 	@mkdir -p $(LOGS_DIR)
 	docker compose -f $(OBS_COMPOSE) up -d
-	@echo "==> waiting for loki and tempo"
-	@for i in $$(seq 1 60); do \
+	@echo "==> waiting for loki, tempo and prometheus"
+	@for i in $$(seq 1 90); do \
 		if curl -fsS http://localhost:3100/ready >/dev/null 2>&1 \
-			&& curl -fsS http://localhost:3200/ready >/dev/null 2>&1; then \
-			echo "loki and tempo ready"; break; \
+			&& curl -fsS http://localhost:3200/ready >/dev/null 2>&1 \
+			&& curl -fsS http://localhost:9097/-/ready >/dev/null 2>&1; then \
+			echo "loki, tempo and prometheus ready"; break; \
 		fi; \
-		if [ $$i -eq 60 ]; then echo "loki/tempo did not become ready"; exit 1; fi; \
+		if [ $$i -eq 90 ]; then echo "a backend did not become ready"; exit 1; fi; \
 		sleep 1; \
 	done
-	@echo "grafana  http://localhost:3300  (admin/admin)"
-	@echo "tempo    http://localhost:3200"
-	@echo "loki     http://localhost:3100"
+	@echo "grafana      http://localhost:3300  (admin/admin)"
+	@echo "prometheus   http://localhost:9097"
+	@echo "tempo        http://localhost:3200"
+	@echo "loki         http://localhost:3100"
 
 obs-down:
 	docker compose -f $(OBS_COMPOSE) down

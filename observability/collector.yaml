@@ -1,12 +1,8 @@
-# OpenTelemetry Collector — logs pipeline only (phase 1a).
+# OpenTelemetry Collector — the single ingest point for all three signals.
 #
-# Dev services run as host processes via `make dev-*`, which tee their slog JSON
-# output into logs/<service>.log. The collector tails those files instead of
-# listening to the apps, so no Go change is required.
-#
-# The `otlp` receiver is declared but not wired to the logs pipeline yet; it is
-# here so later phases (traces, HTTP metrics) can push to it without editing
-# this file's receiver list.
+# Logs come from two places: dev services run as host processes via `make dev-*`
+# and tee their slog JSON into logs/<service>.log, which `file_log` tails, and
+# anything that speaks OTLP logs. Traces and metrics arrive over OTLP only.
 #
 # Adding Docker container logs (infra + the e2e stack) is deliberately left out
 # for now — that needs a root-only bind mount, so it is a separate step.
@@ -75,6 +71,23 @@ exporters:
   otlp_http/tempo:
     endpoint: http://tempo:4318
 
+  # Metrics are exposed for Prometheus to scrape. All three services share this
+  # one endpoint, so service.name has to survive as a label — without it the
+  # series from auth, ticketing and payment would be indistinguishable.
+  #
+  # Port 9464 is deliberately not published to the host: Prometheus reaches it
+  # over the observability network, so there is no reason to expose it on the
+  # developer's machine.
+  prometheus:
+    endpoint: 0.0.0.0:9464
+    # Pinned rather than left to the default so the names in the README's PromQL
+    # examples cannot drift: dots become underscores and unit/type suffixes are
+    # appended, giving http_server_request_duration_seconds and
+    # http_server_request_count_total.
+    translation_strategy: UnderscoreEscapingWithSuffixes
+    resource_constant_labels:
+      included: ["*"]
+
 service:
   pipelines:
     logs:
@@ -85,3 +98,7 @@ service:
       receivers: [otlp]
       processors: [memory_limiter, batch]
       exporters: [otlp_http/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]

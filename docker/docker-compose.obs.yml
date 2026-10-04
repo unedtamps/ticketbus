@@ -50,6 +50,19 @@ services:
       # stay on the observability network for the collector to use.
       - "3200:3200"
 
+  prometheus:
+    image: prom/prometheus:v3.13.2
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=6h
+      - --web.enable-lifecycle
+    volumes:
+      - ../observability/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9097:9090"
+
   grafana:
     image: grafana/grafana:13.2.3
     environment:
@@ -66,6 +79,7 @@ services:
       - "3300:3000"
 
 volumes:
+  prometheus-data:
   loki-data:
   tempo-data:
   grafana-data:

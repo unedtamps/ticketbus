@@ -219,6 +219,8 @@ Notable values:
 | PostgreSQL ticketing | 5433 | `ticketing_db` |
 | PostgreSQL payment | 5435 | `payment_db` |
 | Grafana (observability) | 3300 | http://localhost:3300 — `admin`/`admin` |
+| Prometheus | 9097 | http://localhost:9097 |
+| Collector metrics endpoint | 9464 | scraped by Prometheus |
 | Tempo (trace query API) | 3200 | http://localhost:3200 |
 | Loki (log query API) | 3100 | http://localhost:3100 |
 | OTel collector OTLP | 4317 / 4318 | gRPC / HTTP, both published |
@@ -298,6 +300,55 @@ search and can return a partial or missing trace.
 
 Every HTTP access log line carries the `trace_id` of its request, so Grafana's
 trace view can jump straight to the matching log lines.
+
+### Metrics
+
+RED metrics only — HTTP and PostgreSQL. No business counters.
+
+`OTEL_EXPORTER_OTLP_ENDPOINT` enables traces **and** metrics; there is no second
+switch. Metrics follow the same path as traces to the collector, which exposes
+them on `:9464` for Prometheus to scrape, so adding a different metrics backend
+later is a collector change rather than an application change.
+
+| Metric | Source | Type |
+|---|---|---|
+| `http.server.request.count` | this repo | counter — `{method, route, status}` |
+| `http.server.active_requests` | this repo | up-down counter |
+| `http.server.request.duration` | otelhttp | histogram |
+| `http.client.request.duration` | otelhttp | histogram |
+| `db.client.operation.duration` | otelpgx | histogram |
+| `db.client.operation.errors` | otelpgx | counter |
+
+The request counter and the in-flight gauge are written by hand because
+otelhttp v0.72 emits neither — it only produces duration and body-size
+histograms. Without the counter there would be no rate and no error rate.
+
+```promql
+# p95 latency per service
+histogram_quantile(0.95, sum by (le, service_name) (rate(http_server_request_duration_seconds_bucket[5m])))
+
+# request rate by route
+sum by (service_name, http_route) (rate(http_server_request_count_total[5m]))
+
+# error rate
+sum by (service_name) (rate(http_server_request_count_total{http_response_status_code=~"5.."}[5m]))
+
+# saturation
+sum by (service_name) (http_server_active_requests)
+
+# database p95 and error rate
+histogram_quantile(0.95, sum by (le, service_name) (rate(db_client_operation_duration_seconds_bucket[5m])))
+sum by (service_name) (rate(db_client_operation_errors_total[5m]))
+```
+
+Histogram bucket boundaries are pinned with SDK **Views**, not with the
+instrument's own `WithExplicitBucketBoundaries`, which OpenTelemetry documents as
+advisory and allows implementations to ignore. Body-size histograms are dropped
+on purpose: every payload here is fixed-shape JSON of a couple hundred bytes, so
+those buckets would collapse into the lowest one. See `pkg/telemetry/views.go`.
+
+`service.name` is kept on every series. All three services share one collector
+endpoint, so without it their metrics could not be told apart.
 
 ### Logs
 

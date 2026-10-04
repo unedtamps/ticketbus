@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -21,7 +22,18 @@ import (
 // The logged path comes from chi's route pattern rather than the raw URL, so a
 // per-entity route such as /api/bookings/{id} stays one low-cardinality value
 // instead of one per identifier.
-func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
+// metrics is the subset of telemetry this middleware needs, declared here so
+// pkg/http does not depend on pkg/telemetry. A nil HTTPMetrics satisfies it.
+type metrics interface {
+	Started(ctx context.Context)
+	Unstarted(ctx context.Context)
+	Observed(ctx context.Context, method, route string, status int)
+}
+
+// RequestLogger emits one structured JSON line per HTTP request and records the
+// RED instruments. metrics may be nil, in which case nothing is recorded — that
+// is the case whenever no meter provider is installed.
+func RequestLogger(logger *slog.Logger, m metrics) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -29,6 +41,11 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			// http.Flusher and http.Hijacker intact, which a hand-rolled
 			// ResponseWriter wrapper silently breaks.
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+
+			// In-flight is incremented for every request, health checks included:
+			// it measures saturation, which health polling is part of.
+			m.Started(r.Context())
+			defer m.Unstarted(r.Context())
 
 			next.ServeHTTP(ww, r)
 
@@ -47,6 +64,8 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			if strings.HasSuffix(path, "/health") {
 				return
 			}
+
+			m.Observed(r.Context(), r.Method, path, ww.Status())
 
 			logger.InfoContext(r.Context(), "http request",
 				"method", r.Method,

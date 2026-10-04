@@ -42,7 +42,7 @@ func main() {
 
 	// Before db.NewPool: the pgx tracer captures the global providers by
 	// reference and would stay a no-op if built first.
-	shutdownTelemetry, err := telemetry.Init(context.Background(), telemetry.Config{
+	shutdownTelemetry, httpMetrics, err := telemetry.Init(context.Background(), telemetry.Config{
 		ServiceName:    "auth-service",
 		ServiceVersion: "dev",
 		Environment:    cfg.AppEnv,
@@ -110,7 +110,7 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(sharedhttp.OTelMiddleware())
-	r.Use(sharedhttp.RequestLogger(logger))
+	r.Use(sharedhttp.RequestLogger(logger, httpMetrics))
 	r.Use(middleware.Recoverer)
 	r.Use(sharedhttp.WithUserContext)
 

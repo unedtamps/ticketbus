@@ -4,9 +4,9 @@
 # HTTP API (see the Observability section of the README) and the Grafana
 # datasource.
 #
-# Everything is in-memory / on-disk local: no object store, no compaction
-# tuning beyond a short retention, because this only has to survive a dev
-# session.
+# Everything is in-memory / on-disk local: no object store. Blocks live on the
+# tempo-data volume, so traces survive restarts, and the compactor merges them
+# into hourly blocks, so a 24h retention stays cheap on disk.
 
 stream_over_http_enabled: true
 
@@ -24,18 +24,37 @@ distributor:
           endpoint: 0.0.0.0:4317
 
 ingester:
-  # Flush to the backend quickly so traces become searchable almost
-  # immediately; an E2E assertion polls for them right after a booking.
-  max_block_duration: 1m
-  complete_block_timeout: 1m
+  # Head blocks are held for 5m so a trace stays searchable straight from the
+  # ingester for far longer than the worst-case block-discovery lag
+  # (2 x storage.trace.blocklist_poll = 1m). At 1m a trace left the ingester
+  # after ~2m, before its flushed block was discoverable, so Grafana showed
+  # recent traces disappearing minutes after they appeared.
+  max_block_duration: 5m
+  complete_block_timeout: 5m
 
 compactor:
   compaction:
-    block_retention: 1h
+    # A full dev day of traces. compacted_block_retention must be >= 2x
+    # blocklist_poll, which it comfortably is.
+    block_retention: 24h
+    compacted_block_retention: 24h
+
+query_frontend:
+  search:
+    # A query whose range is newer than this is served from the ingester only,
+    # an older one from backend blocks. Must be at least twice blocklist_poll,
+    # otherwise the frontend looks in the backend before the querier's blocklist
+    # knows the block exists.
+    query_backend_after: 2m
 
 storage:
   trace:
     backend: local
+    # Queriers never scan the backend per request; a background poller keeps
+    # their in-memory blocklist fresh, so a block is invisible for up to
+    # 2 x this interval after it is written. At the 5m default a trace vanished
+    # for up to 10 minutes the moment its head block was flushed.
+    blocklist_poll: 30s
     wal:
       path: /var/tempo/wal
     local:

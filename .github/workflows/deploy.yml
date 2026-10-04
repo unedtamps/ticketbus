@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [auth, payment]
+        service: [auth, ticketing, payment]
     steps:
       - uses: actions/checkout@v4
         with:

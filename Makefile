@@ -70,7 +70,7 @@ dev-payment:
 	direnv exec cmd/payment-service go run ./cmd/payment-service
 
 dev-web:
-	npx turbo run dev
+	pnpm run dev
 
 direnv-allow:
 	direnv allow cmd/auth-service

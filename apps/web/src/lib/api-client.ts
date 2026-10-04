@@ -50,7 +50,8 @@ class ApiClient {
       if (data.access_token) {
         localStorage.setItem("access_token", data.access_token as string);
         setAccessTokenCookie(data.access_token as string);
-        if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token as string);
+        if (data.refresh_token)
+          localStorage.setItem("refresh_token", data.refresh_token as string);
         return true;
       }
       return false;
@@ -66,11 +67,15 @@ class ApiClient {
     window.dispatchEvent(new CustomEvent("auth:expired"));
   }
 
-  private async readJSON(res: Response): Promise<Record<string, unknown> | null> {
+  private async readJSON(
+    res: Response,
+  ): Promise<Record<string, unknown> | null> {
     const contentType = res.headers.get("content-type") || "";
     if (!contentType.includes("application/json")) {
       const text = await res.text().catch(() => "");
-      toast.error("Server returned an unexpected response. Check console for details.");
+      toast.error(
+        "Server returned an unexpected response. Check console for details.",
+      );
       console.error(`Non-JSON response from ${res.url}:`, text.slice(0, 500));
       return null;
     }
@@ -81,7 +86,11 @@ class ApiClient {
     }
   }
 
-  private async request<T>(path: string, options: RequestInit = {}, retry = true): Promise<T> {
+  private async request<T>(
+    path: string,
+    options: RequestInit = {},
+    retry = true,
+  ): Promise<T> {
     const token = this.getToken();
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -106,16 +115,31 @@ class ApiClient {
     }
 
     if (!res.ok) {
-      const errMsg = json?.error || json?.message || `Server error (${res.status})`;
+      const errMsg =
+        json?.error || json?.message || `Server error (${res.status})`;
       throw new Error(String(errMsg));
     }
     return json?.data !== undefined ? (json.data as T) : (json as unknown as T);
   }
 
-  get<T>(path: string) { return this.request<T>(path); }
-  post<T>(path: string, body?: unknown) { return this.request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }); }
-  put<T>(path: string, body?: unknown) { return this.request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }); }
-  delete<T>(path: string) { return this.request<T>(path, { method: "DELETE" }); }
+  get<T>(path: string) {
+    return this.request<T>(path);
+  }
+  post<T>(path: string, body?: unknown) {
+    return this.request<T>(path, {
+      method: "POST",
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+  put<T>(path: string, body?: unknown) {
+    return this.request<T>(path, {
+      method: "PUT",
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+  delete<T>(path: string) {
+    return this.request<T>(path, { method: "DELETE" });
+  }
 }
 
 export const api = new ApiClient();

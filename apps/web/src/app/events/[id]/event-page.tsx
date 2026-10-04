@@ -7,7 +7,17 @@ import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Calendar, MapPin, Users, Clock, Ticket as TicketIcon, ArrowRight, ChevronLeft, Loader2, X } from "lucide-react";
+import {
+  Calendar,
+  MapPin,
+  Users,
+  Clock,
+  Ticket as TicketIcon,
+  ArrowRight,
+  ChevronLeft,
+  Loader2,
+  X,
+} from "lucide-react";
 import { fmtDateTime, fmtIDR, fmtTime } from "@/lib/format";
 import type { EventDetail, ReservationResponse } from "@/types";
 
@@ -22,7 +32,9 @@ export default function EventPage() {
   const [phase, setPhase] = useState<Phase>("selection");
   const [confirming, setConfirming] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const [selectedTickets, setSelectedTickets] = useState<Record<string, number>>({});
+  const [selectedTickets, setSelectedTickets] = useState<
+    Record<string, number>
+  >({});
 
   const eventQuery = useQuery({
     queryKey: ["event", id],
@@ -31,8 +43,17 @@ export default function EventPage() {
   });
 
   const reserveMutation = useMutation({
-    mutationFn: (items: { ticket_type_id: string; quantity: number; unit_price_rupiah: number }[]) =>
-      api.post<ReservationResponse>("/api/bookings/reserve", { event_id: id, items }),
+    mutationFn: (
+      items: {
+        ticket_type_id: string;
+        quantity: number;
+        unit_price_rupiah: number;
+      }[],
+    ) =>
+      api.post<ReservationResponse>("/api/bookings/reserve", {
+        event_id: id,
+        items,
+      }),
     onSuccess: (data) => {
       router.push("/checkout/" + data.booking_id);
     },
@@ -42,13 +63,13 @@ export default function EventPage() {
   });
 
   const event = eventQuery.data;
-  const hasSelection = Object.values(selectedTickets).some(q => q > 0);
+  const hasSelection = Object.values(selectedTickets).some((q) => q > 0);
 
   function getOrderItems() {
     return Object.entries(selectedTickets)
       .filter(([, qty]) => qty > 0)
       .map(([ticketTypeId, qty]) => {
-        const tt = event?.ticket_types.find(t => t.id === ticketTypeId);
+        const tt = event?.ticket_types.find((t) => t.id === ticketTypeId);
         return {
           ticket_type_id: ticketTypeId,
           name: tt?.name || "",
@@ -59,15 +80,23 @@ export default function EventPage() {
   }
 
   const orderItems = getOrderItems();
-  const orderTotal = orderItems.reduce((sum, item) => sum + item.unit_price_rupiah * item.quantity, 0);
+  const orderTotal = orderItems.reduce(
+    (sum, item) => sum + item.unit_price_rupiah * item.quantity,
+    0,
+  );
 
   function handleCheckout() {
-    if (!user) { router.push("/login"); return; }
-    reserveMutation.mutate(orderItems.map(i => ({
-      ticket_type_id: i.ticket_type_id,
-      quantity: i.quantity,
-      unit_price_rupiah: i.unit_price_rupiah,
-    })));
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+    reserveMutation.mutate(
+      orderItems.map((i) => ({
+        ticket_type_id: i.ticket_type_id,
+        quantity: i.quantity,
+        unit_price_rupiah: i.unit_price_rupiah,
+      })),
+    );
   }
   if (eventQuery.isLoading) {
     return (
@@ -75,7 +104,11 @@ export default function EventPage() {
         <div className="skeleton h-10 w-3/4" />
         <div className="skeleton h-5 w-1/2" />
         <div className="skeleton h-40 w-full" />
-        <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="skeleton h-20" />)}</div>
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="skeleton h-20" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -93,10 +126,14 @@ export default function EventPage() {
     <div className="max-w-2xl mx-auto">
       {/* Hero */}
       <div className="card-stub mb-6">
-        <span className={`badge mb-3 ${event.event.status === "published" ? "badge-green" : "badge-yellow"}`}>
+        <span
+          className={`badge mb-3 ${event.event.status === "published" ? "badge-green" : "badge-yellow"}`}
+        >
           {event.event.status}
         </span>
-        <h1 className="font-[family-name:var(--font-display)] text-2xl text-[#1A1817] mb-3">{event.event.title}</h1>
+        <h1 className="font-[family-name:var(--font-display)] text-2xl text-[#1A1817] mb-3">
+          {event.event.title}
+        </h1>
         <p className="text-[#8B8580] text-sm mb-4">{event.event.description}</p>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="flex items-center gap-2 text-[#4A4541]">
@@ -105,11 +142,19 @@ export default function EventPage() {
           </div>
           <div className="flex items-center gap-2 text-[#4A4541]">
             <Clock className="w-4 h-4 text-[#B0A89E]" />
-            <span>{fmtTime(event.event.start_at)} &mdash; {fmtTime(event.event.end_at)}</span>
+            <span>
+              {fmtTime(event.event.start_at)} &mdash;{" "}
+              {fmtTime(event.event.end_at)}
+            </span>
           </div>
           <div className="flex items-center gap-2 text-[#4A4541]">
             <MapPin className="w-4 h-4 text-[#B0A89E]" />
-            <span>{event.event.venue_name}{event.event.venue_address ? `, ${event.event.venue_address}` : ""}</span>
+            <span>
+              {event.event.venue_name}
+              {event.event.venue_address
+                ? `, ${event.event.venue_address}`
+                : ""}
+            </span>
           </div>
           <div className="flex items-center gap-2 text-[#4A4541]">
             <Users className="w-4 h-4 text-[#B0A89E]" />
@@ -123,16 +168,23 @@ export default function EventPage() {
             Tickets Available
           </p>
           <div className="flex flex-wrap gap-2">
-            {event.ticket_types.map(tt => {
+            {event.ticket_types.map((tt) => {
               const soldOut = tt.available === 0;
               return (
-                <div key={tt.id}
+                <div
+                  key={tt.id}
                   className={`rounded-md px-3 py-2 min-w-[100px] ${
-                    soldOut ? "bg-[#F5F2EC] opacity-60" : "bg-[#FEFBF6] border border-[#E8E3DC]"
+                    soldOut
+                      ? "bg-[#F5F2EC] opacity-60"
+                      : "bg-[#FEFBF6] border border-[#E8E3DC]"
                   }`}
                 >
-                  <p className="text-xs font-semibold text-[#1A1817]">{tt.name}</p>
-                  <p className="text-xs text-[#D9381E] font-medium">{fmtIDR(tt.price_rupiah)}</p>
+                  <p className="text-xs font-semibold text-[#1A1817]">
+                    {tt.name}
+                  </p>
+                  <p className="text-xs text-[#D9381E] font-medium">
+                    {fmtIDR(tt.price_rupiah)}
+                  </p>
                   <p className="text-[0.6rem] text-[#B0A89E]">
                     {soldOut ? "Sold out" : `${tt.available} left`}
                   </p>
@@ -145,7 +197,9 @@ export default function EventPage() {
 
       {(isEO || isAdmin) && (
         <div className="card text-center py-6">
-          <p className="text-sm text-[#8B8580] mb-4">Organizers cannot purchase tickets.</p>
+          <p className="text-sm text-[#8B8580] mb-4">
+            Organizers cannot purchase tickets.
+          </p>
           {isEO && event?.event.status === "published" && (
             <button
               onClick={() => setCancelling(true)}
@@ -159,42 +213,69 @@ export default function EventPage() {
       )}
 
       {/* Phase: Selection */}
-      {(!isEO && !isAdmin) && phase === "selection" && (
+      {!isEO && !isAdmin && phase === "selection" && (
         <>
           <div className="card">
-            <h2 className="font-[family-name:var(--font-display)] text-lg text-[#1A1817] mb-4">Tickets</h2>
+            <h2 className="font-[family-name:var(--font-display)] text-lg text-[#1A1817] mb-4">
+              Tickets
+            </h2>
             <div className="space-y-3">
-              {event.ticket_types.map(tt => {
+              {event.ticket_types.map((tt) => {
                 const soldCount = tt.quantity - tt.available;
-                const soldPercent = tt.quantity > 0 ? Math.round((soldCount / tt.quantity) * 100) : 0;
+                const soldPercent =
+                  tt.quantity > 0
+                    ? Math.round((soldCount / tt.quantity) * 100)
+                    : 0;
                 const isLowStock = tt.available > 0 && tt.available < 5;
                 const isSoldOut = tt.available === 0;
 
                 return (
-                  <div key={tt.id} className="border border-dashed border-[#E8E3DC] rounded-md p-4 space-y-3">
+                  <div
+                    key={tt.id}
+                    className="border border-dashed border-[#E8E3DC] rounded-md p-4 space-y-3"
+                  >
                     <div className="flex items-start justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-[#1A1817]">{tt.name}</p>
+                        <p className="text-sm font-semibold text-[#1A1817]">
+                          {tt.name}
+                        </p>
                         <p className="font-[family-name:var(--font-display)] text-xl text-[#1A1817] mt-0.5">
                           {fmtIDR(tt.price_rupiah)}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
                         {isLowStock && (
-                          <span className="badge badge-red text-[0.6rem]">Only {tt.available} left!</span>
+                          <span className="badge badge-red text-[0.6rem]">
+                            Only {tt.available} left!
+                          </span>
                         )}
                         {isSoldOut && (
-                          <span className="badge badge-ink text-[0.6rem]">Sold out</span>
+                          <span className="badge badge-ink text-[0.6rem]">
+                            Sold out
+                          </span>
                         )}
                         <select
                           value={selectedTickets[tt.id] || 0}
-                          onChange={e => setSelectedTickets(p => ({ ...p, [tt.id]: parseInt(e.target.value) || 0 }))}
+                          onChange={(e) =>
+                            setSelectedTickets((p) => ({
+                              ...p,
+                              [tt.id]: parseInt(e.target.value) || 0,
+                            }))
+                          }
                           disabled={isSoldOut}
                           className="input-field w-auto text-sm"
                         >
-                          {Array.from({ length: Math.min(tt.max_per_order, tt.available) + 1 }, (_, i) => (
-                            <option key={i} value={i}>{i}</option>
-                          ))}
+                          {Array.from(
+                            {
+                              length:
+                                Math.min(tt.max_per_order, tt.available) + 1,
+                            },
+                            (_, i) => (
+                              <option key={i} value={i}>
+                                {i}
+                              </option>
+                            ),
+                          )}
                         </select>
                       </div>
                     </div>
@@ -203,7 +284,9 @@ export default function EventPage() {
                     <div className="space-y-1">
                       <div className="flex justify-between text-[0.65rem] text-[#B0A89E]">
                         <span>{soldPercent}% sold</span>
-                        <span>{tt.available} of {tt.quantity} left</span>
+                        <span>
+                          {tt.available} of {tt.quantity} left
+                        </span>
                       </div>
                       <div className="w-full h-1.5 rounded-full bg-[#F0EDE6] overflow-hidden">
                         <div
@@ -236,24 +319,39 @@ export default function EventPage() {
       {phase === "summary" && (
         <>
           <div className="card space-y-4">
-            <h2 className="font-[family-name:var(--font-display)] text-lg text-[#1A1817]">Order Summary</h2>
+            <h2 className="font-[family-name:var(--font-display)] text-lg text-[#1A1817]">
+              Order Summary
+            </h2>
             <div className="space-y-2">
-              {orderItems.map(item => (
-                <div key={item.ticket_type_id} className="flex justify-between text-sm">
+              {orderItems.map((item) => (
+                <div
+                  key={item.ticket_type_id}
+                  className="flex justify-between text-sm"
+                >
                   <span className="text-[#4A4541]">
-                    {item.name} <span className="text-[#B0A89E]">{item.quantity} &times; {fmtIDR(item.unit_price_rupiah)}</span>
+                    {item.name}{" "}
+                    <span className="text-[#B0A89E]">
+                      {item.quantity} &times; {fmtIDR(item.unit_price_rupiah)}
+                    </span>
                   </span>
-                  <span className="font-medium text-[#1A1817]">{fmtIDR(item.unit_price_rupiah * item.quantity)}</span>
+                  <span className="font-medium text-[#1A1817]">
+                    {fmtIDR(item.unit_price_rupiah * item.quantity)}
+                  </span>
                 </div>
               ))}
             </div>
             <div className="border-t border-dashed border-[#E8E3DC] pt-3 flex justify-between items-center">
               <span className="font-semibold text-[#1A1817]">Total</span>
-              <span className="font-[family-name:var(--font-display)] text-xl text-[#1A1817]">{fmtIDR(orderTotal)}</span>
+              <span className="font-[family-name:var(--font-display)] text-xl text-[#1A1817]">
+                {fmtIDR(orderTotal)}
+              </span>
             </div>
           </div>
           <div className="flex gap-3 mt-6">
-            <button onClick={() => setPhase("selection")} className="btn-outline flex-1">
+            <button
+              onClick={() => setPhase("selection")}
+              className="btn-outline flex-1"
+            >
               <ChevronLeft className="w-4 h-4" /> Back
             </button>
             <button
@@ -261,8 +359,12 @@ export default function EventPage() {
               disabled={reserveMutation.isPending}
               className="btn-accent flex-1"
             >
-              {reserveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : (
-                <span className="flex items-center justify-center gap-2">Checkout <ArrowRight className="w-4 h-4" /></span>
+              {reserveMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  Checkout <ArrowRight className="w-4 h-4" />
+                </span>
               )}
             </button>
           </div>
@@ -291,7 +393,8 @@ export default function EventPage() {
         variant="danger"
         onConfirm={() => {
           if (!event) return;
-          api.post<void>(`/api/events/${event.event.id}/cancel`)
+          api
+            .post<void>(`/api/events/${event.event.id}/cancel`)
             .then(() => {
               toast.success("Event cancelled");
               queryClient.invalidateQueries({ queryKey: ["event", id] });

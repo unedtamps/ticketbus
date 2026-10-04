@@ -33,7 +33,8 @@ function NavLink({ href, children, icon: Icon }: { href: string; children: React
 }
 
 export function Header() {
-  const { user, hydrated, isAdmin, isEO, logout } = useAuth();
+  const { user, hydrated, loading, isAdmin, isEO, logout } = useAuth();
+  const authPending = !hydrated || loading;
 
   return (
     <header className="sticky top-0 z-50 border-b border-[#E8E3DC] bg-[#FEFBF6]/90 backdrop-blur-sm">
@@ -47,7 +48,12 @@ export function Header() {
         <nav className="flex items-center gap-1">
           <NavLink href="/" icon={Ticket}>Events</NavLink>
 
-          {hydrated && user ? (
+          {authPending ? (
+            <span
+              className="mx-1 h-7 w-32 rounded-md bg-[#F5F0E8] animate-pulse"
+              aria-hidden
+            />
+          ) : user ? (
             <>
               <NavLink href="/dashboard" icon={isAdmin ? Shield : LayoutDashboard}>Dashboard</NavLink>
               {isEO && <NavLink href="/events" icon={CalendarPlus}>Create</NavLink>}

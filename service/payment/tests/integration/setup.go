@@ -99,7 +99,8 @@ func startContainers() *TestEnv {
 
 	ctxBg, cancelBg := context.WithCancel(context.Background())
 
-	go outbox.NewWorker(infra.Pool, infra.Producer, logger, 1, 200).Run(ctxBg)
+	go outbox.NewWorker(infra.Pool, infra.Producer, logger, 1, 200,
+		[]string{"payment.completed", "payment.expired"}).Run(ctxBg)
 	go func() { _ = svc.StartConsumer(ctxBg) }()
 	svc.StartExpiryPoller(ctxBg, 1)
 

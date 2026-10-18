@@ -31,9 +31,20 @@ type SeatInitializer interface {
 	SetPrice(ctx context.Context, eventID, ticketTypeID string, price int) error
 }
 
+// OutboxEvent is a domain event written to the outbox table in the same
+// transaction as the business write that produced it.
+type OutboxEvent struct {
+	Topic   string
+	Key     string
+	Payload any
+}
+
 // BookingRepository defines the persistence contract for bookings.
 type BookingRepository interface {
-	Create(ctx context.Context, booking *Booking) error
+	// CreateReservation atomically decrements seat counters, inserts the
+	// booking with its items, and writes the outbox event in one transaction.
+	// Either all three land or none do.
+	CreateReservation(ctx context.Context, booking *Booking, ev OutboxEvent) error
 	FindByID(ctx context.Context, id string) (*Booking, error)
 	ListByUser(ctx context.Context, userID string) ([]Booking, error)
 	ListByEventID(ctx context.Context, eventID string) ([]Booking, error)
@@ -41,14 +52,12 @@ type BookingRepository interface {
 	// TransitionAndReleaseSeats atomically transitions a booking (guarded by its
 	// current status) and releases its seats in a single transaction.
 	TransitionAndReleaseSeats(ctx context.Context, booking *Booking, toStatus string) (bool, error)
-	// Delete removes a pending booking (used to roll back a reserve when the
-	// payment transaction could not be created).
-	Delete(ctx context.Context, bookingID string) error
 }
 
-// PaymentClient creates the payment transaction for a booking. Called
-// synchronously during reserve so the transaction always exists before any
-// gateway activity.
+// PaymentClient creates the payment transaction for a booking by calling the
+// payment service's internal REST API. Used by the outbox REST dispatcher,
+// which runs in the background after a reservation commits — never on the
+// request path.
 type PaymentClient interface {
 	InitiateTxnForBooking(ctx context.Context, bookingID, eventID, userID, email string, amountRupiah int, expiresAt time.Time) error
 }

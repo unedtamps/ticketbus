@@ -84,7 +84,8 @@ func main() {
 		logger.Error("failed to ensure kafka topics", "error", err)
 		os.Exit(1)
 	}
-	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger, cfg.OutboxConcurrency, cfg.OutboxPollMs)
+	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger, cfg.OutboxConcurrency, cfg.OutboxPollMs,
+		[]string{"payment.completed", "payment.expired"})
 
 	svc := application.NewPaymentService(
 		txnRepo,

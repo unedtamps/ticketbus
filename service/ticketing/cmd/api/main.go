@@ -65,7 +65,11 @@ func main() {
 	eventStatusRepo := eventpostgres.NewEventStatusRepo(pool)
 	seatCounter := eventpostgres.NewSeatCounter(pool)
 	seatReader := eventpostgres.NewSeatReader(pool)
+	// The payment client is used only by the outbox REST dispatcher, which
+	// runs in the background and creates the payment transaction for each
+	// reservation after it commits. The HTTP reserve path never calls payment.
 	paymentClient := ticketingpayment.NewClient(cfg.PaymentServiceURL, cfg.InternalAPIKey, cfg.PaymentTimeoutSec)
+	restDispatcher := ticketingpayment.NewDispatcher(pool, paymentClient, logger, cfg.RestDispatchPollMs)
 
 	kafkaBrokers := strings.Split(cfg.KafkaBrokers, ",")
 	consumer := eventkafka.NewTicketingConsumer(
@@ -85,17 +89,19 @@ func main() {
 		logger.Error("failed to ensure kafka topics", "error", err)
 		os.Exit(1)
 	}
+	// The Kafka outbox worker publishes only Kafka-bound topics; the
+	// payment.initiate rows are delivered by the REST dispatcher instead.
 	outboxWorker := outbox.NewWorker(
 		pool,
 		kafkaProducer,
 		logger,
 		cfg.OutboxConcurrency,
 		cfg.OutboxPollMs,
+		[]string{"event.cancelled", "ticket.issued"},
 	)
 
 	bookingSvc := bookingpkg.NewBookingService(
 		bookingRepo,
-		paymentClient,
 		seatCounter,
 		consumer,
 		eventStatusRepo,
@@ -113,6 +119,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go outboxWorker.Run(ctx)
+	go restDispatcher.Run(ctx)
 	if err := bookingSvc.StartConsumers(ctx); err != nil {
 		logger.Error("failed to start kafka consumers", "error", err)
 		os.Exit(1)

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	sdto "github.com/nedo/TicketSaas/pkg/dto"
 	"github.com/nedo/TicketSaas/pkg/outbox"
 	"github.com/nedo/TicketSaas/service/ticketing/internal/application/booking"
 	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
@@ -24,13 +25,13 @@ var invLogger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Lev
 func newBookingService(
 	t testing.TB,
 	bookingRepo domain.BookingRepository,
-	paymentClient domain.PaymentClient,
 	seatCounter domain.SeatCounter,
 	consumer domain.EventConsumer,
+	ob outbox.StoreInterface,
 ) (*booking.BookingService, *mocks.MockEventStatusRepository) {
 	t.Helper()
 	eventStatus := mocks.NewMockEventStatusRepository(t)
-	return booking.NewBookingService(bookingRepo, paymentClient, seatCounter, consumer, eventStatus, outbox.NoopStore{}, invLogger, 300), eventStatus
+	return booking.NewBookingService(bookingRepo, seatCounter, consumer, eventStatus, ob, invLogger, 300), eventStatus
 }
 
 func newBookingServiceDefaults(
@@ -40,7 +41,7 @@ func newBookingServiceDefaults(
 	consumer domain.EventConsumer,
 ) (*booking.BookingService, *mocks.MockEventStatusRepository) {
 	t.Helper()
-	return newBookingService(t, bookingRepo, mocks.NewMockPaymentClient(t), seatCounter, consumer)
+	return newBookingService(t, bookingRepo, seatCounter, consumer, outbox.NoopStore{})
 }
 
 func reserveArgs(items []domain.BookingItem) (userID, email, eventID string, itemsOut []domain.BookingItem) {
@@ -51,18 +52,24 @@ func reserveArgs(items []domain.BookingItem) (userID, email, eventID string, ite
 
 func TestReserve_Success_SingleItem(t *testing.T) {
 	bookingRepo := mocks.NewMockBookingRepository(t)
-	paymentClient := mocks.NewMockPaymentClient(t)
 	seatCounter := mocks.NewMockSeatCounter(t)
 	consumer := mocks.NewMockEventConsumer(t)
 	ctx := context.Background()
 	items := []domain.BookingItem{*fixtures.NewTestBookingItem(fixtures.WithBookingItemTicketTypeID("vip"), fixtures.WithBookingItemQuantity(2), fixtures.WithBookingItemUnitPrice(10000))}
 	seatCounter.EXPECT().GetPrice(ctx, "event-1", "vip").Return(10000, nil)
-	seatCounter.EXPECT().Reserve(ctx, "event-1", "vip", 2).Return(nil)
-	bookingRepo.EXPECT().Create(ctx, mock.MatchedBy(func(b *domain.Booking) bool {
+	bookingRepo.EXPECT().CreateReservation(ctx, mock.MatchedBy(func(b *domain.Booking) bool {
 		return b.Status == "pending" && b.ExpiresAt != nil && len(b.Items) == 1
+	}), mock.MatchedBy(func(ev domain.OutboxEvent) bool {
+		if ev.Topic != sdto.TopicPaymentInitiate {
+			return false
+		}
+		req, ok := ev.Payload.(sdto.PaymentInitiateRequested)
+		return ok && req.AmountRupiah == 20000 &&
+			req.Email == "user@example.com" &&
+			req.UserID == "user-1" && req.EventID == "event-1" &&
+			!req.ExpiresAt.IsZero()
 	})).Return(nil)
-	paymentClient.EXPECT().InitiateTxnForBooking(ctx, mock.AnythingOfType("string"), "event-1", "user-1", "user@example.com", 20000, mock.Anything).Return(nil)
-	svc, _ := newBookingService(t, bookingRepo, paymentClient, seatCounter, consumer)
+	svc, _ := newBookingService(t, bookingRepo, seatCounter, consumer, outbox.NoopStore{})
 	userID, email, eventID, itemsOut := reserveArgs(items)
 	res, err := svc.Reserve(ctx, userID, email, eventID, itemsOut)
 	require.NoError(t, err)
@@ -74,7 +81,6 @@ func TestReserve_Success_SingleItem(t *testing.T) {
 
 func TestReserve_Success_MultiItem(t *testing.T) {
 	bookingRepo := mocks.NewMockBookingRepository(t)
-	paymentClient := mocks.NewMockPaymentClient(t)
 	seatCounter := mocks.NewMockSeatCounter(t)
 	consumer := mocks.NewMockEventConsumer(t)
 	ctx := context.Background()
@@ -84,11 +90,11 @@ func TestReserve_Success_MultiItem(t *testing.T) {
 	}
 	seatCounter.EXPECT().GetPrice(ctx, "event-1", "vip").Return(10000, nil)
 	seatCounter.EXPECT().GetPrice(ctx, "event-1", "reg").Return(5000, nil)
-	seatCounter.EXPECT().Reserve(ctx, "event-1", "vip", 2).Return(nil)
-	seatCounter.EXPECT().Reserve(ctx, "event-1", "reg", 1).Return(nil)
-	bookingRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
-	paymentClient.EXPECT().InitiateTxnForBooking(ctx, mock.Anything, "event-1", "user-1", "user@example.com", 25000, mock.Anything).Return(nil)
-	svc, _ := newBookingService(t, bookingRepo, paymentClient, seatCounter, consumer)
+	bookingRepo.EXPECT().CreateReservation(ctx, mock.Anything, mock.MatchedBy(func(ev domain.OutboxEvent) bool {
+		req, ok := ev.Payload.(sdto.PaymentInitiateRequested)
+		return ok && req.AmountRupiah == 25000 && req.Email == "user@example.com"
+	})).Return(nil)
+	svc, _ := newBookingService(t, bookingRepo, seatCounter, consumer, outbox.NoopStore{})
 	userID, email, eventID, itemsOut := reserveArgs(items)
 	res, err := svc.Reserve(ctx, userID, email, eventID, itemsOut)
 	require.NoError(t, err)
@@ -104,52 +110,46 @@ func TestReserve_EmptyItems(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrInvalidQuantity)
 }
 
-func TestReserve_FirstItemNoSeats(t *testing.T) {
+func TestReserve_NoSeats_Fails(t *testing.T) {
 	bookingRepo := mocks.NewMockBookingRepository(t)
 	seatCounter := mocks.NewMockSeatCounter(t)
 	svc, _ := newBookingServiceDefaults(t, bookingRepo, seatCounter, mocks.NewMockEventConsumer(t))
 	ctx := context.Background()
 	items := []domain.BookingItem{*fixtures.NewTestBookingItem(fixtures.WithBookingItemTicketTypeID("vip"), fixtures.WithBookingItemQuantity(2), fixtures.WithBookingItemUnitPrice(10000))}
 	seatCounter.EXPECT().GetPrice(ctx, "event-1", "vip").Return(10000, nil)
-	seatCounter.EXPECT().Reserve(ctx, "event-1", "vip", 2).Return(errors.New("no seats"))
+	// The seat decrement happens inside the reservation transaction, so a
+	// seat failure aborts the whole thing: no booking, no outbox row, and no
+	// manual seat compensation. Atomicity is asserted in the integration
+	// suite; here CreateReservation is one mocked call.
+	bookingRepo.EXPECT().CreateReservation(ctx, mock.Anything, mock.Anything).Return(domain.ErrNoSeatsAvailable)
 	_, err := svc.Reserve(ctx, "user-1", "u@e.com", "event-1", items)
 	assert.ErrorIs(t, err, domain.ErrNoSeatsAvailable)
 }
 
-func TestReserve_SecondItemNoSeats_RollbackFirst(t *testing.T) {
+func TestReserve_WrongPrice_Fails(t *testing.T) {
 	bookingRepo := mocks.NewMockBookingRepository(t)
 	seatCounter := mocks.NewMockSeatCounter(t)
 	svc, _ := newBookingServiceDefaults(t, bookingRepo, seatCounter, mocks.NewMockEventConsumer(t))
 	ctx := context.Background()
-	items := []domain.BookingItem{
-		*fixtures.NewTestBookingItem(fixtures.WithBookingItemTicketTypeID("vip"), fixtures.WithBookingItemQuantity(2), fixtures.WithBookingItemUnitPrice(10000)),
-		*fixtures.NewTestBookingItem(fixtures.WithBookingItemTicketTypeID("reg"), fixtures.WithBookingItemQuantity(1), fixtures.WithBookingItemUnitPrice(5000)),
-	}
+	items := []domain.BookingItem{*fixtures.NewTestBookingItem(fixtures.WithBookingItemTicketTypeID("vip"), fixtures.WithBookingItemQuantity(1), fixtures.WithBookingItemUnitPrice(9999))}
 	seatCounter.EXPECT().GetPrice(ctx, "event-1", "vip").Return(10000, nil)
-	seatCounter.EXPECT().GetPrice(ctx, "event-1", "reg").Return(5000, nil)
-	seatCounter.EXPECT().Reserve(ctx, "event-1", "vip", 2).Return(nil)
-	seatCounter.EXPECT().Reserve(ctx, "event-1", "reg", 1).Return(errors.New("no seats"))
-	seatCounter.EXPECT().Release(ctx, "event-1", "vip", 2).Return(nil)
 	_, err := svc.Reserve(ctx, "user-1", "u@e.com", "event-1", items)
-	assert.ErrorIs(t, err, domain.ErrNoSeatsAvailable)
+	assert.ErrorIs(t, err, domain.ErrPriceMismatch)
 }
 
-func TestReserve_PaymentFails_RollbackAll(t *testing.T) {
+func TestReserve_ReservationTxError_Fails(t *testing.T) {
 	bookingRepo := mocks.NewMockBookingRepository(t)
-	paymentClient := mocks.NewMockPaymentClient(t)
 	seatCounter := mocks.NewMockSeatCounter(t)
-	svc, _ := newBookingService(t, bookingRepo, paymentClient, seatCounter, mocks.NewMockEventConsumer(t))
+	svc, _ := newBookingServiceDefaults(t, bookingRepo, seatCounter, mocks.NewMockEventConsumer(t))
 	ctx := context.Background()
 	items := []domain.BookingItem{*fixtures.NewTestBookingItem(fixtures.WithBookingItemTicketTypeID("vip"), fixtures.WithBookingItemQuantity(2), fixtures.WithBookingItemUnitPrice(10000))}
 	seatCounter.EXPECT().GetPrice(ctx, "event-1", "vip").Return(10000, nil)
-	seatCounter.EXPECT().Reserve(ctx, "event-1", "vip", 2).Return(nil)
-	bookingRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
-	bookingRepo.EXPECT().Delete(ctx, mock.AnythingOfType("string")).Return(nil)
-	paymentClient.EXPECT().InitiateTxnForBooking(ctx, mock.Anything, "event-1", "user-1", "user@example.com", 20000, mock.Anything).Return(domain.ErrPaymentUnavailable)
-	seatCounter.EXPECT().Release(ctx, "event-1", "vip", 2).Return(nil)
+	// CreateReservation is atomic: if the outbox insert fails the whole
+	// transaction (seats + booking + outbox) rolls back and Reserve errors.
+	bookingRepo.EXPECT().CreateReservation(ctx, mock.Anything, mock.Anything).Return(errors.New("db error"))
 	userID, email, eventID, itemsOut := reserveArgs(items)
 	_, err := svc.Reserve(ctx, userID, email, eventID, itemsOut)
-	assert.ErrorIs(t, err, domain.ErrPaymentUnavailable)
+	assert.Error(t, err)
 }
 
 // ── Confirm ──────────────────────────────────────────────────────────────────

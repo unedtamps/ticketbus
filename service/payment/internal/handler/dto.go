@@ -7,7 +7,7 @@ type TransactionResponse struct {
 	ID             string `json:"id"`
 	BookingID      string `json:"booking_id"`
 	EventID        string `json:"event_id"`
-	AmountRupiah    int    `json:"amount_rupiah"`
+	AmountRupiah   int    `json:"amount_rupiah"`
 	Currency       string `json:"currency"`
 	Status         string `json:"status"`
 	RefundStatus   string `json:"refund_status,omitempty"`
@@ -19,18 +19,21 @@ type TransactionResponse struct {
 // InternalCreateRequest is the internal (service-to-service) payload for
 // creating a transaction during reserve.
 type InternalCreateRequest struct {
-	BookingID   string    `json:"booking_id"`
-	EventID     string    `json:"event_id"`
-	UserID      string    `json:"user_id"`
-	Email       string    `json:"email"`
+	BookingID    string    `json:"booking_id"`
+	EventID      string    `json:"event_id"`
+	UserID       string    `json:"user_id"`
+	Email        string    `json:"email"`
 	AmountRupiah int       `json:"amount_rupiah"`
-	ExpiresAt   time.Time `json:"expires_at"`
+	ExpiresAt    time.Time `json:"expires_at"`
 }
 
-// InternalCreateResponse confirms the transaction was created.
+// InternalCreateResponse confirms the transaction exists. created=true when
+// this call inserted the row; created=false when a transaction for the same
+// booking already existed (idempotent success — safe to retry).
 type InternalCreateResponse struct {
 	TransactionID string `json:"transaction_id"`
 	BookingID     string `json:"booking_id"`
+	Created       bool   `json:"created"`
 }
 
 // ProcessPaymentResponse returns the gateway session details to render/redirect.
@@ -38,7 +41,7 @@ type ProcessPaymentResponse struct {
 	TransactionID    string `json:"transaction_id"`
 	PaymentSessionID string `json:"payment_session_id"`
 	PaymentLinkURL   string `json:"payment_link_url"`
-	AmountRupiah      int    `json:"amount_rupiah"`
+	AmountRupiah     int    `json:"amount_rupiah"`
 	Currency         string `json:"currency"`
 	Status           string `json:"status"`
 	ExpiresAt        string `json:"expires_at"`
@@ -49,6 +52,6 @@ type PaymentStatusResponse struct {
 	TransactionID  string `json:"transaction_id"`
 	Status         string `json:"status"`
 	PaymentLinkURL string `json:"payment_link_url,omitempty"`
-	AmountRupiah    int    `json:"amount_rupiah"`
+	AmountRupiah   int    `json:"amount_rupiah"`
 	Currency       string `json:"currency"`
 }

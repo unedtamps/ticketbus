@@ -66,14 +66,14 @@ func TestE2E_Webhook_SessionMismatchIgnored(t *testing.T) {
 	bookingID := env.reserve(t, cust, eventID, tt.ID, 1, tt.PriceRupiah)
 
 	// Deliberately skip env.payBooking: the stored provider_ref is still empty.
-	before := env.paymentStatus(t, cust, bookingID)
-	require.Equal(t, "initiated", before,
-		"a seeded-but-unpaid transaction is initiated")
+	// The transaction is created asynchronously by the outbox REST dispatcher,
+	// so wait for it to land before asserting its state.
+	env.waitPaymentStatus(t, cust, bookingID, "initiated", txnTimeout)
 
 	status := env.deliverWebhook(t, "payment_session.completed", bookingID, "ps-mock-some-other-booking")
 	assert.Equal(t, http.StatusOK, status, "mismatched delivery is acknowledged, not retried")
 
-	assert.Equal(t, before, env.paymentStatus(t, cust, bookingID),
+	assert.Equal(t, "initiated", env.paymentStatus(t, cust, bookingID),
 		"a mismatched session id must not change the transaction")
 	assert.Equal(t, "pending", env.getBooking(t, cust, bookingID).Status,
 		"a mismatched session id must not confirm the booking")

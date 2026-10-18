@@ -6,13 +6,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	sdto "github.com/nedo/TicketSaas/pkg/dto"
 	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
 )
 
-// Reserve creates a temporary reservation: it validates prices, decrements
-// seats, persists a pending booking, and synchronously creates the payment
-// transaction in the payment service. If the payment service is unavailable,
-// the booking is rolled back and seats are released.
+// Reserve creates a temporary reservation in one atomic database transaction:
+// seat counters are decremented, the pending booking is persisted, and a
+// payment.initiate outbox row is written. A background dispatcher delivers
+// that row to the payment service's internal API to create the payment
+// transaction — the HTTP request path never talks to payment, and a payment
+// outage can no longer fail a reservation.
 func (s *BookingService) Reserve(
 	ctx context.Context,
 	userID, userEmail, eventID string,
@@ -36,34 +39,18 @@ func (s *BookingService) Reserve(
 				item.UnitPriceRupiah,
 			)
 		}
-
-		if err := s.seatCounter.Reserve(
-			ctx,
-			eventID,
-			item.TicketTypeID,
-			item.Quantity,
-		); err != nil {
-			// Roll back only the items reserved before this one failed.
-			for _, rb := range items {
-				if rb.TicketTypeID == item.TicketTypeID {
-					break
-				}
-				_ = s.seatCounter.Release(ctx, eventID, rb.TicketTypeID, rb.Quantity)
-			}
-			return nil, fmt.Errorf("%w: %s", domain.ErrNoSeatsAvailable, err)
-		}
 	}
 
 	expiresAt := time.Now().Add(time.Duration(s.reservationTTL) * time.Second)
 	res := &domain.Reservation{
-		BookingID:  uuid.NewString(),
-		UserID:     userID,
-		EventID:    eventID,
-		Items:      items,
+		BookingID:   uuid.NewString(),
+		UserID:      userID,
+		EventID:     eventID,
+		Items:       items,
 		TotalRupiah: calculateTotal(items),
-		Status:     "pending",
-		ExpiresAt:  expiresAt,
-		CreatedAt:  time.Now(),
+		Status:      "pending",
+		ExpiresAt:   expiresAt,
+		CreatedAt:   time.Now(),
 	}
 	for i := range res.Items {
 		res.Items[i].ID = uuid.NewString()
@@ -79,38 +66,26 @@ func (s *BookingService) Reserve(
 		ExpiresAt: &res.ExpiresAt,
 		Items:     res.Items,
 	}
-	if err := s.bookingRepo.Create(ctx, booking); err != nil {
-		s.rollbackSeats(ctx, eventID, items)
-		return nil, err
-	}
 
-	if err := s.paymentClient.InitiateTxnForBooking(
-		ctx,
-		res.BookingID,
-		res.EventID,
-		res.UserID,
-		userEmail,
-		res.TotalRupiah,
-		res.ExpiresAt,
-	); err != nil {
-		_ = s.bookingRepo.Delete(ctx, res.BookingID)
-		s.rollbackSeats(ctx, eventID, items)
+	if err := s.bookingRepo.CreateReservation(ctx, booking, domain.OutboxEvent{
+		Topic: sdto.TopicPaymentInitiate,
+		Key:   res.BookingID,
+		Payload: sdto.PaymentInitiateRequested{
+			BookingID:    res.BookingID,
+			EventID:      res.EventID,
+			UserID:       res.UserID,
+			Email:        userEmail,
+			AmountRupiah: res.TotalRupiah,
+			ExpiresAt:    res.ExpiresAt,
+		},
+	}); err != nil {
+		// ErrNoSeatsAvailable from the seat counter maps to 409 at the
+		// handler; anything else (db/outbox failure) rolls back the whole
+		// reservation transaction and surfaces as a 500.
 		return nil, err
 	}
 
 	return res, nil
-}
-
-// rollbackSeats restores seats after a reserve failure where all items were
-// already decremented (booking creation or payment creation failed).
-func (s *BookingService) rollbackSeats(
-	ctx context.Context,
-	eventID string,
-	items []domain.BookingItem,
-) {
-	for _, item := range items {
-		_ = s.seatCounter.Release(ctx, eventID, item.TicketTypeID, item.Quantity)
-	}
 }
 
 // calculateTotal sums the unit prices of all reservation items.

@@ -117,7 +117,9 @@ class ApiClient {
     if (!res.ok) {
       const errMsg =
         json?.error || json?.message || `Server error (${res.status})`;
-      throw new Error(String(errMsg));
+      const err = new Error(String(errMsg)) as Error & { status?: number };
+      err.status = res.status;
+      throw err;
     }
     return json?.data !== undefined ? (json.data as T) : (json as unknown as T);
   }

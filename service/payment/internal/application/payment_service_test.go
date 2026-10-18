@@ -62,8 +62,9 @@ func TestInitiateTxnForBooking_Success(t *testing.T) {
 			tx.ExpiresAt != nil && tx.ExpiresAt.Equal(expiresAt)
 	})).Return(nil)
 
-	txn, err := svc.InitiateTxnForBooking(ctx, "book-1", "event-1", "user-1", "user@example.com", 10000, expiresAt)
+	txn, created, err := svc.InitiateTxnForBooking(ctx, "book-1", "event-1", "user-1", "user@example.com", 10000, expiresAt)
 	require.NoError(t, err)
+	assert.True(t, created, "first call for a booking must report created=true")
 	assert.Equal(t, "book-1", txn.BookingID)
 	assert.Equal(t, "IDR", txn.Currency)
 }
@@ -81,8 +82,9 @@ func TestInitiateTxnForBooking_Idempotent(t *testing.T) {
 	txnRepo.EXPECT().Create(ctx, mock.Anything).Return(&pgconn.PgError{Code: "23505", Message: "duplicate key"})
 	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(existing, nil)
 
-	txn, err := svc.InitiateTxnForBooking(ctx, "book-1", "event-1", "user-1", "", 10000, time.Now().Add(15*time.Minute))
+	txn, created, err := svc.InitiateTxnForBooking(ctx, "book-1", "event-1", "user-1", "", 10000, time.Now().Add(15*time.Minute))
 	require.NoError(t, err)
+	assert.False(t, created, "duplicate booking must report created=false (idempotent success)")
 	assert.Equal(t, "txn-1", txn.ID)
 }
 

@@ -24,9 +24,12 @@ func TestBooking_Reserve_Succeeds(t *testing.T) {
 	assert.NotEmpty(t, rr.Data.BookingID)
 	assert.Equal(t, "pending", rr.Data.Status)
 
-	// Reserve hands the booking to the payment service to create the transaction.
-	assert.True(t, env.fakePay.calledFor(rr.Data.BookingID),
-		"reserve should have initiated a payment transaction for %s", rr.Data.BookingID)
+	// Reserve writes the payment.initiate outbox row in the same transaction
+	// as the booking, and the REST dispatcher delivers it to payment in the
+	// background.
+	assert.Equal(t, 1, env.outboxInitiateCount(t, rr.Data.BookingID),
+		"reserve should have written one payment.initiate outbox row for %s", rr.Data.BookingID)
+	env.requirePaymentInitiated(t, rr.Data.BookingID)
 }
 
 func TestBooking_Reserve_WrongPrice_400(t *testing.T) {

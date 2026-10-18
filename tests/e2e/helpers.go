@@ -376,11 +376,26 @@ func (env *TestEnv) waitBookingStatus(t *testing.T, cust account, bookingID, wan
 // payBooking returns the gateway's payment_session_id. With PROVIDER=mock it is
 // deterministic — "ps-mock-" + booking id — but it is parsed from the response so
 // the helpers keep working if the provider is swapped for Xendit.
+//
+// The payment transaction is created asynchronously: reserve writes an
+// outbox row, ticketing's REST dispatcher posts it to the payment service in
+// the background. A call that races that dispatch gets 404 "transaction not
+// found"; retry until it lands (typically well under a second).
 func (env *TestEnv) payBooking(t *testing.T, cust account, bookingID string) string {
 	t.Helper()
-	status, body, err := env.doJSON(
-		http.MethodPost, "/api/payments/booking/"+bookingID, nil, bearer(cust))
-	require.NoError(t, err)
+	deadline := time.Now().Add(15 * time.Second)
+	var status int
+	var body []byte
+	var err error
+	for {
+		status, body, err = env.doJSON(
+			http.MethodPost, "/api/payments/booking/"+bookingID, nil, bearer(cust))
+		require.NoError(t, err)
+		if status != http.StatusNotFound || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(pollInterval)
+	}
 	require.Equal(t, http.StatusOK, status, "initiate payment: %s", body)
 
 	var out struct {
@@ -419,11 +434,26 @@ func (env *TestEnv) paymentStatus(t *testing.T, cust account, bookingID string) 
 }
 
 // waitPaymentStatus polls until the transaction reaches the wanted status.
+// The transaction is created asynchronously (outbox → REST dispatcher), so a
+// GET can 404 for a short window after reserve; that is treated as "not yet"
+// rather than a failure.
 func (env *TestEnv) waitPaymentStatus(t *testing.T, cust account, bookingID, want string, timeout time.Duration) {
 	t.Helper()
 	var last string
 	pollFor(t, timeout, 500*time.Millisecond, func() bool {
-		last = env.paymentStatus(t, cust, bookingID)
+		status, body, err := env.doJSON(
+			http.MethodGet, "/api/payments/booking/"+bookingID, nil, bearer(cust))
+		require.NoError(t, err)
+		if status == http.StatusNotFound {
+			last = "not found yet"
+			return false
+		}
+		require.Equal(t, http.StatusOK, status, "payment status: %s", body)
+		var out struct {
+			Status string `json:"status"`
+		}
+		require.NoError(t, decodeData(body, &out), "payment status: %s", body)
+		last = out.Status
 		return last == want
 	}, "transaction "+bookingID+" to become "+want+" (last saw "+last+")")
 }

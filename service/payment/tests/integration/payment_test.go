@@ -57,6 +57,57 @@ func TestPayment_Initiate_Duplicate_Idempotent(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, resp.StatusCode, "second initiate should return 409: %s", body)
 }
 
+// TestPayment_InternalCreate_Duplicate_Idempotent verifies the internal
+// endpoint the ticketing REST dispatcher calls is idempotent per booking:
+// the first call creates the transaction (201, created=true); a redelivered
+// call returns the same transaction untouched (200, created=false) so the
+// dispatcher can treat any 2xx as delivered.
+func TestPayment_InternalCreate_Duplicate_Idempotent(t *testing.T) {
+	env := getTestEnv()
+	c := newCustomer()
+	bookingID := newBookingID()
+	payload := map[string]interface{}{
+		"booking_id":    bookingID,
+		"event_id":      newEventID(),
+		"user_id":       c.id,
+		"email":         c.email,
+		"amount_rupiah": defaultAmount,
+		"expires_at":    time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+	}
+	headers := map[string]string{"X-Internal-Key": internalKey}
+
+	type createResp struct {
+		Data struct {
+			TransactionID string `json:"transaction_id"`
+			BookingID     string `json:"booking_id"`
+			Created       bool   `json:"created"`
+		} `json:"data"`
+	}
+
+	// First call: created.
+	resp, body, err := doJSON(http.MethodPost, env.payURL+"/api/payments/internal", payload, headers)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode, "first internal create: %s", body)
+	var first createResp
+	require.NoError(t, json.Unmarshal(body, &first), "body: %s", body)
+	assert.True(t, first.Data.Created)
+	assert.Equal(t, bookingID, first.Data.BookingID)
+	require.NotEmpty(t, first.Data.TransactionID)
+
+	// Second call (e.g. at-least-once redelivery): idempotent success.
+	resp, body, err = doJSON(http.MethodPost, env.payURL+"/api/payments/internal", payload, headers)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "duplicate internal create: %s", body)
+	var second createResp
+	require.NoError(t, json.Unmarshal(body, &second), "body: %s", body)
+	assert.False(t, second.Data.Created, "duplicate must report created=false")
+	assert.Equal(t, first.Data.TransactionID, second.Data.TransactionID,
+		"duplicate must return the existing transaction id")
+
+	// The transaction is still a single, untouched initiated row.
+	assert.Equal(t, "initiated", env.txnStatusByBooking(t, bookingID))
+}
+
 func TestPayment_Initiate_NonexistentBooking(t *testing.T) {
 	env := getTestEnv()
 	c := newCustomer()

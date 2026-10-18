@@ -16,22 +16,27 @@ import (
 )
 
 // Worker polls the outbox table and publishes undelivered events to Kafka.
+// Only rows whose topic is in the allow-list are touched: a service's outbox
+// table may also carry rows destined for non-Kafka delivery (e.g. ticketing's
+// payment.initiate rows, which a REST dispatcher picks up instead).
 type Worker struct {
 	store        *Store
 	producer     *kafka.Producer
 	logger       *slog.Logger
 	tracer       trace.Tracer
+	topics       []string
 	concurrency  int
 	pollInterval time.Duration
 }
 
-// NewWorker creates a new outbox worker.
+// NewWorker creates a new outbox worker that publishes only the given topics.
 func NewWorker(
 	db shareddb.DBTx,
 	producer *kafka.Producer,
 	logger *slog.Logger,
 	concurrency int,
 	pollMs int,
+	kafkaTopics []string,
 ) *Worker {
 	if concurrency < 1 {
 		concurrency = 1
@@ -47,6 +52,7 @@ func NewWorker(
 		tracer:       otel.Tracer("github.com/nedo/TicketSaas/pkg/outbox"),
 		producer:     producer,
 		logger:       logger,
+		topics:       kafkaTopics,
 		concurrency:  concurrency,
 		pollInterval: pollInterval,
 	}
@@ -77,8 +83,12 @@ func (w *Worker) Run(ctx context.Context) {
 }
 
 func (w *Worker) processBatch(ctx context.Context) {
+	if len(w.topics) == 0 {
+		return
+	}
 	rows, err := w.store.db.Query(ctx,
-		`SELECT id, topic, key, payload, trace_context FROM outbox WHERE delivered = false ORDER BY id LIMIT 100`)
+		`SELECT id, topic, key, payload, trace_context FROM outbox WHERE delivered = false AND topic = ANY($1) ORDER BY id LIMIT 100`,
+		w.topics)
 	if err != nil {
 		w.logger.Error("outbox worker query failed", "error", err)
 		return

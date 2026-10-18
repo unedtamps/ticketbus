@@ -7,8 +7,9 @@
 // The suite imports nothing from the other services. Caller identity comes from
 // synthesized X-Authenticated-* headers, which WithUserContext trusts without
 // signature verification; the payment service is replaced by a fake
-// domain.PaymentClient; and upstream payment events are published straight to
-// Kafka, standing in for the payment service.
+// domain.PaymentClient driven by the outbox REST dispatcher; and upstream
+// payment events are published straight to Kafka, standing in for the payment
+// service.
 //
 // Running the suite:
 //
@@ -38,6 +39,7 @@ import (
 	eventpkg "github.com/nedo/TicketSaas/service/ticketing/internal/application/event"
 	ticketinghandler "github.com/nedo/TicketSaas/service/ticketing/internal/handler"
 	eventkafka "github.com/nedo/TicketSaas/service/ticketing/internal/kafka"
+	"github.com/nedo/TicketSaas/service/ticketing/internal/payment"
 	eventpostgres "github.com/nedo/TicketSaas/service/ticketing/internal/postgres"
 )
 
@@ -86,12 +88,14 @@ func startContainers() *TestEnv {
 	ticketingOutbox := outbox.NewStore(infra.Pool)
 	consumer := eventkafka.NewTicketingConsumer(infra.Brokers, consumerGroup, 1)
 
-	// The payment service is not running: the reserve path only needs a
-	// transaction to be created, and a fake records the calls instead.
+	// The payment service is not running: the reserve path writes a
+	// payment.initiate outbox row, and the REST dispatcher hands it to this
+	// fake instead of the real internal API. The calls are recorded so tests
+	// can assert the ticketing side handed off correctly.
 	fakePay := &fakePaymentClient{}
 
 	bookSvc := bookingpkg.NewBookingService(
-		bookingRepo, fakePay, seatCounter, consumer, eventStatusRepo,
+		bookingRepo, seatCounter, consumer, eventStatusRepo,
 		ticketingOutbox, logger, 3600,
 	)
 	eventSvc := eventpkg.NewEventService(eventRepo, seatReader, seatCounter, ticketingOutbox)
@@ -103,7 +107,11 @@ func startContainers() *TestEnv {
 
 	ctxBg, cancelBg := context.WithCancel(context.Background())
 
-	go outbox.NewWorker(infra.Pool, infra.Producer, logger, 1, 200).Run(ctxBg)
+	// Kafka-bound outbox rows only; payment.initiate goes through the REST
+	// dispatcher, which is wired to the fake payment client here.
+	go outbox.NewWorker(infra.Pool, infra.Producer, logger, 1, 200,
+		[]string{"event.cancelled", "ticket.issued"}).Run(ctxBg)
+	go payment.NewDispatcher(infra.Pool, fakePay, logger, 100).Run(ctxBg)
 	go func() { _ = bookSvc.StartConsumers(ctxBg) }()
 
 	// Allow the outbox worker and Kafka writer to warm up; the first produce

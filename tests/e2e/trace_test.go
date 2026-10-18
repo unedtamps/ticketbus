@@ -142,24 +142,31 @@ type tempoSearch struct {
 }
 
 // findTraceSince polls Tempo for a trace with the given root span name that
-// started after `since`.
+// started after `since`, optionally requiring spans from extra services.
 //
-// Both conditions matter. Matching on the name alone would happily return a
-// trace left behind by an earlier test — several tests POST to /webhook and
-// /reserve — which turns the assertions below into false passes. Filtering the
-// results client-side by start time avoids passing start/end to the API, since
-// doing that restricts Tempo's block search and can return a partial trace.
+// Both the name and the start time matter. Matching on the name alone would
+// happily return a trace left behind by an earlier test — several tests POST
+// to /webhook and /reserve — which turns the assertions below into false
+// passes. Filtering the results client-side by start time avoids passing
+// start/end to the API, since doing that restricts Tempo's block search and
+// can return a partial trace.
 //
-// Spans land in the WAL before they are searchable, hence the polling.
-func findTraceSince(t *testing.T, rootName string, since time.Time) []tempoSpan {
+// Spans land in the WAL before they are searchable, hence the polling. The
+// optional requiredServices arguments extend the wait: asynchronous hops (the
+// outbox REST dispatcher delivering to payment) add spans to the trace after
+// the root request finishes, so a trace that only contains the root service
+// is not yet complete.
+func findTraceSince(t *testing.T, rootName string, since time.Time, requiredServices ...string) []tempoSpan {
 	t.Helper()
 
 	var searched int
+	var best []tempoSpan
 	pollFor(t, 90*time.Second, 2*time.Second, func() bool {
 		var search tempoSearch
 		tempoGet(t, "/api/search?limit=500", &search)
 		searched = len(search.Traces)
 
+		best = nil
 		for _, candidate := range search.Traces {
 			if candidate.RootTraceName != rootName {
 				continue
@@ -169,26 +176,28 @@ func findTraceSince(t *testing.T, rootName string, since time.Time) []tempoSpan 
 			}
 			var trace tempoTrace
 			tempoGet(t, "/api/traces/"+candidate.TraceID, &trace)
-			return len(trace.flatten()) > 0
+			spans := trace.flatten()
+			if len(spans) == 0 {
+				continue
+			}
+			best = spans
+			complete := true
+			for _, svc := range requiredServices {
+				if !hasService(spans, svc) {
+					complete = false
+					break
+				}
+			}
+			if complete {
+				return true
+			}
 		}
 		return false
-	}, fmt.Sprintf("trace %q started after %s to appear (%d traces searched)",
-		rootName, since.Format(time.RFC3339), searched))
+	}, fmt.Sprintf("trace %q started after %s to appear with services %v (%d traces searched)",
+		rootName, since.Format(time.RFC3339), requiredServices, searched))
 
-	var search tempoSearch
-	tempoGet(t, "/api/search?limit=500", &search)
-	for _, candidate := range search.Traces {
-		if candidate.RootTraceName != rootName {
-			continue
-		}
-		if _, ok := candidate.startedAfter(since); !ok {
-			continue
-		}
-		var trace tempoTrace
-		tempoGet(t, "/api/traces/"+candidate.TraceID, &trace)
-		if spans := trace.flatten(); len(spans) > 0 {
-			return spans
-		}
+	if best != nil {
+		return best
 	}
 	t.Fatalf("trace %q vanished between search and fetch", rootName)
 	return nil
@@ -214,10 +223,14 @@ func hasService(spans []tempoSpan, service string) bool {
 
 func kindOf(s tempoSpan) string { return strings.TrimPrefix(s.Kind, "SPAN_KIND_") }
 
-// TestE2E_Trace_ReserveSpansBothServices covers the synchronous hop: one trace
-// must contain the ticketing server span, the client span that called payment,
-// and payment's server span as its child. If traceparent were not forwarded,
-// payment would appear as a second unrelated root.
+// TestE2E_Trace_ReserveSpansBothServices covers the reserve → payment hop,
+// which is now asynchronous: reserve only writes an outbox row, and the REST
+// dispatcher delivers it later. One trace must still contain the ticketing
+// server span, the dispatcher's client span that called payment, and
+// payment's server span as its child — the dispatcher restores the trace
+// context persisted in the outbox row, so the late spans join the reserve
+// trace rather than starting a new one. payment-service spans are therefore
+// required in the search, since they land after the reserve request returns.
 func TestE2E_Trace_ReserveSpansBothServices(t *testing.T) {
 	env := getTestEnv()
 	admin := env.loginAdmin(t)
@@ -228,7 +241,7 @@ func TestE2E_Trace_ReserveSpansBothServices(t *testing.T) {
 	since := time.Now()
 	env.reserve(t, cust, eventID, tt.ID, 1, tt.PriceRupiah)
 
-	spans := findTraceSince(t, "POST /api/bookings/reserve", since)
+	spans := findTraceSince(t, "POST /api/bookings/reserve", since, "payment-service")
 
 	if !hasService(spans, "ticketing-service") {
 		t.Fatalf("trace is missing ticketing-service spans: %s", describe(spans))

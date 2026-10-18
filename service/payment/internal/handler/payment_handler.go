@@ -61,7 +61,7 @@ func (h *PaymentHandler) InitiateTxnForBooking(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	txn, err := h.svc.InitiateTxnForBooking(
+	txn, created, err := h.svc.InitiateTxnForBooking(
 		r.Context(),
 		req.BookingID,
 		req.EventID,
@@ -74,10 +74,18 @@ func (h *PaymentHandler) InitiateTxnForBooking(w http.ResponseWriter, r *http.Re
 		sharedhttp.InternalServerError(w, "failed to create transaction")
 		return
 	}
-	sharedhttp.Created(w, InternalCreateResponse{
+	resp := InternalCreateResponse{
 		TransactionID: txn.ID,
 		BookingID:     txn.BookingID,
-	})
+		Created:       created,
+	}
+	if created {
+		sharedhttp.Created(w, resp)
+		return
+	}
+	// 200 = idempotent success: the booking already had a transaction. The
+	// caller (ticketing's REST dispatcher) treats any 2xx as delivered.
+	sharedhttp.OK(w, resp)
 }
 
 // ProcessPayment handles POST /api/payments/booking/{booking_id}.

@@ -21,6 +21,10 @@ Services communicate asynchronously via Kafka (4 brokers, RF=3, 4 partitions per
   ├─ payment.expired    payment   → ticketing (expire booking, release seats)
   └─ ticket.issued      ticketing → (emitted per booking item on confirmation)
 
+Reserve → payment handoff is asynchronous too, but over REST (never Kafka):
+  └─ payment.initiate   ticketing → payment (outbox row → background REST dispatcher
+                          → POST /api/payments/internal; payment idempotent per booking_id)
+
 Seat availability is authoritative in PostgreSQL:
   └─ ticket_types.available_seat — atomic seat counter (conditional UPDATE ... WHERE available_seat >= qty)
 
@@ -39,29 +43,32 @@ Reservation expiry lives in the payment service:
 
 ## Transactional Outbox
 
-All inter-service communication flows through the **transactional outbox pattern** — each service writes domain events to an outbox table in its own database within the same transaction as the business data. A background worker polls every `OUTBOX_POLL_MS` (200ms), publishes undelivered messages to Kafka in batches of 100, and marks them `delivered=true`.
+All inter-service communication flows through the **transactional outbox pattern** — each service writes domain events to an outbox table in its own database within the same transaction as the business data. Two workers share the table, partitioned by topic:
+
+- **Kafka worker** (`pkg/outbox.Worker`) — polls every `OUTBOX_POLL_MS` (200ms), publishes undelivered rows in batches of 100 to an **allow-listed set of Kafka topics**, marks them `delivered=true`.
+- **REST dispatcher** (ticketing only, `internal/payment.Dispatcher`) — polls `payment.initiate` rows every `REST_DISPATCH_POLL_MS` (200ms) and POSTs each payload to the payment service's `POST /api/payments/internal`, marks `delivered=true` on any 2xx. Failed batches back off 1s. `payment.initiate` is never published to Kafka, and the Kafka worker never touches it.
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────┐
-│  Business Tx │────▶│ Outbox Table │────▶│  Worker  │──▶ Kafka
-│ (atomic)     │     │ (same DB)    │     │ (200ms)  │
-└──────────────┘     └──────────────┘     └──────────┘
+┌──────────────┐     ┌──────────────┐     ┌────────────────┐
+│  Business Tx │────▶│ Outbox Table │────▶│ Kafka Worker   │──▶ Kafka (allow-listed topics)
+│ (atomic)     │     │ (same DB)    │     │ REST Dispatcher│──▶ POST /api/payments/internal
+└──────────────┘     └──────────────┘     └────────────────┘
 ```
 
 | Service | Produces via Outbox | Consumes |
 |---------|-------------------|----------|
 | Auth | — | — |
-| Ticketing | `event.cancelled`, `ticket.issued` | `payment.completed`, `payment.expired` |
+| Ticketing | `event.cancelled`, `ticket.issued` (Kafka), `payment.initiate` (REST dispatch) | `payment.completed`, `payment.expired` |
 | Payment | `payment.completed`, `payment.expired` | `event.cancelled` |
 
-This guarantees **at-least-once delivery** and eliminates the dual-write problem (no DB write that can succeed while the Kafka write fails). Consumers are idempotent via guarded status transitions (`TransitionIfActive`, `UpdateStatusIfPending`), so a redelivered message is a no-op instead of a double write.
+This guarantees **at-least-once delivery** and eliminates the dual-write problem (no DB write that can succeed while the REST/Kafka write fails). Consumers are idempotent via guarded status transitions (`TransitionIfActive`, `UpdateStatusIfPending`), so a redelivered message is a no-op instead of a double write. The same holds across the REST hop: the payment service upserts on `booking_id` (201 `created=true` on first insert, 200 `created=false` on redelivery — both 2xx, so the dispatcher treats either as delivered).
 
 ## Services
 
 | Service | Language | Port | Database | Responsibilities |
 |---------|----------|------|----------|-----------------|
 | `auth-service` | Go | 8081 | `auth_db` (5432) | Customer/organizer registration, login, JWT (access 15m, refresh 7d), Traefik ForwardAuth `verify`, organizer profiles, admin seed from `ADMIN_SEEDS` |
-| `ticketing-service` | Go | 8082 | `ticketing_db` (5433) | Event CRUD, admin approval workflow, live seat counters, reservation holds (`RESERVATION_TTL`), booking transitions, cancel cascade, outbox: `event.cancelled`, `ticket.issued` |
+| `ticketing-service` | Go | 8082 | `ticketing_db` (5433) | Event CRUD, admin approval workflow, live seat counters, reservation holds (`RESERVATION_TTL`), booking transitions, cancel cascade, outbox: `event.cancelled`, `ticket.issued` (Kafka) + `payment.initiate` (REST dispatcher → payment) |
 | `payment-service` | Go | 8083 | `payment_db` (5435) | Transaction lifecycle (`initiated → pending → completed \| expired`), gateway session creation via pluggable `mock`/`xendit` processor, webhook ingestion, expiry poller, refund requests, outbox: `payment.*` |
 | `web` | Next.js 16 | 3000 | — | TanStack Query data fetching, `proxy.ts` route guards, ticket-stub UI, toasts, ConfirmDialog, Tooltip, SSR homepage |
 
@@ -77,8 +84,11 @@ Admin approves → status=published + seat counters initialised per ticket type 
 Customer browses → GET /api/events (published only)
   ↓
 Customer reserves → POST /api/bookings/reserve
-    seats decremented in PostgreSQL, booking created (status=pending, expires_at = now + RESERVATION_TTL)
-    payment transaction created synchronously via POST /api/payments/internal (rollback if it fails)
+    ONE DB transaction: seats decremented (atomic UPDATE), booking created
+    (status=pending, expires_at = now + RESERVATION_TTL), outbox row payment.initiate
+    → background REST dispatcher calls POST /api/payments/internal (idempotent per booking_id;
+      the frontend may see 404 "transaction not found" for the first few hundred ms and shows a
+      wait/Refresh state until it lands)
   ↓
 Customer pays → POST /api/payments/booking/{booking_id}
     gateway session created (status=pending, provider_ref + payment_link_url stored)
@@ -264,13 +274,17 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 The e2e stack sets it for you. The standard `OTEL_*` variables are honoured
 throughout, so pointing at a hosted backend later needs no code change.
 
-A booking produces **two** traces, because the reservation and the payment
-webhook are separate inbound requests:
+A booking produces **two** traces. The reserve request is one; the payment
+internal create is a second, started later by the background REST dispatcher,
+which restores the reserve request's trace context from `outbox.trace_context`
+so the hop stays on the same trace. The webhook is a third inbound request:
 
 ```
 POST /api/bookings/reserve          SERVER   ticketing-service
-├─ SELECT / INSERT / pool.acquire   CLIENT   postgres
-└─ POST /api/payments/internal      CLIENT   ticketing-service
+└─ INSERT seats + booking + outbox  CLIENT   postgres   (one transaction)
+
+(outbox REST dispatcher — background, same trace via restored traceparent)
+POST /api/payments/internal         CLIENT   ticketing-service
    └─ SERVER /api/payments/internal SERVER   payment-service
       └─ SELECT / INSERT            CLIENT   postgres
 ```
@@ -451,7 +465,7 @@ pipeline, not the selector:
 | GET | `/api/payments/{txn_id}` | Bearer | Customer |
 | GET | `/api/payments` | Bearer | Customer (own transactions) |
 | GET | `/api/payments/health` | No | — |
-| POST | `/api/payments/internal` | `X-Internal-Key` | ❌ gateway-blocked — service-to-service only |
+| POST | `/api/payments/internal` | `X-Internal-Key` | ❌ gateway-blocked — service-to-service only; idempotent per `booking_id`, `201 created=true` on first insert / `200 created=false` on redelivery (both = delivered) |
 | POST | `/api/payments/booking/mock/{booking_id}/{status}` | No | ❌ gateway-blocked — dev simulator, `status` = `success` \| `expired` |
 
 The two gateway-blocked routes are excluded by the Traefik payments router
@@ -460,7 +474,7 @@ reachable only on the payment service port.
 
 ## Testing
 
-### Unit tests (104 tests, 5 packages)
+### Unit tests (106 tests, 6 packages)
 
 ```bash
 make test        # go test -race -count=1 ./...

@@ -3,7 +3,9 @@ package postgres
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nedo/TicketSaas/pkg/outbox"
 	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
 )
 
@@ -17,15 +19,38 @@ func NewBookingRepo(pool *pgxpool.Pool) *BookingRepo {
 	return &BookingRepo{pool: pool}
 }
 
-// Create inserts a new booking with items.
-func (r *BookingRepo) Create(ctx context.Context, b *domain.Booking) error {
+// CreateReservation atomically decrements the seat counters, inserts the
+// booking with its items, and writes the outbox event — all in one
+// transaction. A partial reservation (seats taken but no booking, or booking
+// without its payment-initiate outbox row) is impossible.
+func (r *BookingRepo) CreateReservation(ctx context.Context, b *domain.Booking, ev domain.OutboxEvent) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 
-	_, err = tx.Exec(ctx, `
+	seatCounter := NewSeatCounter(tx)
+	for _, item := range b.Items {
+		if err := seatCounter.Reserve(ctx, b.EventID, item.TicketTypeID, item.Quantity); err != nil {
+			return err
+		}
+	}
+
+	if err := insertBooking(ctx, tx, b); err != nil {
+		return err
+	}
+
+	if err := outbox.NewStore(tx).Insert(ctx, ev.Topic, ev.Key, ev.Payload); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+// insertBooking writes a booking row and its items inside an open transaction.
+func insertBooking(ctx context.Context, tx pgx.Tx, b *domain.Booking) error {
+	_, err := tx.Exec(ctx, `
 		INSERT INTO bookings (id, user_id, event_id, status, expires_at)
 		VALUES ($1,$2,$3,$4,$5)`,
 		b.ID, b.UserID, b.EventID, b.Status, b.ExpiresAt)
@@ -46,8 +71,7 @@ func (r *BookingRepo) Create(ctx context.Context, b *domain.Booking) error {
 			return err
 		}
 	}
-
-	return tx.Commit(ctx)
+	return nil
 }
 
 // FindByID retrieves a booking by ID.
@@ -164,13 +188,6 @@ func (r *BookingRepo) TransitionAndReleaseSeats(ctx context.Context, booking *do
 		return false, err
 	}
 	return true, nil
-}
-
-// Delete removes a pending booking. Used to roll back a reserve when the
-// payment transaction could not be created.
-func (r *BookingRepo) Delete(ctx context.Context, bookingID string) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM bookings WHERE id=$1 AND status='pending'`, bookingID)
-	return err
 }
 
 // loadItems loads booking_items into a booking and derives compatibility fields.

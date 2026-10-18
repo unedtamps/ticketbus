@@ -17,10 +17,17 @@ type Config struct {
 	OutboxConcurrency   int    `env:"OUTBOX_CONCURRENCY,required,notEmpty"`
 	OutboxPollMs        int    `env:"OUTBOX_POLL_MS,required,notEmpty"`
 
-	// Payment service (sync transaction creation during reserve).
+	// Payment service. PAYMENT_SERVICE_URL / INTERNAL_API_KEY are used by the
+	// outbox REST dispatcher, which calls POST /api/payments/internal in the
+	// background to create the payment transaction for each reservation.
+	// PAYMENT_TIMEOUT_SEC bounds each REST attempt.
 	PaymentServiceURL string `env:"PAYMENT_SERVICE_URL,required,notEmpty"`
 	PaymentTimeoutSec int    `env:"PAYMENT_TIMEOUT_SEC,required,notEmpty"`
 	InternalAPIKey    string `env:"INTERNAL_API_KEY,required,notEmpty"`
+
+	// RestDispatchPollMs is how often the REST dispatcher wakes to look for
+	// undelivered payment.initiate outbox rows. Defaults to 200ms.
+	RestDispatchPollMs int `env:"REST_DISPATCH_POLL_MS" envDefault:"200"`
 }
 
 // Load reads configuration from environment variables.

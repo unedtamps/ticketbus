@@ -11,6 +11,7 @@ import (
 
 	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 )
 
 // Client talks to the payment service' internal API to create the payment
@@ -22,6 +23,13 @@ type Client struct {
 }
 
 // NewClient creates a new payment service client.
+//
+// Must be called after telemetry.Init: the otelhttp transport captures the
+// tracer provider by reference, and NewTransport's fallback (span.TracerProvider()
+// from the request ctx) resolves to the no-op provider when the dispatcher
+// delivers with a restored *remote* traceparent — which would silently skip
+// the CLIENT span and parent payment's SERVER span directly to the reserve
+// server span.
 func NewClient(baseURL, apiKey string, timeoutSec int) *Client {
 	return &Client{
 		baseURL: strings.TrimSuffix(baseURL, "/"),
@@ -30,8 +38,9 @@ func NewClient(baseURL, apiKey string, timeoutSec int) *Client {
 		// traceparent header, so the payment service's server span nests under
 		// this one. It is a no-op when no tracer provider is installed.
 		httpClient: &http.Client{
-			Timeout:   time.Duration(timeoutSec) * time.Second,
-			Transport: otelhttp.NewTransport(nil),
+			Timeout: time.Duration(timeoutSec) * time.Second,
+			Transport: otelhttp.NewTransport(nil,
+				otelhttp.WithTracerProvider(otel.GetTracerProvider())),
 		},
 	}
 }

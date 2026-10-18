@@ -13,14 +13,16 @@ import (
 )
 
 // InitiateTxnForBooking creates a pending transaction for a booking. Called
-// synchronously by the ticketing service during reserve, so the transaction
-// row always exists before any gateway activity. Idempotent per booking.
+// by the ticketing service's REST dispatcher during reserve (asynchronously,
+// after the reservation commits), so the transaction row always exists before
+// any gateway activity. Idempotent per booking: a duplicate request reports
+// created=false and returns the existing transaction untouched.
 func (s *PaymentService) InitiateTxnForBooking(
 	ctx context.Context,
 	bookingID, eventID, userID, email string,
 	amountRupiah int,
 	expiresAt time.Time,
-) (*domain.Transaction, error) {
+) (*domain.Transaction, bool, error) {
 	txn := &domain.Transaction{
 		ID:            uuid.NewString(),
 		UserID:        userID,
@@ -37,15 +39,18 @@ func (s *PaymentService) InitiateTxnForBooking(
 	if err := s.txnRepo.Create(ctx, txn); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			// booking_id is UNIQUE: another dispatch for the same booking won
+			// the race. Return the existing transaction as-is — its status,
+			// session reference and expiry are never overwritten.
 			existing, ferr := s.txnRepo.FindByBookingID(ctx, bookingID)
 			if ferr != nil {
-				return nil, ferr
+				return nil, false, ferr
 			}
-			return existing, nil
+			return existing, false, nil
 		}
-		return nil, err
+		return nil, false, err
 	}
-	return txn, nil
+	return txn, true, nil
 }
 
 // GetPaymentStatus returns the transaction (including the stored payment

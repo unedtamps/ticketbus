@@ -11,7 +11,6 @@ import (
 // BookingService orchestrates reservation and booking operations.
 type BookingService struct {
 	bookingRepo    domain.BookingRepository
-	paymentClient  domain.PaymentClient
 	seatCounter    domain.SeatCounter
 	consumer       domain.EventConsumer
 	eventStatus    domain.EventStatusRepository
@@ -23,7 +22,6 @@ type BookingService struct {
 // NewBookingService creates a new BookingService.
 func NewBookingService(
 	bookingRepo domain.BookingRepository,
-	paymentClient domain.PaymentClient,
 	seatCounter domain.SeatCounter,
 	consumer domain.EventConsumer,
 	eventStatus domain.EventStatusRepository,
@@ -33,7 +31,6 @@ func NewBookingService(
 ) *BookingService {
 	return &BookingService{
 		bookingRepo:    bookingRepo,
-		paymentClient:  paymentClient,
 		seatCounter:    seatCounter,
 		consumer:       consumer,
 		eventStatus:    eventStatus,

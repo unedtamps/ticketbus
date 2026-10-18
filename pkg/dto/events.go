@@ -19,7 +19,7 @@ type TicketTypeInfo struct {
 	TicketTypeID string `json:"ticket_type_id"`
 	Name         string `json:"name"`
 	Quantity     int    `json:"quantity"`
-	PriceRupiah   int    `json:"price_rupiah"`
+	PriceRupiah  int    `json:"price_rupiah"`
 }
 
 type EventRejected struct {
@@ -39,8 +39,8 @@ type EventCancelled struct {
 }
 
 type BookingItem struct {
-	TicketTypeID   string `json:"ticket_type_id"`
-	Quantity       int    `json:"quantity"`
+	TicketTypeID    string `json:"ticket_type_id"`
+	Quantity        int    `json:"quantity"`
 	UnitPriceRupiah int    `json:"unit_price_rupiah"`
 }
 
@@ -49,7 +49,7 @@ type PaymentInitiated struct {
 	BookingID     string    `json:"booking_id"`
 	EventID       string    `json:"event_id"`
 	UserID        string    `json:"user_id"`
-	AmountRupiah   int       `json:"amount_rupiah"`
+	AmountRupiah  int       `json:"amount_rupiah"`
 	At            time.Time `json:"at"`
 }
 
@@ -76,6 +76,23 @@ type TicketIssued struct {
 	UserID       string `json:"user_id"`
 	EventID      string `json:"event_id"`
 	TicketTypeID string `json:"ticket_type_id"`
+}
+
+// TopicPaymentInitiate is the outbox topic for reservation → payment
+// transaction creation. It is delivered by the ticketing service's REST
+// dispatcher (POST /api/payments/internal), never published to Kafka.
+const TopicPaymentInitiate = "payment.initiate"
+
+// PaymentInitiateRequested is the outbox payload ticketing writes in the same
+// transaction as the reservation. The REST dispatcher turns it into
+// POST /api/payments/internal. The payment service is idempotent per booking_id.
+type PaymentInitiateRequested struct {
+	BookingID    string    `json:"booking_id"`
+	EventID      string    `json:"event_id"`
+	UserID       string    `json:"user_id"`
+	Email        string    `json:"email"`
+	AmountRupiah int       `json:"amount_rupiah"`
+	ExpiresAt    time.Time `json:"expires_at"`
 }
 
 type OrganizerCreated struct {

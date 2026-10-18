@@ -44,8 +44,8 @@ func (h *BookingHandler) Reserve(w http.ResponseWriter, r *http.Request) {
 	items := make([]domain.BookingItem, len(req.Items))
 	for i, item := range req.Items {
 		items[i] = domain.BookingItem{
-			TicketTypeID:   item.TicketTypeID,
-			Quantity:       item.Quantity,
+			TicketTypeID:    item.TicketTypeID,
+			Quantity:        item.Quantity,
 			UnitPriceRupiah: item.UnitPriceRupiah,
 		}
 	}
@@ -60,20 +60,16 @@ func (h *BookingHandler) Reserve(w http.ResponseWriter, r *http.Request) {
 			sharedhttp.BadRequest(w, err.Error())
 			return
 		}
-		if errors.Is(err, domain.ErrPaymentUnavailable) {
-			sharedhttp.Error(w, http.StatusBadGateway, "payment service unavailable, please retry")
-			return
-		}
 		sharedhttp.InternalServerError(w, "reservation failed")
 		return
 	}
 
 	sharedhttp.Created(w, ReservationResponse{
-		BookingID:  res.BookingID,
-		EventID:    res.EventID,
+		BookingID:   res.BookingID,
+		EventID:     res.EventID,
 		TotalRupiah: res.TotalRupiah,
-		Status:     res.Status,
-		ExpiresAt:  res.ExpiresAt.Format("2006-01-02T15:04:05Z07:00"),
+		Status:      res.Status,
+		ExpiresAt:   res.ExpiresAt.Format("2006-01-02T15:04:05Z07:00"),
 	})
 }
 

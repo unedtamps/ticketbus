@@ -38,36 +38,37 @@ func (_m *MockBookingRepository) EXPECT() *MockBookingRepository_Expecter {
 	return &MockBookingRepository_Expecter{mock: &_m.Mock}
 }
 
-// Create provides a mock function for the type MockBookingRepository
-func (_mock *MockBookingRepository) Create(ctx context.Context, booking *domain.Booking) error {
-	ret := _mock.Called(ctx, booking)
+// CreateReservation provides a mock function for the type MockBookingRepository
+func (_mock *MockBookingRepository) CreateReservation(ctx context.Context, booking *domain.Booking, ev domain.OutboxEvent) error {
+	ret := _mock.Called(ctx, booking, ev)
 
 	if len(ret) == 0 {
-		panic("no return value specified for Create")
+		panic("no return value specified for CreateReservation")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *domain.Booking) error); ok {
-		r0 = returnFunc(ctx, booking)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *domain.Booking, domain.OutboxEvent) error); ok {
+		r0 = returnFunc(ctx, booking, ev)
 	} else {
 		r0 = ret.Error(0)
 	}
 	return r0
 }
 
-// MockBookingRepository_Create_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Create'
-type MockBookingRepository_Create_Call struct {
+// MockBookingRepository_CreateReservation_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateReservation'
+type MockBookingRepository_CreateReservation_Call struct {
 	*mock.Call
 }
 
-// Create is a helper method to define mock.On call
+// CreateReservation is a helper method to define mock.On call
 //   - ctx context.Context
 //   - booking *domain.Booking
-func (_e *MockBookingRepository_Expecter) Create(ctx any, booking any) *MockBookingRepository_Create_Call {
-	return &MockBookingRepository_Create_Call{Call: _e.mock.On("Create", ctx, booking)}
+//   - ev domain.OutboxEvent
+func (_e *MockBookingRepository_Expecter) CreateReservation(ctx any, booking any, ev any) *MockBookingRepository_CreateReservation_Call {
+	return &MockBookingRepository_CreateReservation_Call{Call: _e.mock.On("CreateReservation", ctx, booking, ev)}
 }
 
-func (_c *MockBookingRepository_Create_Call) Run(run func(ctx context.Context, booking *domain.Booking)) *MockBookingRepository_Create_Call {
+func (_c *MockBookingRepository_CreateReservation_Call) Run(run func(ctx context.Context, booking *domain.Booking, ev domain.OutboxEvent)) *MockBookingRepository_CreateReservation_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -77,77 +78,25 @@ func (_c *MockBookingRepository_Create_Call) Run(run func(ctx context.Context, b
 		if args[1] != nil {
 			arg1 = args[1].(*domain.Booking)
 		}
+		var arg2 domain.OutboxEvent
+		if args[2] != nil {
+			arg2 = args[2].(domain.OutboxEvent)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
 }
 
-func (_c *MockBookingRepository_Create_Call) Return(err error) *MockBookingRepository_Create_Call {
+func (_c *MockBookingRepository_CreateReservation_Call) Return(err error) *MockBookingRepository_CreateReservation_Call {
 	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *MockBookingRepository_Create_Call) RunAndReturn(run func(ctx context.Context, booking *domain.Booking) error) *MockBookingRepository_Create_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// Delete provides a mock function for the type MockBookingRepository
-func (_mock *MockBookingRepository) Delete(ctx context.Context, bookingID string) error {
-	ret := _mock.Called(ctx, bookingID)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Delete")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) error); ok {
-		r0 = returnFunc(ctx, bookingID)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockBookingRepository_Delete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Delete'
-type MockBookingRepository_Delete_Call struct {
-	*mock.Call
-}
-
-// Delete is a helper method to define mock.On call
-//   - ctx context.Context
-//   - bookingID string
-func (_e *MockBookingRepository_Expecter) Delete(ctx any, bookingID any) *MockBookingRepository_Delete_Call {
-	return &MockBookingRepository_Delete_Call{Call: _e.mock.On("Delete", ctx, bookingID)}
-}
-
-func (_c *MockBookingRepository_Delete_Call) Run(run func(ctx context.Context, bookingID string)) *MockBookingRepository_Delete_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockBookingRepository_Delete_Call) Return(err error) *MockBookingRepository_Delete_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockBookingRepository_Delete_Call) RunAndReturn(run func(ctx context.Context, bookingID string) error) *MockBookingRepository_Delete_Call {
+func (_c *MockBookingRepository_CreateReservation_Call) RunAndReturn(run func(ctx context.Context, booking *domain.Booking, ev domain.OutboxEvent) error) *MockBookingRepository_CreateReservation_Call {
 	_c.Call.Return(run)
 	return _c
 }

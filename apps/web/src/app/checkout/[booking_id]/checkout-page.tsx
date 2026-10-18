@@ -1,17 +1,23 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api-client";
 import { fmtDateTime, fmtIDR } from "@/lib/format";
 import { toast } from "@/components/ui/toast";
-import { AlertTriangle, ArrowRight, Loader2, ShoppingBag, Ticket } from "lucide-react";
+import { AlertTriangle, ArrowRight, Hourglass, Loader2, RefreshCw, ShoppingBag, Ticket } from "lucide-react";
 import type { BookingResponse, InitiatePaymentResponse, PaymentStatusResponse } from "@/types";
 
 export default function CheckoutPage() {
   const { booking_id } = useParams<{ booking_id: string }>();
   const router = useRouter();
+  // The payment transaction is created asynchronously (outbox → background
+  // dispatch to the payment service), so a very fast "Pay Now" can race the
+  // dispatcher and get a 404. We surface a wait/refresh state instead of an
+  // error; the row typically lands within a second.
+  const [txnNotReady, setTxnNotReady] = useState(false);
 
   const bookingQuery = useQuery({
     queryKey: ["booking", booking_id],
@@ -25,10 +31,17 @@ export default function CheckoutPage() {
     mutationFn: (bookingId: string) =>
       api.post<InitiatePaymentResponse>(`/api/payments/booking/${bookingId}`),
     onSuccess: (data) => {
+      setTxnNotReady(false);
       router.push("/payment/" + data.transaction_id);
     },
     onError: (err: Error) => {
       const msg = err.message;
+      const status = (err as Error & { status?: number }).status;
+      if (status === 404 || msg.includes("transaction not found")) {
+        // Not created yet by the background dispatcher — not a real failure.
+        setTxnNotReady(true);
+        return;
+      }
       if (msg.includes("already initiated")) {
         // A session already exists — resume it on the payment page.
         api
@@ -125,7 +138,32 @@ export default function CheckoutPage() {
         )}
       </div>
 
-      {booking.status === "pending" && (
+      {booking.status === "pending" && txnNotReady && (
+        <div className="card space-y-3 text-center">
+          <div className="flex items-center justify-center gap-2 text-sm text-[#4A4541]">
+            <Hourglass className="w-4 h-4 text-[#D9381E]" />
+            <span>
+              Payment setup is still being prepared&hellip; this usually takes
+              a second.
+            </span>
+          </div>
+          <button
+            onClick={() => initiateMutation.mutate(booking.id)}
+            disabled={initiateMutation.isPending}
+            className="btn-outline w-full py-3 flex items-center justify-center gap-2"
+          >
+            {initiateMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4" /> Refresh
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {booking.status === "pending" && !txnNotReady && (
         <button
           onClick={() => initiateMutation.mutate(booking.id)}
           disabled={initiateMutation.isPending}

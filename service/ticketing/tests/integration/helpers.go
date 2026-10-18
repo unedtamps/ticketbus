@@ -97,9 +97,9 @@ func adminActor() actor { return newActor(dto.RoleAdmin) }
 
 // ── Fake payment client ──
 
-// fakePaymentClient stands in for the payment service. Reserve only needs a
-// transaction to be created for the booking; the calls are recorded so tests can
-// assert the ticketing side handed off correctly.
+// fakePaymentClient stands in for the payment service. The outbox REST
+// dispatcher calls it with each payment.initiate payload; the calls are
+// recorded so tests can assert the ticketing side handed off correctly.
 type fakePaymentClient struct {
 	mu    sync.Mutex
 	calls []string
@@ -126,6 +126,29 @@ func (f *fakePaymentClient) calledFor(bookingID string) bool {
 		}
 	}
 	return false
+}
+
+// outboxInitiateCount returns how many payment.initiate outbox rows exist for
+// the booking. Written in the same transaction as the reservation, so it is
+// visible immediately after reserve returns.
+func (env *TestEnv) outboxInitiateCount(t *testing.T, bookingID string) int {
+	t.Helper()
+	var n int
+	err := env.pool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM outbox WHERE topic = 'payment.initiate' AND key = $1`,
+		bookingID).Scan(&n)
+	require.NoError(t, err)
+	return n
+}
+
+// requirePaymentInitiated waits for the REST dispatcher to hand the booking to
+// (fake) payment. Delivery is asynchronous (outbox poll → REST call).
+func (env *TestEnv) requirePaymentInitiated(t *testing.T, bookingID string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		return env.fakePay.calledFor(bookingID)
+	}, 10*time.Second, 100*time.Millisecond,
+		"dispatcher should have initiated a payment transaction for %s", bookingID)
 }
 
 // ── Response shapes ──

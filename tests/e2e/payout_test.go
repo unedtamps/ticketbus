@@ -2,9 +2,12 @@
 
 package e2e
 
-// payout_test.go — happy-path organizer payout through the real stack with the
-// mock payment gateway. Failure/retry paths live in the payment integration
-// suite; this test proves the end-to-end async choreography and the public API.
+// payout_test.go — organizer payout through the real stack with the mock
+// payment gateway. The gateway accepts disbursements asynchronously (PENDING,
+// like Xendit's rails), so the tests drive the confirmation — success and
+// failure — the way the gateway's webhook would, and assert the full
+// choreography: ticketing → payment → gateway → confirmation → ticketing.
+// Per-service failure/retry edge cases live in the payment integration suite.
 //
 // The flow needs an event that has ended, so the test books while the event is
 // still live and waits for it to finish before asking for the money. The e2e
@@ -14,7 +17,6 @@ package e2e
 import (
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,38 +27,17 @@ func TestE2E_Payout_FullFlow(t *testing.T) {
 	admin := env.loginAdmin(t)
 	eo := env.registerEO(t)
 
-	// A live event: it started an hour ago and ends in 90 seconds. The
-	// booking hold is clamped to the end of the event, so the customer pays
-	// while the event is still running.
-	endAt := time.Now().Add(90 * time.Second)
-	ev := env.createEventAt(t, eo, 100, time.Now().Add(-time.Hour), endAt)
-	env.approveEvent(t, ev.Event.ID, admin)
-
-	var detail eventDetail
-	pollFor(t, 30*time.Second, 500*time.Millisecond, func() bool {
-		detail = env.fetchEvent(t, ev.Event.ID)
-		return len(detail.TicketTypes) > 0 && detail.TicketTypes[0].Available > 0
-	}, "seat init after approval")
-	require.NotEmpty(t, detail.TicketTypes)
-	tt := detail.TicketTypes[0]
-
 	// Two paid tickets: the payout amount is the sum of completed,
 	// non-refunded transactions.
-	cust := env.registerCustomer(t)
-	bookingID := env.reserve(t, cust, ev.Event.ID, tt.ID, 2, tt.PriceRupiah)
-	env.settleBooking(t, cust, bookingID)
-
+	eventID, tt := env.endedEventWithSales(t, admin, eo, 2)
 	env.setPayoutAccount(t, eo, "BCA", "1234567890", "E2E Organizer")
 
-	// The event must be over before its earnings can be paid out.
-	pollFor(t, 2*time.Minute, time.Second, func() bool {
-		return time.Now().After(endAt)
-	}, "event to end")
-
-	status, body := env.requestPayout(t, eo, ev.Event.ID)
+	status, body := env.requestPayout(t, eo, eventID)
 	require.Equal(t, http.StatusAccepted, status, "request payout: %s", body)
 
-	payout := env.waitPayoutStatus(t, eo, ev.Event.ID, "paid_out", settleTimeout)
+	// The gateway accepted the disbursement but has not settled it: the
+	// confirmation webhook (retried here, like Xendit retries) finalizes it.
+	payout := env.confirmPayout(t, eo, eventID, "success", "paid_out", settleTimeout)
 	assert.EqualValues(t, 2*tt.PriceRupiah, payout.AmountRupiah,
 		"payout should equal the settled booking total")
 	assert.Contains(t, payout.ProviderRef, "dis-mock-",
@@ -67,11 +48,31 @@ func TestE2E_Payout_FullFlow(t *testing.T) {
 	// The event can be paid out again, but only to collect what was not paid
 	// out before — here there is nothing left, so the attempt finds no
 	// earnings.
-	status, body = env.requestPayout(t, eo, ev.Event.ID)
+	status, body = env.requestPayout(t, eo, eventID)
 	require.Equal(t, http.StatusAccepted, status, "second payout request: %s", body)
 
-	payout = env.waitPayoutStatus(t, eo, ev.Event.ID, "paid_out", settleTimeout)
+	payout = env.waitPayoutStatus(t, eo, eventID, "paid_out", settleTimeout)
 	assert.EqualValues(t, 2*tt.PriceRupiah, payout.AmountRupiah,
 		"a further payout must not pay the same transactions twice")
 	assert.Equal(t, 2, payout.Attempts, "the second attempt is recorded")
+}
+
+// A payout the gateway accepted but then rejected: the failed confirmation
+// records the gateway's failure code on the attempt instead of losing it.
+func TestE2E_Payout_WebhookFailed(t *testing.T) {
+	env := getTestEnv()
+	admin := env.loginAdmin(t)
+	eo := env.registerEO(t)
+
+	eventID, _ := env.endedEventWithSales(t, admin, eo, 1)
+	env.setPayoutAccount(t, eo, "BCA", "1234567890", "E2E Organizer")
+
+	status, body := env.requestPayout(t, eo, eventID)
+	require.Equal(t, http.StatusAccepted, status, "request payout: %s", body)
+
+	payout := env.confirmPayout(t, eo, eventID, "failed", "failed", settleTimeout)
+	assert.Equal(t, "failed", payout.Status)
+	assert.Contains(t, payout.FailureReason, "INSUFFICIENT_BALANCE")
+	assert.Contains(t, payout.ProviderRef, "dis-mock-",
+		"even a failed attempt records which gateway payout it belongs to")
 }

@@ -567,15 +567,81 @@ func (env *TestEnv) payoutStatus(t *testing.T, eo account, eventID string) payou
 
 // waitPayoutStatus polls until the event payout reaches want. The async chain
 // crosses ticketing outbox → Kafka → payment consumer → payment outbox →
-// dispatcher → mock gateway → Kafka → ticketing consumer.
+// dispatcher → mock gateway → confirmation → Kafka → ticketing consumer.
 func (env *TestEnv) waitPayoutStatus(t *testing.T, eo account, eventID, want string, timeout time.Duration) payoutState {
 	t.Helper()
 	var last payoutState
-	pollFor(t, timeout, 500*time.Millisecond, func() bool {
+	pollFor(t, timeout, pollInterval, func() bool {
 		last = env.payoutStatus(t, eo, eventID)
 		return last.Status == want
 	}, "event payout "+eventID+" to become "+want+" (last saw "+last.Status+")")
 	return env.payoutStatus(t, eo, eventID)
+}
+
+// directPaymentJSON posts JSON straight to the payment service port. Only the
+// dev-only mock routes need it — everything public goes through the gateway.
+func (env *TestEnv) directPaymentJSON(path string) (int, []byte, error) {
+	req, err := http.NewRequest(http.MethodPost, env.paymentURL+path, nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := env.client.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	return resp.StatusCode, b, err
+}
+
+// confirmPayout plays the gateway settling (outcome "success") or rejecting
+// (outcome "failed") the event's latest payout attempt, retrying until
+// ticketing reflects the outcome. The mock route resolves the gateway
+// reference itself — the dispatcher records it only after delivery — so 404
+// answers ("not dispatched yet") are simply retried. Confirmations are
+// idempotent, so the repeated posts mirror Xendit's own webhook retries.
+func (env *TestEnv) confirmPayout(t *testing.T, eo account, eventID, outcome, want string, timeout time.Duration) payoutState {
+	t.Helper()
+	var last payoutState
+	pollFor(t, timeout, pollInterval, func() bool {
+		statusCode, _, err := env.directPaymentJSON("/api/payments/payout/mock/" + eventID + "/" + outcome)
+		if err != nil || statusCode != http.StatusOK {
+			return false
+		}
+		last = env.payoutStatus(t, eo, eventID)
+		return last.Status == want
+	}, "event payout "+eventID+" to become "+want+" via "+outcome+" confirmation (last saw "+last.Status+")")
+	return env.payoutStatus(t, eo, eventID)
+}
+
+// endedEventWithSales creates an event that sold tickets through the mock
+// gateway and has just ended — the precondition for requesting a payout —
+// and returns the event id with the ticket type that was sold.
+func (env *TestEnv) endedEventWithSales(t *testing.T, admin, eo account, tickets int) (string, ticketType) {
+	t.Helper()
+	endAt := time.Now().Add(90 * time.Second)
+	ev := env.createEventAt(t, eo, 100, time.Now().Add(-time.Hour), endAt)
+	env.approveEvent(t, ev.Event.ID, admin)
+
+	var detail eventDetail
+	pollFor(t, 30*time.Second, 500*time.Millisecond, func() bool {
+		detail = env.fetchEvent(t, ev.Event.ID)
+		return len(detail.TicketTypes) > 0 && detail.TicketTypes[0].Available > 0
+	}, "seat init after approval")
+	require.NotEmpty(t, detail.TicketTypes)
+	tt := detail.TicketTypes[0]
+
+	cust := env.registerCustomer(t)
+	bookingID := env.reserve(t, cust, ev.Event.ID, tt.ID, tickets, tt.PriceRupiah)
+	env.settleBooking(t, cust, bookingID)
+
+	// The event must be over before its earnings can be paid out.
+	pollFor(t, 2*time.Minute, time.Second, func() bool {
+		return time.Now().After(endAt)
+	}, "event to end")
+
+	return ev.Event.ID, tt
 }
 
 // ── Cancel ──

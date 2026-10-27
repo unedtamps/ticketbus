@@ -34,6 +34,11 @@ import (
 // defaultBaseURL matches the Traefik host port in docker-compose.e2e.yml.
 const defaultBaseURL = "http://localhost:8100"
 
+// defaultPaymentURL matches the payment service host port in
+// docker-compose.e2e.yml. The dev-only payout mock route is blocked at the
+// gateway, so the payout tests reach the service directly.
+const defaultPaymentURL = "http://localhost:18083"
+
 // readinessTimeout allows for a cold stack: three postgres instances, one Kafka
 // broker, three service images starting and the gateway coming up behind them.
 const readinessTimeout = 3 * time.Minute
@@ -41,8 +46,9 @@ const readinessTimeout = 3 * time.Minute
 // TestEnv holds the gateway address. There is nothing else to wire: no database
 // pools, no containers, no in-process handlers.
 type TestEnv struct {
-	baseURL string
-	client  *http.Client
+	baseURL    string
+	paymentURL string
+	client     *http.Client
 }
 
 // TestMain blocks until the gateway answers, so tests never fail on a stack
@@ -66,9 +72,14 @@ func getTestEnv() *TestEnv {
 	if base == "" {
 		base = defaultBaseURL
 	}
+	payment := os.Getenv("E2E_PAYMENT_URL")
+	if payment == "" {
+		payment = defaultPaymentURL
+	}
 	return &TestEnv{
-		baseURL: base,
-		client:  &http.Client{Timeout: 30 * time.Second},
+		baseURL:    base,
+		paymentURL: payment,
+		client:     &http.Client{Timeout: 30 * time.Second},
 	}
 }
 

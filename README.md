@@ -230,7 +230,16 @@ payment consumes payout.requested
         │ payment REST dispatcher → Xendit Payouts API
   POST /v2/payouts  channel_code=ID_<BANK>, account_holder_name, account_number,
                     Idempotency-Key=payout-<payout_id>-<attempt>
-  2xx  → ONE TX (Complete): payouts + transactions = paid_out + outbox payout.completed
+  terminal status (COMPLETED)
+        → ONE TX (Complete): payouts + transactions = paid_out + outbox payout.completed
+  non-terminal (PENDING/ACCEPTED, the common async case)
+        → payouts stay pending with provider_ref recorded; the ledger is
+          finalized later by whichever confirmation arrives first:
+            a) gateway payout webhook → POST /api/payments/webhook/payout
+               (x-callback-token verified, idempotent), or
+            b) the dispatcher's reconciliation poll (PAYOUT_RECONCILE_SEC):
+               GET /v2/payouts/{id} → COMPLETED → paid_out, FAILED (+failure_code)
+               → failed. REVERSED is logged (ledger keeps paid_out).
   4xx  → failed (permanent: bad data); 401/403 → retried (credentials, e.g. a missing
           MONEY-OUT scope); 429/5xx/network → retried with backoff
         │ outbox worker → Kafka

@@ -56,6 +56,9 @@ type PaymentProcessor interface {
 	GetSession(ctx context.Context, providerRef string) (*SessionResult, error)
 	// CreatePayout sends the organizer's earnings to their bank account.
 	CreatePayout(ctx context.Context, req PayoutRequest) (*PayoutResult, error)
+	// GetPayout fetches the gateway's current state of a payout created
+	// earlier (the reconciliation poll's source of truth).
+	GetPayout(ctx context.Context, payoutID string) (*PayoutResult, error)
 }
 
 // PayoutRepository defines the persistence contract for event payouts.
@@ -70,6 +73,21 @@ type PayoutRepository interface {
 	// Complete applies the gateway outcome to one attempt of the ledger and its
 	// transactions and emits payout.completed, in one transaction.
 	Complete(ctx context.Context, eventID string, attempt int, status string, amountRupiah int64, providerRef, reason string) error
+	// AttachProviderRef stores the gateway payout id on a still-pending attempt
+	// after the gateway accepted the disbursement: the payout now waits for an
+	// async confirmation (gateway webhook or reconciliation poll).
+	AttachProviderRef(ctx context.Context, eventID string, attempt int, providerRef string) error
+	// FindByProviderRef locates the payout attempt that owns a gateway payout
+	// id — gateway callbacks address payouts by their gateway id.
+	FindByProviderRef(ctx context.Context, providerRef string) (*Payout, error)
+	// ListPendingDispatched returns pending payouts that were already sent to
+	// the gateway (provider_ref set) and untouched since olderThan — the
+	// reconciliation poll's work queue.
+	ListPendingDispatched(ctx context.Context, olderThan time.Time, limit int) ([]*Payout, error)
+	// FindLatestByEvent returns the most recent attempt of an event's payout
+	// ledger (dev-only mock confirmation endpoint uses it to resolve the
+	// gateway reference without knowing it upfront).
+	FindLatestByEvent(ctx context.Context, eventID string) (*Payout, error)
 	FindByEvent(ctx context.Context, eventID string, attempt int) (*Payout, error)
 }
 

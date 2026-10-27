@@ -107,7 +107,7 @@ func main() {
 	)
 
 	payoutDispatcher := payoutpkg.NewDispatcher(
-		pool, payoutRepo, payProcessor, logger, cfg.PayoutDispatchPollMs,
+		pool, payoutRepo, payProcessor, logger, cfg.PayoutDispatchPollMs, cfg.PayoutReconcileSec,
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())

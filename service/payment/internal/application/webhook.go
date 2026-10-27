@@ -148,3 +148,136 @@ func (s *PaymentService) requestLatePaymentRefund(ctx context.Context, txn *doma
 	_ = s.txnRepo.UpdateRefundStatus(ctx, txn.ID, "pending")
 	s.logger.Warn("late payment refunded", "txn_id", txn.ID)
 }
+
+// payoutWebhookPayload parses a gateway payout callback. The legacy v2
+// callback carries the payout object at the top level; other providers wrap it
+// in {event, data}. Both shapes are parsed, and the decision is made from the
+// payout's status field — not from the event name.
+type payoutWebhookPayload struct {
+	Event string `json:"event"`
+	Data  struct {
+		ID          string `json:"id"`
+		Status      string `json:"status"`
+		ReferenceID string `json:"reference_id"`
+		FailureCode string `json:"failure_code"`
+	} `json:"data"`
+	ID          string `json:"id"`
+	Status      string `json:"status"`
+	FailureCode string `json:"failure_code"`
+}
+
+// fields resolves the payout identity and outcome across both payload shapes.
+func (p *payoutWebhookPayload) fields() (id, status, failureCode string) {
+	id, status, failureCode = p.Data.ID, p.Data.Status, p.Data.FailureCode
+	if id == "" {
+		id = p.ID
+	}
+	if status == "" {
+		status = p.Status
+	}
+	if failureCode == "" {
+		failureCode = p.FailureCode
+	}
+	return id, status, failureCode
+}
+
+// HandlePayoutWebhook applies a verified gateway payout callback to the payout
+// ledger. The webhook is a fast path only — the dispatcher's reconciliation
+// poll reaches the same outcome if a delivery is lost — so anything that is
+// not an actionable terminal confirmation is acknowledged with success and
+// logged: only transient database failures return an error (a non-2xx makes
+// the gateway retry).
+func (s *PaymentService) HandlePayoutWebhook(
+	ctx context.Context,
+	payload []byte,
+) error {
+	var event payoutWebhookPayload
+	if err := json.Unmarshal(payload, &event); err != nil {
+		s.logger.Warn("payout webhook payload not parseable", "error", err)
+		return nil
+	}
+	payoutID, gatewayStatus, failureCode := event.fields()
+	if payoutID == "" {
+		s.logger.Warn("payout webhook missing payout id", "event", event.Event)
+		return nil
+	}
+
+	payout, err := s.payoutRepo.FindByProviderRef(ctx, payoutID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNoRows) {
+			// Not a payout we know. Retrying cannot fix that, so acknowledge.
+			s.logger.Warn("payout webhook for unknown provider ref",
+				"provider_ref", payoutID, "event", event.Event)
+			return nil
+		}
+		return err
+	}
+
+	// Terminal already (e.g. REVERSED arriving after a COMPLETED
+	// confirmation): log loudly, keep the ledger as it is.
+	if payout.Status != domain.PayoutStatusPending {
+		s.logger.Warn("payout webhook ignored, attempt already final",
+			"payout_id", payout.ID,
+			"event_id", payout.EventID,
+			"ledger_status", payout.Status,
+			"gateway_status", gatewayStatus,
+			"event", event.Event,
+		)
+		return nil
+	}
+
+	ledgerStatus, reason, terminal := domain.PayoutConfirmation(gatewayStatus, failureCode)
+	if !terminal {
+		s.logger.Info("payout webhook non-terminal, ignoring",
+			"payout_id", payout.ID,
+			"gateway_status", gatewayStatus,
+			"event", event.Event,
+		)
+		return nil
+	}
+
+	if err := s.payoutRepo.Complete(ctx, payout.EventID, payout.Attempt,
+		ledgerStatus, payout.AmountRupiah, payout.ProviderRef, reason); err != nil {
+		return err
+	}
+	s.logger.Info("payout confirmed via webhook",
+		"event_id", payout.EventID,
+		"payout_id", payout.ID,
+		"gateway_status", gatewayStatus,
+		"status", ledgerStatus,
+	)
+	return nil
+}
+
+// MockPayoutWebhookConfirmation resolves the event's latest payout attempt and
+// feeds HandlePayoutWebhook a synthetic gateway callback. It backs the dev-only
+// mock endpoint and mirrors MockSessionWebhook: the caller cannot know the
+// gateway reference upfront (the dispatcher records it after delivery), so the
+// service resolves it. An attempt that is not dispatched yet surfaces
+// domain.ErrPayoutNotDispatched so callers poll until it lands.
+func (s *PaymentService) MockPayoutWebhookConfirmation(
+	ctx context.Context,
+	eventID, outcome string,
+) error {
+	payout, err := s.payoutRepo.FindLatestByEvent(ctx, eventID)
+	if err != nil {
+		return err
+	}
+	if payout.ProviderRef == "" {
+		return domain.ErrPayoutNotDispatched
+	}
+
+	event, gatewayStatus, failureCode := "payout.succeeded", domain.GatewayPayoutCompleted, ""
+	if outcome == "failed" {
+		event, gatewayStatus, failureCode = "payout.failed", domain.GatewayPayoutFailed, "INSUFFICIENT_BALANCE"
+	}
+	payload, _ := json.Marshal(map[string]interface{}{
+		"event": event,
+		"data": map[string]string{
+			"id":           payout.ProviderRef,
+			"status":       gatewayStatus,
+			"failure_code": failureCode,
+		},
+	})
+	return s.HandlePayoutWebhook(ctx, payload)
+}

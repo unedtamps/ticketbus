@@ -12,9 +12,13 @@ func (h *PaymentHandler) Routes() chi.Router {
 
 	// Provider webhook (public — providers authenticate via x-callback-token)
 	r.Post("/api/payments/webhook", h.Webhook)
+	// Provider payout webhook (same shared x-callback-token; covered by the
+	// gateway's /api/payments/webhook route prefix)
+	r.Post("/api/payments/webhook/payout", h.PayoutWebhook)
 
 	// Dev-only mock webhook simulator (blocked at the gateway — see traefik/dynamic.yml)
 	r.Post("/api/payments/booking/mock/{booking_id}/{status}", h.MockSessionWebhook)
+	r.Post("/api/payments/payout/mock/{event_id}/{status}", h.MockPayoutWebhook)
 
 	// Internal service-to-service routes (protected by X-Internal-Key)
 	r.With(h.requireInternalKey).Post("/api/payments/internal", h.InitiateTxnForBooking)

@@ -199,6 +199,34 @@ func (h *PaymentHandler) MockSessionWebhook(w http.ResponseWriter, r *http.Reque
 	sharedhttp.OK(w, map[string]string{"status": "received"})
 }
 
+// MockPayoutWebhook handles POST /api/payments/payout/mock/{event_id}/{status}.
+// Dev-only: simulates the gateway confirming (or failing) the event's latest
+// payout attempt without knowing the gateway reference. status must be
+// "success" or "failed". Blocked externally at the gateway (traefik), reachable
+// only on the service port directly. An attempt that has not been dispatched
+// yet answers 404 so callers poll.
+func (h *PaymentHandler) MockPayoutWebhook(w http.ResponseWriter, r *http.Request) {
+	eventID := chi.URLParam(r, "event_id")
+	outcome := chi.URLParam(r, "status")
+	switch outcome {
+	case "success", "failed":
+	default:
+		sharedhttp.BadRequest(w, "status must be 'success' or 'failed'")
+		return
+	}
+
+	if err := h.svc.MockPayoutWebhookConfirmation(r.Context(), eventID, outcome); err != nil {
+		if errors.Is(err, domain.ErrNoRows) || errors.Is(err, domain.ErrPayoutNotDispatched) {
+			sharedhttp.NotFound(w, "payout attempt not dispatched yet")
+			return
+		}
+		sharedhttp.InternalServerError(w, "mock payout webhook failed")
+		return
+	}
+
+	sharedhttp.OK(w, map[string]string{"status": "received"})
+}
+
 // GetStatus handles GET /payments/:id/status.
 func (h *PaymentHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	txnID := chi.URLParam(r, "id")
@@ -259,6 +287,34 @@ func (h *PaymentHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sharedhttp.BadRequest(w, "invalid webhook payload")
+		return
+	}
+
+	sharedhttp.OK(w, map[string]string{"status": "received"})
+}
+
+// PayoutWebhook handles POST /api/payments/webhook/payout (gateway payout
+// callbacks), verified with the same shared x-callback-token. Unparseable or
+// non-actionable deliveries are acknowledged — the dispatcher's reconciliation
+// poll covers lost confirmations; only transient failures (DB) return a
+// non-2xx so the gateway retries.
+func (h *PaymentHandler) PayoutWebhook(w http.ResponseWriter, r *http.Request) {
+	if subtle.ConstantTimeCompare(
+		[]byte(r.Header.Get("x-callback-token")),
+		[]byte(h.callbackToken),
+	) != 1 {
+		sharedhttp.Unauthorized(w, "invalid callback token")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		sharedhttp.BadRequest(w, "failed to read body")
+		return
+	}
+	if err := h.svc.HandlePayoutWebhook(r.Context(), body); err != nil {
+		sharedhttp.InternalServerError(w, "failed to apply payout webhook")
 		return
 	}
 

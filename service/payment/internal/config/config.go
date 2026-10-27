@@ -33,6 +33,11 @@ type Config struct {
 	// undelivered payment.disbursement rows.
 	PayoutDispatchPollMs int `env:"PAYOUT_DISPATCH_POLL_MS" envDefault:"200"`
 
+	// PayoutReconcileSec is how often payouts already sent to the gateway are
+	// polled for their final status (GET /v2/payouts/{id}) — the safety net
+	// for payout webhooks that never arrived. 0 disables reconciliation.
+	PayoutReconcileSec int `env:"PAYOUT_RECONCILE_SEC" envDefault:"30"`
+
 	// Shared webhook verification token (both providers). Must match the
 	// token the gateway includes as the x-callback-token header.
 	WebhookCallbackTok string `env:"WEBHOOK_CALLBACK_TOKEN,required,notEmpty"`

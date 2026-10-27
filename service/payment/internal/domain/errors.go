@@ -16,4 +16,7 @@ var (
 	ErrGatewayUnavailable = errors.New("payment gateway unavailable")
 	// ErrNoRows is returned by repositories when no row matches.
 	ErrNoRows = pgx.ErrNoRows
+	// ErrPayoutNotDispatched means the payout attempt exists but has not been
+	// sent to the gateway yet, so it has no gateway reference to confirm.
+	ErrPayoutNotDispatched = errors.New("payout not dispatched")
 )

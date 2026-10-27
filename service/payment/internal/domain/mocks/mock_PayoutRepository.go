@@ -6,10 +6,11 @@ package mocks
 
 import (
 	"context"
+	"time"
 
+	mock "github.com/stretchr/testify/mock"
 	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
 	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
-	mock "github.com/stretchr/testify/mock"
 )
 
 // NewMockPayoutRepository creates a new instance of MockPayoutRepository.
@@ -71,6 +72,72 @@ func (_mock *MockPayoutRepository) FindByEvent(ctx context.Context, eventID stri
 	}
 	if ret.Get(0) != nil {
 		r0 = ret.Get(0).(*domain.Payout)
+	}
+	r1 = ret.Error(1)
+	return r0, r1
+}
+
+// FindLatestByEvent provides a mock function for the type MockPayoutRepository.
+func (_mock *MockPayoutRepository) FindLatestByEvent(ctx context.Context, eventID string) (*domain.Payout, error) {
+	ret := _mock.Called(ctx, eventID)
+	if len(ret) == 0 {
+		panic("no return value specified for FindLatestByEvent")
+	}
+	var r0 *domain.Payout
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.Payout, error)); ok {
+		return returnFunc(ctx, eventID)
+	}
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*domain.Payout)
+	}
+	r1 = ret.Error(1)
+	return r0, r1
+}
+
+// AttachProviderRef provides a mock function for the type MockPayoutRepository.
+func (_mock *MockPayoutRepository) AttachProviderRef(ctx context.Context, eventID string, attempt int, providerRef string) error {
+	ret := _mock.Called(ctx, eventID, attempt, providerRef)
+	if len(ret) == 0 {
+		panic("no return value specified for AttachProviderRef")
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, string) error); ok {
+		return returnFunc(ctx, eventID, attempt, providerRef)
+	}
+	return ret.Error(0)
+}
+
+// FindByProviderRef provides a mock function for the type MockPayoutRepository.
+func (_mock *MockPayoutRepository) FindByProviderRef(ctx context.Context, providerRef string) (*domain.Payout, error) {
+	ret := _mock.Called(ctx, providerRef)
+	if len(ret) == 0 {
+		panic("no return value specified for FindByProviderRef")
+	}
+	var r0 *domain.Payout
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.Payout, error)); ok {
+		return returnFunc(ctx, providerRef)
+	}
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*domain.Payout)
+	}
+	r1 = ret.Error(1)
+	return r0, r1
+}
+
+// ListPendingDispatched provides a mock function for the type MockPayoutRepository.
+func (_mock *MockPayoutRepository) ListPendingDispatched(ctx context.Context, olderThan time.Time, limit int) ([]*domain.Payout, error) {
+	ret := _mock.Called(ctx, olderThan, limit)
+	if len(ret) == 0 {
+		panic("no return value specified for ListPendingDispatched")
+	}
+	var r0 []*domain.Payout
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, int) ([]*domain.Payout, error)); ok {
+		return returnFunc(ctx, olderThan, limit)
+	}
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]*domain.Payout)
 	}
 	r1 = ret.Error(1)
 	return r0, r1

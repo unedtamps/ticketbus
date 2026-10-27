@@ -223,6 +223,85 @@ func (r *PayoutRepo) Complete(
 	return tx.Commit(ctx)
 }
 
+// AttachProviderRef records the gateway payout id on the pending attempt. No
+// status change: the payout stays pending until the gateway webhook or the
+// reconciliation poll confirms a terminal status.
+func (r *PayoutRepo) AttachProviderRef(ctx context.Context, eventID string, attempt int, providerRef string) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE payouts SET
+			provider_ref = NULLIF($3, ''),
+			updated_at = NOW()
+		WHERE event_id = $1 AND attempt = $2::int AND status = 'pending'`,
+		eventID, attempt, providerRef)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("payout attempt %s/%d is not pending", eventID, attempt)
+	}
+	return nil
+}
+
+// FindByProviderRef returns the payout attempt that owns a gateway payout id.
+func (r *PayoutRepo) FindByProviderRef(ctx context.Context, providerRef string) (*domain.Payout, error) {
+	var p domain.Payout
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, event_id, attempt, organizer_id, amount_rupiah, currency, status,
+		       provider, COALESCE(provider_ref, ''), COALESCE(failure_reason, ''),
+		       created_at, updated_at
+		FROM payouts WHERE provider_ref = $1`, providerRef).
+		Scan(&p.ID, &p.EventID, &p.Attempt, &p.OrganizerID, &p.AmountRupiah, &p.Currency,
+			&p.Status, &p.Provider, &p.ProviderRef, &p.FailureReason, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// ListPendingDispatched returns pending payouts already sent to the gateway
+// (oldest first) — the reconciliation poll's work queue.
+func (r *PayoutRepo) ListPendingDispatched(ctx context.Context, olderThan time.Time, limit int) ([]*domain.Payout, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, event_id, attempt, organizer_id, amount_rupiah, currency, status,
+		       provider, COALESCE(provider_ref, ''), COALESCE(failure_reason, ''),
+		       created_at, updated_at
+		FROM payouts
+		WHERE status = 'pending' AND provider_ref IS NOT NULL AND updated_at < $1
+		ORDER BY updated_at
+		LIMIT $2`, olderThan, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*domain.Payout
+	for rows.Next() {
+		var p domain.Payout
+		if err := rows.Scan(&p.ID, &p.EventID, &p.Attempt, &p.OrganizerID, &p.AmountRupiah, &p.Currency,
+			&p.Status, &p.Provider, &p.ProviderRef, &p.FailureReason, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, &p)
+	}
+	return out, rows.Err()
+}
+
+// FindLatestByEvent returns the most recent attempt of an event's payout.
+func (r *PayoutRepo) FindLatestByEvent(ctx context.Context, eventID string) (*domain.Payout, error) {
+	var p domain.Payout
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, event_id, attempt, organizer_id, amount_rupiah, currency, status,
+		       provider, COALESCE(provider_ref, ''), COALESCE(failure_reason, ''),
+		       created_at, updated_at
+		FROM payouts WHERE event_id = $1 ORDER BY attempt DESC LIMIT 1`, eventID).
+		Scan(&p.ID, &p.EventID, &p.Attempt, &p.OrganizerID, &p.AmountRupiah, &p.Currency,
+			&p.Status, &p.Provider, &p.ProviderRef, &p.FailureReason, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 // FindByEvent returns one attempt of the payout ledger.
 func (r *PayoutRepo) FindByEvent(ctx context.Context, eventID string, attempt int) (*domain.Payout, error) {
 	var p domain.Payout

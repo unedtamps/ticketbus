@@ -62,6 +62,38 @@ func TestXenditCreatePayout_RequestShape(t *testing.T) {
 	assert.Equal(t, "ACCEPTED", result.Status)
 }
 
+func TestXenditGetPayout_StatusAndFailureCode(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"po-1","reference_id":"payout-1","status":"FAILED","failure_code":"INSUFFICIENT_BALANCE"}`))
+	}))
+	defer srv.Close()
+
+	p := NewXenditProcessor("http://unused/v1", srv.URL, "/v2/payouts", "key")
+	result, err := p.GetPayout(context.Background(), "po-1")
+	require.NoError(t, err)
+
+	assert.Equal(t, "/v2/payouts/po-1", gotPath)
+	assert.Equal(t, "po-1", result.ProviderRef)
+	assert.Equal(t, "FAILED", result.Status)
+	assert.Equal(t, "INSUFFICIENT_BALANCE", result.FailureCode)
+}
+
+func TestXenditGetPayout_ErrorClassification(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error_code":"DATA_NOT_FOUND","message":"payout not found"}`))
+	}))
+	defer srv.Close()
+
+	p := NewXenditProcessor("http://unused/v1", srv.URL, "/v2/payouts", "key")
+	_, err := p.GetPayout(context.Background(), "po-unknown")
+	require.Error(t, err)
+	assert.True(t, domain.IsPermanentProcessorError(err), "a 404 on GET is a permanent answer")
+}
+
 func TestXenditCreatePayout_ErrorClassification(t *testing.T) {
 	cases := []struct {
 		name      string

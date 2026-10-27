@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -182,6 +183,7 @@ type xenditPayoutResponse struct {
 	ID          string `json:"id"`
 	ReferenceID string `json:"reference_id"`
 	Status      string `json:"status"`
+	FailureCode string `json:"failure_code"`
 }
 
 // CreatePayout sends funds to the organizer's bank account through the Xendit
@@ -212,6 +214,32 @@ func (p *XenditProcessor) CreatePayout(
 	return &domain.PayoutResult{
 		ProviderRef: firstNonEmpty(out.ID, out.ReferenceID, req.ReferenceID),
 		Status:      out.Status,
+		FailureCode: out.FailureCode,
+	}, nil
+}
+
+// GetPayout fetches the gateway's current state of a previously created
+// payout. The dispatcher's reconciliation poll uses it as the source of truth
+// for payouts whose webhook never arrived.
+func (p *XenditProcessor) GetPayout(
+	ctx context.Context,
+	payoutID string,
+) (*domain.PayoutResult, error) {
+	var out xenditPayoutResponse
+	if err := p.doURL(
+		ctx,
+		http.MethodGet,
+		p.payoutBaseURL+p.payoutPath+"/"+url.PathEscape(payoutID),
+		"",
+		nil,
+		&out,
+	); err != nil {
+		return nil, err
+	}
+	return &domain.PayoutResult{
+		ProviderRef: firstNonEmpty(out.ID, payoutID),
+		Status:      out.Status,
+		FailureCode: out.FailureCode,
 	}, nil
 }
 

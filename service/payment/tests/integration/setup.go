@@ -103,7 +103,8 @@ func startContainers() *TestEnv {
 
 	go outbox.NewWorker(infra.Pool, infra.Producer, logger, 1, 200,
 		[]string{"payment.completed", "payment.expired", "payout.completed"}).Run(ctxBg)
-	go payoutpkg.NewDispatcher(infra.Pool, payoutRepo, mockProcessor, logger, 100).Run(ctxBg)
+	// Reconciliation every second so the async-confirmation tests resolve fast.
+	go payoutpkg.NewDispatcher(infra.Pool, payoutRepo, mockProcessor, logger, 100, 1).Run(ctxBg)
 	go func() { _ = svc.StartConsumer(ctxBg) }()
 	svc.StartExpiryPoller(ctxBg, 1)
 

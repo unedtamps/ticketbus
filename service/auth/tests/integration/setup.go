@@ -33,12 +33,12 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/nedo/TicketSaas/pkg/testinfra"
-	"github.com/nedo/TicketSaas/service/auth/internal/application"
-	"github.com/nedo/TicketSaas/service/auth/internal/bcrypt"
-	authhandler "github.com/nedo/TicketSaas/service/auth/internal/handler"
-	"github.com/nedo/TicketSaas/service/auth/internal/jwt"
-	authpostgres "github.com/nedo/TicketSaas/service/auth/internal/postgres"
+	"github.com/unedtamps/ticketbus/pkg/testinfra"
+	"github.com/unedtamps/ticketbus/service/auth/internal/application"
+	"github.com/unedtamps/ticketbus/service/auth/internal/bcrypt"
+	authhandler "github.com/unedtamps/ticketbus/service/auth/internal/handler"
+	"github.com/unedtamps/ticketbus/service/auth/internal/jwt"
+	authpostgres "github.com/unedtamps/ticketbus/service/auth/internal/postgres"
 )
 
 const (

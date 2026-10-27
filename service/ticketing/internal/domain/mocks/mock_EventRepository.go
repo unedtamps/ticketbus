@@ -7,7 +7,8 @@ package mocks
 import (
 	"context"
 
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -657,4 +658,102 @@ func (_c *MockEventRepository_UpdateEvent_Call) Return(err error) *MockEventRepo
 func (_c *MockEventRepository_UpdateEvent_Call) RunAndReturn(run func(ctx context.Context, event *domain.Event) error) *MockEventRepository_UpdateEvent_Call {
 	_c.Call.Return(run)
 	return _c
+}
+
+// FindPayoutAccount provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) FindPayoutAccount(ctx context.Context, organizerID string) (*domain.OrganizerPayoutAccount, error) {
+	ret := _mock.Called(ctx, organizerID)
+	if len(ret) == 0 {
+		panic("no return value specified for FindPayoutAccount")
+	}
+	var r0 *domain.OrganizerPayoutAccount
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.OrganizerPayoutAccount, error)); ok {
+		return returnFunc(ctx, organizerID)
+	}
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*domain.OrganizerPayoutAccount)
+	}
+	r1 = ret.Error(1)
+	return r0, r1
+}
+
+// RequestPayout provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) RequestPayout(ctx context.Context, attempt *domain.EventPayoutAttempt, payload func(int) any) (bool, error) {
+	ret := _mock.Called(ctx, attempt, payload)
+	if len(ret) == 0 {
+		panic("no return value specified for RequestPayout")
+	}
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *domain.EventPayoutAttempt, func(int) any) (bool, error)); ok {
+		return returnFunc(ctx, attempt, payload)
+	}
+	r0 = ret.Bool(0)
+	r1 = ret.Error(1)
+	return r0, r1
+}
+
+// ListPayoutAttempts provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) ListPayoutAttempts(ctx context.Context, eventID string) ([]domain.EventPayoutAttempt, error) {
+	ret := _mock.Called(ctx, eventID)
+	if len(ret) == 0 {
+		panic("no return value specified for ListPayoutAttempts")
+	}
+	var r0 []domain.EventPayoutAttempt
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]domain.EventPayoutAttempt, error)); ok {
+		return returnFunc(ctx, eventID)
+	}
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]domain.EventPayoutAttempt)
+	}
+	r1 = ret.Error(1)
+	return r0, r1
+}
+
+// PayoutSummary provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) PayoutSummary(ctx context.Context, eventID string) (*domain.EventPayoutSummary, error) {
+	ret := _mock.Called(ctx, eventID)
+	if len(ret) == 0 {
+		panic("no return value specified for PayoutSummary")
+	}
+	var r0 *domain.EventPayoutSummary
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.EventPayoutSummary, error)); ok {
+		return returnFunc(ctx, eventID)
+	}
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*domain.EventPayoutSummary)
+	}
+	r1 = ret.Error(1)
+	return r0, r1
+}
+
+// SetPayoutResult provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) SetPayoutResult(ctx context.Context, eventID string, attempt int, status sdomain.PayoutStatus, amountRupiah int64, providerRef string, reason string) (bool, error) {
+	ret := _mock.Called(ctx, eventID, attempt, status, amountRupiah, providerRef, reason)
+	if len(ret) == 0 {
+		panic("no return value specified for SetPayoutResult")
+	}
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, sdomain.PayoutStatus, int64, string, string) (bool, error)); ok {
+		return returnFunc(ctx, eventID, attempt, status, amountRupiah, providerRef, reason)
+	}
+	r0 = ret.Bool(0)
+	r1 = ret.Error(1)
+	return r0, r1
+}
+
+// UpsertPayoutAccount provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) UpsertPayoutAccount(ctx context.Context, acct *domain.OrganizerPayoutAccount) error {
+	ret := _mock.Called(ctx, acct)
+	if len(ret) == 0 {
+		panic("no return value specified for UpsertPayoutAccount")
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *domain.OrganizerPayoutAccount) error); ok {
+		return returnFunc(ctx, acct)
+	}
+	return ret.Error(0)
 }

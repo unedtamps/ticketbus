@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	sdto "github.com/nedo/TicketSaas/pkg/dto"
+	sdto "github.com/unedtamps/ticketbus/pkg/dto"
 )
 
 // fakeClient records InitiateTxnForBooking calls.

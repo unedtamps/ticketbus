@@ -5,13 +5,14 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
-	sharedhttp "github.com/nedo/TicketSaas/pkg/http"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/application/event"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	sharedhttp "github.com/unedtamps/ticketbus/pkg/http"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/application/event"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
 // EventHandler handles HTTP requests for the event service.
@@ -45,7 +46,7 @@ func (h *EventHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		}
 		ticketTypes[i] = domain.TicketType{
 			Name:        tt.Name,
-			PriceRupiah:  tt.PriceRupiah,
+			PriceRupiah: tt.PriceRupiah,
 			Quantity:    tt.Quantity,
 			MaxPerOrder: mpo,
 		}
@@ -64,7 +65,8 @@ func (h *EventHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, domain.ErrCapacityExceeded) ||
-			errors.Is(err, domain.ErrTicketTypesEmpty) {
+			errors.Is(err, domain.ErrTicketTypesEmpty) ||
+			errors.Is(err, domain.ErrEventInvalidWindow) {
 			sharedhttp.BadRequest(w, err.Error())
 			return
 		}
@@ -116,6 +118,10 @@ func (h *EventHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, domain.ErrNotEventOwner) || errors.Is(err, domain.ErrEventNotEditable) {
 			sharedhttp.Forbidden(w, err.Error())
+			return
+		}
+		if errors.Is(err, domain.ErrEventInvalidWindow) {
+			sharedhttp.BadRequest(w, err.Error())
 			return
 		}
 		sharedhttp.InternalServerError(w, "failed to update event")
@@ -276,7 +282,7 @@ func (h *EventHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
 		ttResp[i] = TicketTypeResponse{
 			ID:          tt.ID,
 			Name:        tt.Name,
-			PriceRupiah:  tt.PriceRupiah,
+			PriceRupiah: tt.PriceRupiah,
 			Quantity:    tt.Quantity,
 			Available:   tt.Available,
 			MaxPerOrder: tt.MaxPerOrder,
@@ -284,18 +290,19 @@ func (h *EventHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	sharedhttp.OK(w, EventDetailResponse{
 		Event: EventResponse{
-			ID:            event.ID,
-			OrganizerID:   event.OrganizerID,
-			VenueName:     event.VenueName,
-			VenueAddress:  event.VenueAddress,
-			VenueCapacity: event.VenueCapacity,
-			Title:         event.Title,
-			Description:   event.Description,
-			StartAt:       event.StartAt,
-			EndAt:         event.EndAt,
-			Status:        event.Status,
-			CreatedAt:     event.CreatedAt,
-			UpdatedAt:     event.UpdatedAt,
+			ReservationsOpen: reservationsOpen(event),
+			ID:               event.ID,
+			OrganizerID:      event.OrganizerID,
+			VenueName:        event.VenueName,
+			VenueAddress:     event.VenueAddress,
+			VenueCapacity:    event.VenueCapacity,
+			Title:            event.Title,
+			Description:      event.Description,
+			StartAt:          event.StartAt,
+			EndAt:            event.EndAt,
+			Status:           event.Status,
+			CreatedAt:        event.CreatedAt,
+			UpdatedAt:        event.UpdatedAt,
 		},
 		TicketTypes: ttResp,
 	})
@@ -319,18 +326,19 @@ func (h *EventHandler) ListPublished(w http.ResponseWriter, r *http.Request) {
 		resp = append(
 			resp,
 			EventResponse{
-				ID:            e.ID,
-				OrganizerID:   e.OrganizerID,
-				VenueName:     e.VenueName,
-				VenueAddress:  e.VenueAddress,
-				VenueCapacity: e.VenueCapacity,
-				Title:         e.Title,
-				Description:   e.Description,
-				StartAt:       e.StartAt,
-				EndAt:         e.EndAt,
-				Status:        e.Status,
-				CreatedAt:     e.CreatedAt,
-				UpdatedAt:     e.UpdatedAt,
+				ReservationsOpen: reservationsOpen(&e),
+				ID:               e.ID,
+				OrganizerID:      e.OrganizerID,
+				VenueName:        e.VenueName,
+				VenueAddress:     e.VenueAddress,
+				VenueCapacity:    e.VenueCapacity,
+				Title:            e.Title,
+				Description:      e.Description,
+				StartAt:          e.StartAt,
+				EndAt:            e.EndAt,
+				Status:           e.Status,
+				CreatedAt:        e.CreatedAt,
+				UpdatedAt:        e.UpdatedAt,
 			},
 		)
 	}
@@ -345,23 +353,29 @@ func (h *EventHandler) ListMyEvents(w http.ResponseWriter, r *http.Request) {
 		sharedhttp.InternalServerError(w, "failed to list events")
 		return
 	}
-	resp := make([]EventResponse, 0, len(events))
+	resp := make([]OrganizerEventResponse, 0, len(events))
 	for _, e := range events {
 		resp = append(
 			resp,
-			EventResponse{
-				ID:            e.ID,
-				OrganizerID:   e.OrganizerID,
-				VenueName:     e.VenueName,
-				VenueAddress:  e.VenueAddress,
-				VenueCapacity: e.VenueCapacity,
-				Title:         e.Title,
-				Description:   e.Description,
-				StartAt:       e.StartAt,
-				EndAt:         e.EndAt,
-				Status:        e.Status,
-				CreatedAt:     e.CreatedAt,
-				UpdatedAt:     e.UpdatedAt,
+			OrganizerEventResponse{
+				EventResponse: EventResponse{
+					ID:            e.ID,
+					OrganizerID:   e.OrganizerID,
+					VenueName:     e.VenueName,
+					VenueAddress:  e.VenueAddress,
+					VenueCapacity: e.VenueCapacity,
+					Title:         e.Title,
+					Description:   e.Description,
+					StartAt:       e.StartAt,
+					EndAt:         e.EndAt,
+					Status:        e.Status,
+					CreatedAt:     e.CreatedAt,
+					UpdatedAt:     e.UpdatedAt,
+				},
+				PayoutStatus:       string(e.PayoutStatus),
+				PayoutAmountRupiah: e.PayoutAmountRupiah,
+				PayoutRequestedAt:  e.PayoutRequestedAt,
+				PayoutCompletedAt:  e.PayoutCompletedAt,
 			},
 		)
 	}
@@ -385,18 +399,19 @@ func (h *EventHandler) ListPending(w http.ResponseWriter, r *http.Request) {
 		resp = append(
 			resp,
 			EventResponse{
-				ID:            e.ID,
-				OrganizerID:   e.OrganizerID,
-				VenueName:     e.VenueName,
-				VenueAddress:  e.VenueAddress,
-				VenueCapacity: e.VenueCapacity,
-				Title:         e.Title,
-				Description:   e.Description,
-				StartAt:       e.StartAt,
-				EndAt:         e.EndAt,
-				Status:        e.Status,
-				CreatedAt:     e.CreatedAt,
-				UpdatedAt:     e.UpdatedAt,
+				ReservationsOpen: reservationsOpen(&e),
+				ID:               e.ID,
+				OrganizerID:      e.OrganizerID,
+				VenueName:        e.VenueName,
+				VenueAddress:     e.VenueAddress,
+				VenueCapacity:    e.VenueCapacity,
+				Title:            e.Title,
+				Description:      e.Description,
+				StartAt:          e.StartAt,
+				EndAt:            e.EndAt,
+				Status:           e.Status,
+				CreatedAt:        e.CreatedAt,
+				UpdatedAt:        e.UpdatedAt,
 			},
 		)
 	}
@@ -421,20 +436,164 @@ func (h *EventHandler) ListAll(w http.ResponseWriter, r *http.Request) {
 		resp = append(
 			resp,
 			EventResponse{
-				ID:            e.ID,
-				OrganizerID:   e.OrganizerID,
-				VenueName:     e.VenueName,
-				VenueAddress:  e.VenueAddress,
-				VenueCapacity: e.VenueCapacity,
-				Title:         e.Title,
-				Description:   e.Description,
-				StartAt:       e.StartAt,
-				EndAt:         e.EndAt,
-				Status:        e.Status,
-				CreatedAt:     e.CreatedAt,
-				UpdatedAt:     e.UpdatedAt,
+				ReservationsOpen: reservationsOpen(&e),
+				ID:               e.ID,
+				OrganizerID:      e.OrganizerID,
+				VenueName:        e.VenueName,
+				VenueAddress:     e.VenueAddress,
+				VenueCapacity:    e.VenueCapacity,
+				Title:            e.Title,
+				Description:      e.Description,
+				StartAt:          e.StartAt,
+				EndAt:            e.EndAt,
+				Status:           e.Status,
+				CreatedAt:        e.CreatedAt,
+				UpdatedAt:        e.UpdatedAt,
 			},
 		)
 	}
 	sharedhttp.OK(w, EventListResponse{Events: resp, Total: total})
+}
+
+// GetPayoutAccount handles GET /api/payout-account (EO).
+func (h *EventHandler) GetPayoutAccount(w http.ResponseWriter, r *http.Request) {
+	userID := sharedhttp.UserIDFromContext(r.Context())
+	acct, err := h.svc.GetPayoutAccount(r.Context(), userID)
+	if err != nil {
+		if errors.Is(err, domain.ErrPayoutAccountAbsent) {
+			sharedhttp.NotFound(w, err.Error())
+			return
+		}
+		sharedhttp.InternalServerError(w, "failed to load payout account")
+		return
+	}
+	sharedhttp.OK(w, PayoutAccountResponse{
+		BankCode:              acct.BankCode,
+		BankAccountNumber:     acct.BankAccountNumber,
+		BankAccountHolderName: acct.BankAccountHolderName,
+		CreatedAt:             acct.CreatedAt,
+		UpdatedAt:             acct.UpdatedAt,
+	})
+}
+
+// SetPayoutAccount handles PUT /api/payout-account (EO).
+func (h *EventHandler) SetPayoutAccount(w http.ResponseWriter, r *http.Request) {
+	var req PayoutAccountRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sharedhttp.BadRequest(w, "invalid request body")
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		sharedhttp.BadRequest(w, err.Error())
+		return
+	}
+	userID := sharedhttp.UserIDFromContext(r.Context())
+	acct, err := h.svc.SetPayoutAccount(
+		r.Context(), userID, req.BankCode, req.BankAccountNumber, req.BankAccountHolderName,
+	)
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidPayoutBank) {
+			sharedhttp.BadRequest(w, err.Error())
+			return
+		}
+		sharedhttp.InternalServerError(w, "failed to save payout account")
+		return
+	}
+	sharedhttp.OK(w, PayoutAccountResponse{
+		BankCode:              acct.BankCode,
+		BankAccountNumber:     acct.BankAccountNumber,
+		BankAccountHolderName: acct.BankAccountHolderName,
+		CreatedAt:             acct.CreatedAt,
+		UpdatedAt:             acct.UpdatedAt,
+	})
+}
+
+// RequestPayout handles POST /api/events/{id}/payout (EO).
+func (h *EventHandler) RequestPayout(w http.ResponseWriter, r *http.Request) {
+	eventID := chi.URLParam(r, "id")
+	userID := sharedhttp.UserIDFromContext(r.Context())
+	attempt, err := h.svc.RequestPayout(r.Context(), eventID, userID)
+	if err != nil {
+		h.writePayoutError(w, err)
+		return
+	}
+	sharedhttp.Accepted(w, PayoutAttemptResponse{
+		EventID:               attempt.EventID,
+		Attempt:               attempt.Attempt,
+		Status:                string(attempt.Status),
+		AmountRupiah:          attempt.AmountRupiah,
+		BankCode:              attempt.BankCode,
+		BankAccountNumber:     attempt.BankAccountNumber,
+		BankAccountHolderName: attempt.BankAccountHolderName,
+		RequestedAt:           attempt.RequestedAt,
+		CompletedAt:           attempt.CompletedAt,
+	})
+}
+
+// GetPayout handles GET /api/events/{id}/payout (EO).
+func (h *EventHandler) GetPayout(w http.ResponseWriter, r *http.Request) {
+	eventID := chi.URLParam(r, "id")
+	userID := sharedhttp.UserIDFromContext(r.Context())
+	summary, err := h.svc.GetEventPayout(r.Context(), eventID, userID)
+	if err != nil {
+		h.writePayoutError(w, err)
+		return
+	}
+	attempts := make([]PayoutAttemptResponse, 0, len(summary.AttemptsList))
+	for _, a := range summary.AttemptsList {
+		attempts = append(attempts, PayoutAttemptResponse{
+			EventID:               a.EventID,
+			Attempt:               a.Attempt,
+			Status:                string(a.Status),
+			AmountRupiah:          a.AmountRupiah,
+			BankCode:              a.BankCode,
+			BankAccountNumber:     a.BankAccountNumber,
+			BankAccountHolderName: a.BankAccountHolderName,
+			ProviderRef:           a.ProviderRef,
+			FailureReason:         a.FailureReason,
+			RequestedAt:           a.RequestedAt,
+			CompletedAt:           a.CompletedAt,
+		})
+	}
+	sharedhttp.OK(w, PayoutResponse{
+		EventID:       summary.EventID,
+		Status:        string(summary.Status),
+		AmountRupiah:  summary.AmountRupiah,
+		Attempts:      summary.Attempts,
+		AttemptList:   attempts,
+		ProviderRef:   summary.ProviderRef,
+		FailureReason: summary.FailureReason,
+		RequestedAt:   summary.RequestedAt,
+		CompletedAt:   summary.CompletedAt,
+	})
+}
+
+func (h *EventHandler) writePayoutError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, domain.ErrEventNotFound):
+		sharedhttp.NotFound(w, err.Error())
+	case errors.Is(err, domain.ErrNotEventOwner):
+		sharedhttp.Forbidden(w, err.Error())
+	case errors.Is(err, domain.ErrEventNotPayoutable),
+		errors.Is(err, domain.ErrEventNotEnded),
+		errors.Is(err, domain.ErrPayoutExists),
+		errors.Is(err, domain.ErrPayoutInFlight):
+		sharedhttp.Conflict(w, err.Error())
+	case errors.Is(err, domain.ErrPayoutAccountAbsent),
+		errors.Is(err, domain.ErrInvalidPayoutBank):
+		sharedhttp.BadRequest(w, err.Error())
+	default:
+		sharedhttp.InternalServerError(w, "payout operation failed")
+	}
+}
+
+// reservationsOpen reports whether the event still accepts reservations: it
+// must be published, already started, and not over. The window before the end
+// is enforced server side as well — this flag only tells the UI what to show.
+func reservationsOpen(e *domain.Event) bool {
+	if e.Status != sdomain.EventStatusPublished {
+		return false
+	}
+	now := time.Now()
+	return !now.Before(e.StartAt) && now.Before(e.EndAt)
 }

@@ -5,8 +5,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
-	shareddb "github.com/nedo/TicketSaas/pkg/db"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	shareddb "github.com/unedtamps/ticketbus/pkg/db"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
 // SeatCounter implements domain.SeatCounter using atomic PostgreSQL updates.

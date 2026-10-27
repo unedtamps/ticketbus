@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	shareddb "github.com/nedo/TicketSaas/pkg/db"
-	"github.com/nedo/TicketSaas/service/payment/internal/domain"
+	shareddb "github.com/unedtamps/ticketbus/pkg/db"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
 // TransactionRepo implements domain.TransactionRepository.
@@ -19,14 +19,14 @@ func NewTransactionRepo(db shareddb.DBTx) *TransactionRepo {
 	return &TransactionRepo{db: db}
 }
 
-const txnColumns = `id, user_id, booking_id, event_id, amount_rupiah, currency, status, provider, provider_ref, payment_link_url, customer_email, refund_status, expires_at, created_at, updated_at`
+const txnColumns = `id, user_id, booking_id, event_id, amount_rupiah, currency, status, provider, provider_ref, payment_link_url, customer_email, refund_status, payout_status, expires_at, created_at, updated_at`
 
 func scanTxn(row interface{ Scan(...any) error }) (*domain.Transaction, error) {
 	var t domain.Transaction
 	err := row.Scan(
 		&t.ID, &t.UserID, &t.BookingID, &t.EventID, &t.AmountRupiah, &t.Currency,
 		&t.Status, &t.Provider, &t.ProviderRef, &t.PaymentLinkURL, &t.CustomerEmail,
-		&t.RefundStatus, &t.ExpiresAt, &t.CreatedAt, &t.UpdatedAt,
+		&t.RefundStatus, &t.PayoutStatus, &t.ExpiresAt, &t.CreatedAt, &t.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err

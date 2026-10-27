@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nedo/TicketSaas/service/payment/internal/domain"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
 // MockProcessor implements domain.PaymentProcessor with a simulated gateway.
@@ -16,14 +16,18 @@ import (
 // whoever drives the flow, so tests choose the exact event and observe the
 // result immediately instead of waiting on a timer.
 type MockProcessor struct {
-	mu       sync.Mutex
-	sessions map[string]*domain.SessionResult
+	mu          sync.Mutex
+	sessions    map[string]*domain.SessionResult
+	payouts     map[string]*domain.PayoutResult
+	payoutCalls int
+	payoutErr   error
 }
 
 // NewMockProcessor creates a new mock payment processor.
 func NewMockProcessor() *MockProcessor {
 	return &MockProcessor{
 		sessions: make(map[string]*domain.SessionResult),
+		payouts:  make(map[string]*domain.PayoutResult),
 	}
 }
 
@@ -67,4 +71,37 @@ func (p *MockProcessor) GetSession(ctx context.Context, providerRef string) (*do
 		return nil, fmt.Errorf("mock session %s not found", providerRef)
 	}
 	return result, nil
+}
+
+// CreatePayout simulates a successful gateway payout. The provider reference is
+// deterministic so e2e assertions can recognise it.
+func (p *MockProcessor) CreatePayout(
+	ctx context.Context,
+	req domain.PayoutRequest,
+) (*domain.PayoutResult, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.payoutCalls++
+	if p.payoutErr != nil {
+		return nil, p.payoutErr
+	}
+	ref := "dis-mock-" + req.ReferenceID
+	result := &domain.PayoutResult{ProviderRef: ref, Status: "SUCCEEDED"}
+	p.payouts[ref] = result
+	return result, nil
+}
+
+// SetPayoutError makes subsequent CreatePayout calls fail with err. Tests use
+// it to exercise the failed/retry path deterministically.
+func (p *MockProcessor) SetPayoutError(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.payoutErr = err
+}
+
+// PayoutCalls returns how many CreatePayout calls were attempted.
+func (p *MockProcessor) PayoutCalls() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.payoutCalls
 }

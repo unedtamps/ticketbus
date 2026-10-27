@@ -3,7 +3,7 @@ package domain
 import (
 	"time"
 
-	"github.com/nedo/TicketSaas/pkg/dto"
+	"github.com/unedtamps/ticketbus/pkg/dto"
 )
 
 // Event is the aggregate root for events.
@@ -22,6 +22,17 @@ type Event struct {
 	ReviewedAt    *time.Time      `json:"reviewed_at,omitempty"`
 	CreatedAt     time.Time       `json:"created_at"`
 	UpdatedAt     time.Time       `json:"updated_at"`
+
+	// ReservationsOpen reports whether the event currently accepts
+	// reservations: published, already started, and not over.
+	ReservationsOpen bool `json:"reservations_open"`
+
+	// Payout view fields, populated only by organizer-scoped queries
+	// (GET /api/events/mine, GET /api/events/{id}/payout).
+	PayoutStatus       dto.PayoutStatus `json:"payout_status,omitempty"`
+	PayoutAmountRupiah int64            `json:"payout_amount_rupiah,omitempty"`
+	PayoutRequestedAt  *time.Time       `json:"payout_requested_at,omitempty"`
+	PayoutCompletedAt  *time.Time       `json:"payout_completed_at,omitempty"`
 }
 
 // TicketType represents a ticket category for an event.

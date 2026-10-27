@@ -19,7 +19,7 @@ const sans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "TicketSaas",
+  title: "TicketBus",
   description: "Event ticketing platform",
 };
 

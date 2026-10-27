@@ -19,7 +19,7 @@ import (
 	tckafka "github.com/testcontainers/testcontainers-go/modules/kafka"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"github.com/nedo/TicketSaas/pkg/kafka"
+	"github.com/unedtamps/ticketbus/pkg/kafka"
 )
 
 // Topics are every cross-service topic a suite may need to produce to or
@@ -29,6 +29,8 @@ var Topics = []string{
 	"ticket.issued",
 	"payment.completed",
 	"payment.expired",
+	"payout.requested",
+	"payout.completed",
 }
 
 // smokeTopic is only used to confirm the broker accepts a produce.
@@ -204,8 +206,8 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, dir string) error {
 func startPostgres(ctx context.Context, service string) (string, testcontainers.Container, error) {
 	c, err := tcpostgres.Run(
 		ctx, "postgres:16-alpine",
-		tcpostgres.WithUsername("ticketsaas"),
-		tcpostgres.WithPassword("ticketsaas"),
+		tcpostgres.WithUsername("ticketbus"),
+		tcpostgres.WithPassword("ticketbus"),
 		tcpostgres.WithDatabase(service+"_db"),
 	)
 	if err != nil {
@@ -224,7 +226,7 @@ func startPostgres(ctx context.Context, service string) (string, testcontainers.
 		return "", nil, fmt.Errorf("postgres port: %w", err)
 	}
 
-	dsn := fmt.Sprintf("postgres://ticketsaas:ticketsaas@%s:%s/%s_db?sslmode=disable", host, port.Port(), service)
+	dsn := fmt.Sprintf("postgres://ticketbus:ticketbus@%s:%s/%s_db?sslmode=disable", host, port.Port(), service)
 	return dsn, c, nil
 }
 

@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	sharedhttp "github.com/nedo/TicketSaas/pkg/http"
-	"github.com/nedo/TicketSaas/service/payment/internal/application"
-	"github.com/nedo/TicketSaas/service/payment/internal/domain"
+	sharedhttp "github.com/unedtamps/ticketbus/pkg/http"
+	"github.com/unedtamps/ticketbus/service/payment/internal/application"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
 // PaymentHandler handles HTTP requests for the payment service.

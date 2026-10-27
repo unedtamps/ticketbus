@@ -3,14 +3,15 @@ package application
 import (
 	"log/slog"
 
-	"github.com/nedo/TicketSaas/pkg/outbox"
-	"github.com/nedo/TicketSaas/service/payment/internal/domain"
+	"github.com/unedtamps/ticketbus/pkg/outbox"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
 // PaymentService orchestrates payment operations.
 type PaymentService struct {
 	txnRepo                domain.TransactionRepository
 	refundRepo             domain.RefundRepository
+	payoutRepo             domain.PayoutRepository
 	processor              domain.PaymentProcessor
 	consumer               domain.EventConsumer
 	outbox                 outbox.StoreInterface
@@ -24,6 +25,7 @@ type PaymentService struct {
 func NewPaymentService(
 	txnRepo domain.TransactionRepository,
 	refundRepo domain.RefundRepository,
+	payoutRepo domain.PayoutRepository,
 	processor domain.PaymentProcessor,
 	consumer domain.EventConsumer,
 	ob outbox.StoreInterface,
@@ -35,6 +37,7 @@ func NewPaymentService(
 	return &PaymentService{
 		txnRepo:                txnRepo,
 		refundRepo:             refundRepo,
+		payoutRepo:             payoutRepo,
 		processor:              processor,
 		consumer:               consumer,
 		outbox:                 ob,

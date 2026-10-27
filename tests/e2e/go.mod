@@ -1,7 +1,7 @@
 // The e2e suite is a separate module on purpose: it is black-box and imports
 // nothing from any service, so it has no reason to depend on their internals.
 // A nested module also keeps it out of the root module's ./... patterns.
-module github.com/nedo/TicketSaas/tests
+module github.com/unedtamps/ticketbus/tests
 
 go 1.26.4
 

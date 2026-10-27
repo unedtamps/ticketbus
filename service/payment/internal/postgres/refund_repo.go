@@ -3,8 +3,8 @@ package postgres
 import (
 	"context"
 
-	shareddb "github.com/nedo/TicketSaas/pkg/db"
-	"github.com/nedo/TicketSaas/service/payment/internal/domain"
+	shareddb "github.com/unedtamps/ticketbus/pkg/db"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
 // RefundRepo implements domain.RefundRepository.

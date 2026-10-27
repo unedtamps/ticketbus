@@ -13,11 +13,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/nedo/TicketSaas/pkg/outbox"
-	"github.com/nedo/TicketSaas/service/payment/internal/application"
-	"github.com/nedo/TicketSaas/service/payment/internal/domain"
-	"github.com/nedo/TicketSaas/service/payment/internal/domain/mocks"
-	fixtures "github.com/nedo/TicketSaas/service/payment/internal/testfixtures"
+	"github.com/unedtamps/ticketbus/pkg/outbox"
+	"github.com/unedtamps/ticketbus/service/payment/internal/application"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain/mocks"
+	fixtures "github.com/unedtamps/ticketbus/service/payment/internal/testfixtures"
 )
 
 var payLogger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -31,7 +31,7 @@ func newPaymentService(
 ) *application.PaymentService {
 	t.Helper()
 	return application.NewPaymentService(
-		txnRepo, refundRepo, processor, consumer,
+		txnRepo, refundRepo, mocks.NewMockPayoutRepository(t), processor, consumer,
 		outbox.NoopStore{}, payLogger, "mock", 5, []string{"ID_QRIS"},
 	)
 }

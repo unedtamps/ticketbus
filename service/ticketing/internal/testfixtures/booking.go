@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
 // BookingOption is a functional option for NewTestBooking.

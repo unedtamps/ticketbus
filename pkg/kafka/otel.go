@@ -73,7 +73,7 @@ func startConsumerSpan(ctx context.Context, msg Message) (context.Context, trace
 		semconv.MessagingKafkaOffset(int(msg.Offset)),
 	}
 
-	return otel.Tracer("github.com/nedo/TicketSaas/pkg/kafka").
+	return otel.Tracer("github.com/unedtamps/ticketbus/pkg/kafka").
 		Start(parent, msg.Topic+" process",
 			trace.WithSpanKind(trace.SpanKindConsumer),
 			trace.WithAttributes(attrs...))

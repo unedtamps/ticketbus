@@ -6,21 +6,30 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	sdto "github.com/nedo/TicketSaas/pkg/dto"
-	"github.com/nedo/TicketSaas/pkg/outbox"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/application/booking"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain/mocks"
-	fixtures "github.com/nedo/TicketSaas/service/ticketing/internal/testfixtures"
+	sdto "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/pkg/outbox"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/application/booking"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain/mocks"
+	fixtures "github.com/unedtamps/ticketbus/service/ticketing/internal/testfixtures"
 )
 
 var invLogger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
+
+// reservableWindow is the default event window in tests: published, started
+// an hour ago and ending in a day, so reservations are allowed.
+func reservableWindow() (string, time.Time, time.Time) {
+	return string(sdto.EventStatusPublished),
+		time.Now().Add(-time.Hour),
+		time.Now().Add(24 * time.Hour)
+}
 
 func newBookingService(
 	t testing.TB,
@@ -31,6 +40,11 @@ func newBookingService(
 ) (*booking.BookingService, *mocks.MockEventStatusRepository) {
 	t.Helper()
 	eventStatus := mocks.NewMockEventStatusRepository(t)
+	// Default: the event is open for reservations. Tests that exercise the
+	// window override this expectation.
+	status, startAt, endAt := reservableWindow()
+	eventStatus.EXPECT().EventWindow(mock.Anything, mock.Anything).
+		Return(status, startAt, endAt, nil).Maybe()
 	return booking.NewBookingService(bookingRepo, seatCounter, consumer, eventStatus, ob, invLogger, 300), eventStatus
 }
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	shareddb "github.com/nedo/TicketSaas/pkg/db"
+	shareddb "github.com/unedtamps/ticketbus/pkg/db"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 )

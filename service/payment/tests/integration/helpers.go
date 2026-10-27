@@ -20,7 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/nedo/TicketSaas/pkg/dto"
+	"github.com/unedtamps/ticketbus/pkg/dto"
 )
 
 // ── HTTP helpers ──

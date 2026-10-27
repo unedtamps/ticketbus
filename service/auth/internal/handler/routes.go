@@ -2,7 +2,7 @@ package handler
 
 import (
 	"github.com/go-chi/chi/v5"
-	sharedhttp "github.com/nedo/TicketSaas/pkg/http"
+	sharedhttp "github.com/unedtamps/ticketbus/pkg/http"
 )
 
 // Routes returns the auth service HTTP routes.

@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"time"
+
+	"github.com/unedtamps/ticketbus/pkg/dto"
 )
 
 // TransactionRepository defines the contract for transaction persistence.
@@ -52,11 +54,41 @@ type PaymentProcessor interface {
 	CancelSession(ctx context.Context, providerRef string) error
 	// GetSession fetches a payment session.
 	GetSession(ctx context.Context, providerRef string) (*SessionResult, error)
+	// CreatePayout sends the organizer's earnings to their bank account.
+	CreatePayout(ctx context.Context, req PayoutRequest) (*PayoutResult, error)
+}
+
+// PayoutRepository defines the persistence contract for event payouts.
+type PayoutRepository interface {
+	// Prepare atomically creates the payout ledger row for one attempt, marks
+	// the event's eligible transactions pending, and writes either the gateway
+	// disbursement job or (when there are no earnings) a failed payout.completed
+	// event — all in one transaction.
+	//
+	// A repeated delivery of the same attempt is a no-op.
+	Prepare(ctx context.Context, req dto.PayoutRequested) (*PreparedPayout, error)
+	// Complete applies the gateway outcome to one attempt of the ledger and its
+	// transactions and emits payout.completed, in one transaction.
+	Complete(ctx context.Context, eventID string, attempt int, status string, amountRupiah int64, providerRef, reason string) error
+	FindByEvent(ctx context.Context, eventID string, attempt int) (*Payout, error)
+}
+
+// PreparedPayout is the outcome of Prepare.
+type PreparedPayout struct {
+	Payout       *Payout
+	AmountRupiah int64
+	// Duplicate is true when an existing non-failed payout made this request a
+	// no-op (Kafka redelivery).
+	Duplicate bool
+	// NoEarnings is true when the event had no payable transactions; the payout
+	// is already recorded as failed.
+	NoEarnings bool
 }
 
 // EventConsumer defines the contract for consuming reservation events.
 type EventConsumer interface {
 	OnEventCancelled(ctx context.Context, fn func(ctx context.Context, eventID string) error)
+	OnPayoutRequested(ctx context.Context, fn func(ctx context.Context, evt dto.PayoutRequested) error)
 	Start(ctx context.Context) error
 	Close() error
 }

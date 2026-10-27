@@ -23,6 +23,33 @@ func TestEvent_EO_CreatesDraft(t *testing.T) {
 	assert.Equal(t, "pending", ev.Status)
 }
 
+// TestEvent_RejectsInvertedWindow covers a create request whose end time is
+// not after its start time: such an event could never be booked, so it is
+// rejected instead of stored.
+func TestEvent_RejectsInvertedWindow(t *testing.T) {
+	env := getTestEnv()
+	eo := newEO()
+
+	start := time.Now().Add(24 * time.Hour)
+	payload := map[string]interface{}{
+		"title":          "Backwards Event",
+		"description":    "end before start",
+		"venue_name":     "Test Stadium",
+		"venue_address":  "123 Test St",
+		"venue_capacity": 100,
+		"start_at":       start.Format(time.RFC3339),
+		"end_at":         start.Add(-time.Hour).Format(time.RFC3339),
+		"ticket_types": []map[string]interface{}{
+			{"name": "GA", "price_rupiah": 5000, "quantity": 10, "max_per_order": 5},
+		},
+	}
+
+	resp, body, err := doJSON(http.MethodPost, env.apiURL+"/api/events", payload, eo.headers)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode,
+		"an inverted event window must be rejected: %s", body)
+}
+
 func TestEvent_EO_SeesOnlyOwnEvents(t *testing.T) {
 	env := getTestEnv()
 

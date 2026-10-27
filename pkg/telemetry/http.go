@@ -9,7 +9,7 @@ import (
 )
 
 // instrumentationName is the meter name for instruments this package defines.
-const instrumentationName = "github.com/nedo/TicketSaas/pkg/telemetry"
+const instrumentationName = "github.com/unedtamps/ticketbus/pkg/telemetry"
 
 // HTTPMetrics are the RED instruments the HTTP middleware records: request rate,
 // error rate (via the status code attribute), and in-flight concurrency.

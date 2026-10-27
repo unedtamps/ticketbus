@@ -3,7 +3,7 @@ package handler
 import (
 	"time"
 
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
 )
 
 // CreateEventRequest is the DTO for creating an event.
@@ -21,7 +21,7 @@ type CreateEventRequest struct {
 // TicketTypeRequest is the DTO for a ticket type in event creation.
 type TicketTypeRequest struct {
 	Name        string `json:"name" validate:"required"`
-	PriceRupiah  int    `json:"price_rupiah" validate:"required,min=0"`
+	PriceRupiah int    `json:"price_rupiah" validate:"required,min=0"`
 	Quantity    int    `json:"quantity" validate:"required,min=1"`
 	MaxPerOrder int    `json:"max_per_order" validate:"omitempty,min=1"`
 }
@@ -53,6 +53,10 @@ type EventResponse struct {
 	Status        sdomain.EventStatus `json:"status"`
 	CreatedAt     time.Time           `json:"created_at"`
 	UpdatedAt     time.Time           `json:"updated_at"`
+	// ReservationsOpen reports whether the event currently accepts
+	// reservations. The server enforces the same rule; this only tells the UI
+	// what to show.
+	ReservationsOpen bool `json:"reservations_open"`
 }
 
 // EventDetailResponse includes event with ticket types.
@@ -65,7 +69,7 @@ type EventDetailResponse struct {
 type TicketTypeResponse struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
-	PriceRupiah  int    `json:"price_rupiah"`
+	PriceRupiah int    `json:"price_rupiah"`
 	Quantity    int    `json:"quantity"`
 	Available   int    `json:"available"`
 	MaxPerOrder int    `json:"max_per_order"`
@@ -75,4 +79,58 @@ type TicketTypeResponse struct {
 type EventListResponse struct {
 	Events []EventResponse `json:"events"`
 	Total  int             `json:"total"`
+}
+
+// OrganizerEventResponse is the organizer-scoped event view. It embeds the
+// public fields and adds payout state; bank details are never returned here.
+type OrganizerEventResponse struct {
+	EventResponse
+	PayoutStatus       string     `json:"payout_status"`
+	PayoutAmountRupiah int64      `json:"payout_amount_rupiah"`
+	PayoutRequestedAt  *time.Time `json:"payout_requested_at,omitempty"`
+	PayoutCompletedAt  *time.Time `json:"payout_completed_at,omitempty"`
+}
+
+// PayoutAccountRequest is the EO payout destination.
+type PayoutAccountRequest struct {
+	BankCode              string `json:"bank_code" validate:"required"`
+	BankAccountNumber     string `json:"bank_account_number" validate:"required"`
+	BankAccountHolderName string `json:"bank_account_holder_name" validate:"required"`
+}
+
+// PayoutAccountResponse is the saved payout destination.
+type PayoutAccountResponse struct {
+	BankCode              string    `json:"bank_code"`
+	BankAccountNumber     string    `json:"bank_account_number"`
+	BankAccountHolderName string    `json:"bank_account_holder_name"`
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
+}
+
+// PayoutResponse is the aggregated payout state for an event.
+type PayoutResponse struct {
+	EventID       string                  `json:"event_id"`
+	Status        string                  `json:"status"`
+	AmountRupiah  int64                   `json:"amount_rupiah"`
+	Attempts      int                     `json:"attempts"`
+	AttemptList   []PayoutAttemptResponse `json:"attempts_list"`
+	ProviderRef   string                  `json:"provider_ref,omitempty"`
+	FailureReason string                  `json:"failure_reason,omitempty"`
+	RequestedAt   *time.Time              `json:"requested_at,omitempty"`
+	CompletedAt   *time.Time              `json:"completed_at,omitempty"`
+}
+
+// PayoutAttemptResponse is one payout attempt of an event.
+type PayoutAttemptResponse struct {
+	EventID               string     `json:"event_id"`
+	Attempt               int        `json:"attempt"`
+	Status                string     `json:"status"`
+	AmountRupiah          int64      `json:"amount_rupiah"`
+	BankCode              string     `json:"bank_code,omitempty"`
+	BankAccountNumber     string     `json:"bank_account_number,omitempty"`
+	BankAccountHolderName string     `json:"bank_account_holder_name,omitempty"`
+	ProviderRef           string     `json:"provider_ref,omitempty"`
+	FailureReason         string     `json:"failure_reason,omitempty"`
+	RequestedAt           time.Time  `json:"requested_at"`
+	CompletedAt           *time.Time `json:"completed_at,omitempty"`
 }

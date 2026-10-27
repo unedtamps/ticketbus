@@ -1,4 +1,4 @@
-module github.com/nedo/TicketSaas
+module github.com/unedtamps/ticketbus
 
 go 1.26.4
 

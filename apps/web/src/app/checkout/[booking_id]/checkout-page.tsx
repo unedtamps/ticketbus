@@ -5,7 +5,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api-client";
-import { fmtDateTime, fmtIDR } from "@/lib/format";
+import { fmtIDR } from "@/lib/format";
+import { LocalTime } from "@/components/ui/local-time";
 import { toast } from "@/components/ui/toast";
 import { AlertTriangle, ArrowRight, Hourglass, Loader2, RefreshCw, ShoppingBag, Ticket } from "lucide-react";
 import type { BookingResponse, InitiatePaymentResponse, PaymentStatusResponse } from "@/types";
@@ -133,7 +134,9 @@ export default function CheckoutPage() {
 
         {booking.expires_at && booking.status === "pending" && (
           <p className="text-xs text-[#8B8580] border-t border-dashed border-[#E8E3DC] pt-3">
-            Reservation expires at {fmtDateTime(booking.expires_at)}.
+            Reservation expires at{" "}
+            <LocalTime iso={booking.expires_at} format="datetime" />{" "}
+            (<LocalTime iso={booking.expires_at} format="zone" />).
           </p>
         )}
       </div>

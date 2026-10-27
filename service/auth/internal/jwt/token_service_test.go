@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
-	"github.com/nedo/TicketSaas/service/auth/internal/jwt"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/service/auth/internal/jwt"
 )
 
 func newTestTokenService(t testing.TB, ttl time.Duration) *jwt.TokenService {

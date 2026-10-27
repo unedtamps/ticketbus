@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
 // ReserveRequest is the DTO for creating a reservation.
@@ -12,18 +12,18 @@ type ReserveRequest struct {
 
 // ReserveItemRequest is a single item in a reservation request.
 type ReserveItemRequest struct {
-	TicketTypeID   string `json:"ticket_type_id" validate:"required"`
-	Quantity       int    `json:"quantity" validate:"required,min=1"`
+	TicketTypeID    string `json:"ticket_type_id" validate:"required"`
+	Quantity        int    `json:"quantity" validate:"required,min=1"`
 	UnitPriceRupiah int    `json:"unit_price_rupiah" validate:"required,min=0"`
 }
 
 // ReservationResponse is the public reservation data.
 type ReservationResponse struct {
-	BookingID  string `json:"booking_id"`
-	EventID    string `json:"event_id"`
+	BookingID   string `json:"booking_id"`
+	EventID     string `json:"event_id"`
 	TotalRupiah int    `json:"total_rupiah"`
-	Status     string `json:"status"`
-	ExpiresAt  string `json:"expires_at"`
+	Status      string `json:"status"`
+	ExpiresAt   string `json:"expires_at"`
 }
 
 // BookingResponse is the public booking data.
@@ -33,7 +33,7 @@ type BookingResponse struct {
 	EventID      string            `json:"event_id"`
 	Status       string            `json:"status"`
 	ExpiresAt    string            `json:"expires_at,omitempty"`
-	TotalRupiah   int               `json:"total_rupiah"`
+	TotalRupiah  int               `json:"total_rupiah"`
 	PaymentID    string            `json:"payment_id"`
 	RefundStatus string            `json:"refund_status,omitempty"`
 	Items        []BookingItemResp `json:"items"`
@@ -42,11 +42,11 @@ type BookingResponse struct {
 
 // BookingItemResp is a public booking item.
 type BookingItemResp struct {
-	ID             string `json:"id"`
-	TicketTypeID   string `json:"ticket_type_id"`
-	Quantity       int    `json:"quantity"`
-	UnitPriceRupiah int    `json:"unit_price_rupiah"`
-	TotalPriceRupiah     int    `json:"total_price_rupiah"`
+	ID               string `json:"id"`
+	TicketTypeID     string `json:"ticket_type_id"`
+	Quantity         int    `json:"quantity"`
+	UnitPriceRupiah  int    `json:"unit_price_rupiah"`
+	TotalPriceRupiah int    `json:"total_price_rupiah"`
 }
 
 func bookingToResponse(b *domain.Booking) BookingResponse {

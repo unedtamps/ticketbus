@@ -18,7 +18,8 @@ import {
   Loader2,
   X,
 } from "lucide-react";
-import { fmtDateTime, fmtIDR, fmtTime } from "@/lib/format";
+import { fmtIDR } from "@/lib/format";
+import { LocalTime } from "@/components/ui/local-time";
 import type { EventDetail, ReservationResponse } from "@/types";
 
 type Phase = "selection" | "summary";
@@ -64,6 +65,8 @@ export default function EventPage() {
 
   const event = eventQuery.data;
   const hasSelection = Object.values(selectedTickets).some((q) => q > 0);
+  // The server enforces the reservation window; this only drives the UI.
+  const reservationsOpen = event?.event.reservations_open !== false;
 
   function getOrderItems() {
     return Object.entries(selectedTickets)
@@ -138,13 +141,16 @@ export default function EventPage() {
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="flex items-center gap-2 text-[#4A4541]">
             <Calendar className="w-4 h-4 text-[#B0A89E]" />
-            <span>{fmtDateTime(event.event.start_at)}</span>
+            <span><LocalTime iso={event.event.start_at} format="datetime" /></span>
           </div>
           <div className="flex items-center gap-2 text-[#4A4541]">
             <Clock className="w-4 h-4 text-[#B0A89E]" />
             <span>
-              {fmtTime(event.event.start_at)} &mdash;{" "}
-              {fmtTime(event.event.end_at)}
+              <LocalTime iso={event.event.start_at} format="time" /> &mdash;{" "}
+              <LocalTime iso={event.event.end_at} format="time" />{" "}
+              <span className="text-[#B0A89E]">
+                (<LocalTime iso={event.event.start_at} format="zone" />)
+              </span>
             </span>
           </div>
           <div className="flex items-center gap-2 text-[#4A4541]">
@@ -305,12 +311,21 @@ export default function EventPage() {
               })}
             </div>
           </div>
+          {!reservationsOpen && (
+            <p className="text-center text-sm text-[#8B8580] mt-6">
+              Reservations for this event are closed.
+            </p>
+          )}
           <button
             onClick={() => setPhase("summary")}
-            disabled={!hasSelection || !hydrated || !user}
+            disabled={!hasSelection || !hydrated || !user || !reservationsOpen}
             className="btn-accent w-full mt-6 py-3 text-base"
           >
-            {hydrated && user ? "Review Order" : "Login to Reserve"}
+            {!reservationsOpen
+              ? "Reservations Closed"
+              : hydrated && user
+                ? "Review Order"
+                : "Login to Reserve"}
           </button>
         </>
       )}
@@ -356,7 +371,7 @@ export default function EventPage() {
             </button>
             <button
               onClick={() => setConfirming(true)}
-              disabled={reserveMutation.isPending}
+              disabled={reserveMutation.isPending || !reservationsOpen}
               className="btn-accent flex-1"
             >
               {reserveMutation.isPending ? (

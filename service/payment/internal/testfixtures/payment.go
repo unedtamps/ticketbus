@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nedo/TicketSaas/service/payment/internal/domain"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
 // TransactionOption is a functional option for NewTestTransaction.

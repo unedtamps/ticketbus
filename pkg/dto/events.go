@@ -103,3 +103,55 @@ type OrganizerCreated struct {
 	ContactEmail string    `json:"contact_email"`
 	At           time.Time `json:"at"`
 }
+
+// Payout topics.
+const (
+	// TopicPayoutRequested is the Kafka topic ticketing publishes when an
+	// organizer requests a payout for a finished event.
+	TopicPayoutRequested = "payout.requested"
+	// TopicPaymentDisbursement is the outbox topic the payment service writes
+	// in the same transaction that marks transactions pending; it is delivered
+	// by the payment REST dispatcher to the gateway, never published to Kafka.
+	TopicPaymentDisbursement = "payment.disbursement"
+	// TopicPayoutCompleted is the Kafka topic payment publishes with the
+	// gateway result, consumed by ticketing to settle the event payout.
+	TopicPayoutCompleted = "payout.completed"
+)
+
+// PayoutRequested is the ticketing → payment payout request. Bank details are
+// snapshotted by ticketing from the organizer's payout account.
+type PayoutRequested struct {
+	EventID               string    `json:"event_id"`
+	OrganizerID           string    `json:"organizer_id"`
+	PayoutID              string    `json:"payout_id"`
+	Attempt               int       `json:"attempt"`
+	BankCode              string    `json:"bank_code"`
+	BankAccountNumber     string    `json:"bank_account_number"`
+	BankAccountHolderName string    `json:"bank_account_holder_name"`
+	At                    time.Time `json:"at"`
+}
+
+// PaymentDisbursementRequested is the payment outbox payload that drives the
+// gateway call. It is delivered by the payment REST dispatcher.
+type PaymentDisbursementRequested struct {
+	PayoutID              string `json:"payout_id"`
+	EventID               string `json:"event_id"`
+	Attempt               int    `json:"attempt"`
+	AmountRupiah          int64  `json:"amount_rupiah"`
+	Currency              string `json:"currency"`
+	BankCode              string `json:"bank_code"`
+	BankAccountNumber     string `json:"bank_account_number"`
+	BankAccountHolderName string `json:"bank_account_holder_name"`
+	Description           string `json:"description"`
+}
+
+// PayoutCompleted reports the gateway outcome back to ticketing.
+type PayoutCompleted struct {
+	EventID      string    `json:"event_id"`
+	Attempt      int       `json:"attempt"`
+	Status       string    `json:"status"`
+	AmountRupiah int64     `json:"amount_rupiah"`
+	ProviderRef  string    `json:"provider_ref"`
+	Reason       string    `json:"reason"`
+	At           time.Time `json:"at"`
+}

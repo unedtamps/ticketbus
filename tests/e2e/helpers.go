@@ -225,14 +225,24 @@ type eventDetail struct {
 // createEvent creates a pending event as the given organizer.
 func (env *TestEnv) createEvent(t *testing.T, eo account, capacity int) eventDetail {
 	t.Helper()
+	// Reservations require a started event, so the window opens an hour ago.
+	return env.createEventAt(t, eo, capacity,
+		time.Now().Add(-time.Hour), time.Now().Add(30*24*time.Hour))
+}
+
+// createEventAt creates a pending event with explicit start/end times. Payout
+// tests create an event whose end_at is already in the past; reserve only
+// checks that the event is published.
+func (env *TestEnv) createEventAt(t *testing.T, eo account, capacity int, startAt, endAt time.Time) eventDetail {
+	t.Helper()
 	status, body, err := env.doJSON(http.MethodPost, "/api/events", map[string]interface{}{
 		"title":          "E2E Event",
 		"description":    "end-to-end test event",
 		"venue_name":     "Test Stadium",
 		"venue_address":  "123 Test St",
 		"venue_capacity": capacity,
-		"start_at":       time.Now().Add(30 * 24 * time.Hour).Format(time.RFC3339),
-		"end_at":         time.Now().Add(33 * 24 * time.Hour).Format(time.RFC3339),
+		"start_at":       startAt.Format(time.RFC3339),
+		"end_at":         endAt.Format(time.RFC3339),
 		"ticket_types": []map[string]interface{}{
 			{"name": "VIP", "price_rupiah": 10000, "quantity": 20, "max_per_order": 5},
 			{"name": "GA", "price_rupiah": 5000, "quantity": 80, "max_per_order": 10},
@@ -507,6 +517,65 @@ func (env *TestEnv) settleBooking(t *testing.T, cust account, bookingID string) 
 	env.deliverWebhook(t, "payment_session.completed", bookingID, sessionID)
 	require.Equal(t, "completed", env.paymentStatus(t, cust, bookingID),
 		"duplicate webhook must not change the transaction")
+}
+
+// ── Payouts ──
+
+type payoutState struct {
+	EventID       string `json:"event_id"`
+	Status        string `json:"status"`
+	AmountRupiah  int64  `json:"amount_rupiah"`
+	Attempts      int    `json:"attempts"`
+	ProviderRef   string `json:"provider_ref"`
+	FailureReason string `json:"failure_reason"`
+	CompletedAt   string `json:"completed_at"`
+}
+
+// setPayoutAccount saves the organizer's bank destination.
+func (env *TestEnv) setPayoutAccount(t *testing.T, eo account, bankCode, number, holder string) {
+	t.Helper()
+	status, body, err := env.doJSON(http.MethodPut, "/api/payout-account", map[string]interface{}{
+		"bank_code":                bankCode,
+		"bank_account_number":      number,
+		"bank_account_holder_name": holder,
+	}, bearer(eo))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, status, "set payout account: %s", body)
+}
+
+// requestPayout asks ticketing to pay out an event; 202 on success.
+func (env *TestEnv) requestPayout(t *testing.T, eo account, eventID string) (int, []byte) {
+	t.Helper()
+	status, body, err := env.doJSON(
+		http.MethodPost, "/api/events/"+eventID+"/payout", nil, bearer(eo))
+	require.NoError(t, err)
+	return status, body
+}
+
+// payoutStatus reads the payout state for an event.
+func (env *TestEnv) payoutStatus(t *testing.T, eo account, eventID string) payoutState {
+	t.Helper()
+	status, body, err := env.doJSON(
+		http.MethodGet, "/api/events/"+eventID+"/payout", nil, bearer(eo))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, status, "payout status: %s", body)
+
+	var out payoutState
+	require.NoError(t, decodeData(body, &out), "payout status: %s", body)
+	return out
+}
+
+// waitPayoutStatus polls until the event payout reaches want. The async chain
+// crosses ticketing outbox → Kafka → payment consumer → payment outbox →
+// dispatcher → mock gateway → Kafka → ticketing consumer.
+func (env *TestEnv) waitPayoutStatus(t *testing.T, eo account, eventID, want string, timeout time.Duration) payoutState {
+	t.Helper()
+	var last payoutState
+	pollFor(t, timeout, 500*time.Millisecond, func() bool {
+		last = env.payoutStatus(t, eo, eventID)
+		return last.Status == want
+	}, "event payout "+eventID+" to become "+want+" (last saw "+last.Status+")")
+	return env.payoutStatus(t, eo, eventID)
 }
 
 // ── Cancel ──

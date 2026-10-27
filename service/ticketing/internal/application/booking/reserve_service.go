@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	sdto "github.com/nedo/TicketSaas/pkg/dto"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	sdto "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
 // Reserve creates a temporary reservation in one atomic database transaction:
@@ -23,6 +23,28 @@ func (s *BookingService) Reserve(
 ) (*domain.Reservation, error) {
 	if len(items) == 0 {
 		return nil, domain.ErrInvalidQuantity
+	}
+
+	// The event must be open for reservations: published, already started and
+	// not over. The event does not have to end long after the reservation: the
+	// hold lasts RESERVATION_TTL from now, so a customer who reserved while the
+	// event was live can still pay after it ended. The gateway session always
+	// expires before the hold (session = hold - GATEWAY_EXPIRY_BUFFER_MIN,
+	// floored at the gateway's ten-minute minimum), so a payment made inside
+	// the hold is always honoured.
+	now := time.Now()
+	status, startAt, endAt, err := s.eventStatus.EventWindow(ctx, eventID)
+	if err != nil {
+		return nil, domain.ErrEventNotFound
+	}
+	if status != string(sdto.EventStatusPublished) {
+		return nil, domain.ErrEventNotActive
+	}
+	if now.Before(startAt) {
+		return nil, domain.ErrEventNotStarted
+	}
+	if !now.Before(endAt) {
+		return nil, domain.ErrEventEnded
 	}
 
 	for _, item := range items {
@@ -41,7 +63,10 @@ func (s *BookingService) Reserve(
 		}
 	}
 
-	expiresAt := time.Now().Add(time.Duration(s.reservationTTL) * time.Second)
+	// The hold is not clamped to the event's end: a reservation made while the
+	// event was live stays payable afterwards. The hold is what expires the
+	// booking (via payment.expired), not the event's end time.
+	expiresAt := now.Add(time.Duration(s.reservationTTL) * time.Second)
 	res := &domain.Reservation{
 		BookingID:   uuid.NewString(),
 		UserID:      userID,
@@ -50,7 +75,7 @@ func (s *BookingService) Reserve(
 		TotalRupiah: calculateTotal(items),
 		Status:      "pending",
 		ExpiresAt:   expiresAt,
-		CreatedAt:   time.Now(),
+		CreatedAt:   now,
 	}
 	for i := range res.Items {
 		res.Items[i].ID = uuid.NewString()

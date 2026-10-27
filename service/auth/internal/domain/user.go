@@ -3,7 +3,7 @@ package domain
 import (
 	"time"
 
-	"github.com/nedo/TicketSaas/pkg/dto"
+	"github.com/unedtamps/ticketbus/pkg/dto"
 )
 
 // User is the aggregate root for authentication.

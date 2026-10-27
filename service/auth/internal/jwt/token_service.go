@@ -11,8 +11,8 @@ import (
 	"time"
 
 	jwtgo "github.com/golang-jwt/jwt/v5"
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
-	"github.com/nedo/TicketSaas/service/auth/internal/domain"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/service/auth/internal/domain"
 )
 
 // TokenService implements domain.TokenService using RS256 JWT.

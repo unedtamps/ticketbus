@@ -22,6 +22,11 @@ func Created(w http.ResponseWriter, data interface{}) {
 	writeJSON(w, http.StatusCreated, Response[interface{}]{Data: data})
 }
 
+// Accepted writes a 202 Accepted response.
+func Accepted(w http.ResponseWriter, data interface{}) {
+	writeJSON(w, http.StatusAccepted, Response[interface{}]{Data: data})
+}
+
 // NoContent writes a 204 No Content response.
 func NoContent(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
@@ -50,6 +55,11 @@ func Forbidden(w http.ResponseWriter, message string) {
 // NotFound writes a 404 Not Found response.
 func NotFound(w http.ResponseWriter, message string) {
 	Error(w, http.StatusNotFound, message)
+}
+
+// Conflict writes a 409 Conflict response.
+func Conflict(w http.ResponseWriter, message string) {
+	Error(w, http.StatusConflict, message)
 }
 
 // InternalServerError writes a 500 Internal Server Error response.

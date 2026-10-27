@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/caarlos0/env/v11"
-	"github.com/nedo/TicketSaas/service/auth/internal/application"
+	"github.com/unedtamps/ticketbus/service/auth/internal/application"
 )
 
 // Config holds all configuration for the auth service.

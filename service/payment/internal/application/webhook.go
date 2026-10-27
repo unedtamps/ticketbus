@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
-	"github.com/nedo/TicketSaas/service/payment/internal/domain"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
 // sessionWebhookPayload is the Xendit payment session webhook envelope.

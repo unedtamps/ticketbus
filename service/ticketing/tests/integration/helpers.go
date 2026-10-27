@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/nedo/TicketSaas/pkg/dto"
+	"github.com/unedtamps/ticketbus/pkg/dto"
 )
 
 // ── HTTP helpers ──
@@ -205,7 +205,8 @@ func decodeDataPayload(respBody []byte, target interface{}) error {
 // createEventRaw creates a pending event as the given organizer.
 func createEventRaw(t *testing.T, env *TestEnv, organizer actor) eventResp {
 	t.Helper()
-	future := time.Now().Add(30 * 24 * time.Hour).Format(time.RFC3339)
+	// Reservations require a started event, so the window opens an hour ago.
+	future := time.Now().Add(-time.Hour).Format(time.RFC3339)
 	futureEnd := time.Now().Add(30*24*time.Hour + 3*time.Hour).Format(time.RFC3339)
 
 	resp, body, err := doJSON(http.MethodPost, env.apiURL+"/api/events", map[string]interface{}{

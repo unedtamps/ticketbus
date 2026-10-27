@@ -3,7 +3,7 @@ package event
 import (
 	"context"
 
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
 // GetEvent returns an event by ID with live ticket availability.

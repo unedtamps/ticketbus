@@ -26,7 +26,7 @@ LOGS_DIR    := logs
 
 # Default target
 help:
-	@echo "TicketSaas development commands:"
+	@echo "TicketBus development commands:"
 	@echo "  make infra-up              Start Docker infrastructure"
 	@echo "  make infra-down            Stop Docker infrastructure"
 	@echo "  make infra-logs            Tail Docker logs"

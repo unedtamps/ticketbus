@@ -10,16 +10,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	shareddb "github.com/nedo/TicketSaas/pkg/db"
-	sharedhttp "github.com/nedo/TicketSaas/pkg/http"
-	"github.com/nedo/TicketSaas/pkg/log"
-	"github.com/nedo/TicketSaas/pkg/telemetry"
-	"github.com/nedo/TicketSaas/service/auth/internal/application"
-	"github.com/nedo/TicketSaas/service/auth/internal/bcrypt"
-	"github.com/nedo/TicketSaas/service/auth/internal/config"
-	"github.com/nedo/TicketSaas/service/auth/internal/handler"
-	"github.com/nedo/TicketSaas/service/auth/internal/jwt"
-	"github.com/nedo/TicketSaas/service/auth/internal/postgres"
+	shareddb "github.com/unedtamps/ticketbus/pkg/db"
+	sharedhttp "github.com/unedtamps/ticketbus/pkg/http"
+	"github.com/unedtamps/ticketbus/pkg/log"
+	"github.com/unedtamps/ticketbus/pkg/telemetry"
+	"github.com/unedtamps/ticketbus/service/auth/internal/application"
+	"github.com/unedtamps/ticketbus/service/auth/internal/bcrypt"
+	"github.com/unedtamps/ticketbus/service/auth/internal/config"
+	"github.com/unedtamps/ticketbus/service/auth/internal/handler"
+	"github.com/unedtamps/ticketbus/service/auth/internal/jwt"
+	"github.com/unedtamps/ticketbus/service/auth/internal/postgres"
 )
 
 const (

@@ -11,12 +11,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
-	"github.com/nedo/TicketSaas/pkg/outbox"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/application/event"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain/mocks"
-	fixtures "github.com/nedo/TicketSaas/service/ticketing/internal/testfixtures"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/pkg/outbox"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/application/event"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain/mocks"
+	fixtures "github.com/unedtamps/ticketbus/service/ticketing/internal/testfixtures"
 )
 
 func newEventService(
@@ -44,6 +44,46 @@ func TestCreateEvent_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, sdomain.EventStatusPending, event.Status)
 	assert.NotEmpty(t, event.ID)
+}
+
+func TestCreateEvent_EndBeforeStart(t *testing.T) {
+	repo := mocks.NewMockEventRepository(t)
+	seatReader := mocks.NewMockSeatReader(t)
+	ctx := context.Background()
+	start := time.Now().Add(24 * time.Hour)
+	ticketTypes := []domain.TicketType{
+		*fixtures.NewTestTicketType(fixtures.WithTicketTypeName("VIP"), fixtures.WithTicketTypeQuantity(10), fixtures.WithTicketTypePrice(10000)),
+	}
+	svc := newEventService(t, repo, seatReader)
+	_, err := svc.CreateEvent(ctx, "org-1", "Festival", "desc", "Venue", "Addr", 100,
+		start, start.Add(-time.Hour), ticketTypes)
+	assert.ErrorIs(t, err, domain.ErrEventInvalidWindow)
+}
+
+func TestCreateEvent_EndEqualStart(t *testing.T) {
+	repo := mocks.NewMockEventRepository(t)
+	seatReader := mocks.NewMockSeatReader(t)
+	ctx := context.Background()
+	start := time.Now().Add(24 * time.Hour)
+	ticketTypes := []domain.TicketType{
+		*fixtures.NewTestTicketType(fixtures.WithTicketTypeName("VIP"), fixtures.WithTicketTypeQuantity(10), fixtures.WithTicketTypePrice(10000)),
+	}
+	svc := newEventService(t, repo, seatReader)
+	_, err := svc.CreateEvent(ctx, "org-1", "Festival", "desc", "Venue", "Addr", 100,
+		start, start, ticketTypes)
+	assert.ErrorIs(t, err, domain.ErrEventInvalidWindow)
+}
+
+func TestUpdateEvent_EndBeforeStart(t *testing.T) {
+	repo := mocks.NewMockEventRepository(t)
+	seatReader := mocks.NewMockSeatReader(t)
+	ctx := context.Background()
+	event := fixtures.NewTestEvent(fixtures.WithEventStatus(sdomain.EventStatusDraft), fixtures.WithEventOrganizerID("org-1"))
+	start := time.Now().Add(24 * time.Hour)
+	repo.EXPECT().FindEventByID(ctx, event.ID).Return(event, nil)
+	svc := newEventService(t, repo, seatReader)
+	_, err := svc.UpdateEvent(ctx, event.ID, "org-1", "New", "d", start, start.Add(-time.Hour))
+	assert.ErrorIs(t, err, domain.ErrEventInvalidWindow)
 }
 
 func TestCreateEvent_EmptyTicketTypes(t *testing.T) {

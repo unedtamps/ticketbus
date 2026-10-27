@@ -5,8 +5,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nedo/TicketSaas/pkg/outbox"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	"github.com/unedtamps/ticketbus/pkg/outbox"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
 // BookingRepo implements domain.BookingRepository.
@@ -49,13 +49,26 @@ func (r *BookingRepo) CreateReservation(ctx context.Context, b *domain.Booking, 
 }
 
 // insertBooking writes a booking row and its items inside an open transaction.
+//
+// The insert is conditional on the event still being reservable: published,
+// already started, and not over. The check happens inside the transaction, so
+// an event cancelled between the service-level check and this insert cannot
+// be booked. When the condition does not hold, no row is written and the
+// caller rolls the transaction back — the seat decrement is undone with it.
 func insertBooking(ctx context.Context, tx pgx.Tx, b *domain.Booking) error {
-	_, err := tx.Exec(ctx, `
+	tag, err := tx.Exec(ctx, `
 		INSERT INTO bookings (id, user_id, event_id, status, expires_at)
-		VALUES ($1,$2,$3,$4,$5)`,
+		SELECT $1,$2,$3,$4,$5
+		WHERE EXISTS (
+			SELECT 1 FROM events
+			WHERE id = $3 AND status = 'published' AND start_at <= NOW() AND NOW() < end_at
+		)`,
 		b.ID, b.UserID, b.EventID, b.Status, b.ExpiresAt)
 	if err != nil {
 		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrEventNotActive
 	}
 
 	for _, item := range b.Items {

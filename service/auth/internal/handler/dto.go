@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"github.com/nedo/TicketSaas/pkg/dto"
+	"github.com/unedtamps/ticketbus/pkg/dto"
 )
 
 // RegisterRequest is the DTO for user registration.

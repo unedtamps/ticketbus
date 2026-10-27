@@ -46,7 +46,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <p className="font-[family-name:var(--font-display)] text-3xl text-[#1A1817] mb-2">Join the audience</p>
-          <p className="text-[#8B8580] text-sm">Create your TicketSaas account</p>
+          <p className="text-[#8B8580] text-sm">Create your TicketBus account</p>
         </div>
 
         <form onSubmit={handleSubmit} className="card space-y-4">

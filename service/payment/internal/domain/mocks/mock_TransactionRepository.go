@@ -8,7 +8,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/nedo/TicketSaas/service/payment/internal/domain"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 	mock "github.com/stretchr/testify/mock"
 )
 

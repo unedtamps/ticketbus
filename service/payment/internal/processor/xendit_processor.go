@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nedo/TicketSaas/service/payment/internal/domain"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
 // XenditProcessor implements domain.PaymentProcessor against the Xendit
@@ -18,17 +18,23 @@ import (
 // checkout page (mode PAYMENT_LINK); we receive payment_session.completed and
 // payment_session.expired webhooks.
 type XenditProcessor struct {
-	baseURL    string
-	apiKey     string
-	httpClient *http.Client
+	baseURL       string
+	payoutBaseURL string
+	payoutPath    string
+	apiKey        string
+	httpClient    *http.Client
 }
 
-// NewXenditProcessor creates a new XenditProcessor.
-func NewXenditProcessor(baseURL, apiKey string) *XenditProcessor {
+// NewXenditProcessor creates a new XenditProcessor. baseURL points at the
+// Payment Sessions API (e.g. https://api.xendit.co/v1); payoutBaseURL is the
+// API root used for the Payouts API (https://api.xendit.co).
+func NewXenditProcessor(baseURL, payoutBaseURL, payoutPath, apiKey string) *XenditProcessor {
 	return &XenditProcessor{
-		baseURL:    strings.TrimSuffix(baseURL, "/"),
-		apiKey:     apiKey,
-		httpClient: &http.Client{Timeout: 15 * time.Second},
+		baseURL:       strings.TrimSuffix(baseURL, "/"),
+		payoutBaseURL: strings.TrimSuffix(payoutBaseURL, "/"),
+		payoutPath:    payoutPath,
+		apiKey:        apiKey,
+		httpClient:    &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
@@ -46,9 +52,9 @@ type xenditSessionRequest struct {
 }
 
 type xenditCustomer struct {
-	ReferenceID      string                 `json:"reference_id"`
-	Type             string                 `json:"type"`
-	Email            string                 `json:"email,omitempty"`
+	ReferenceID      string                  `json:"reference_id"`
+	Type             string                  `json:"type"`
+	Email            string                  `json:"email,omitempty"`
 	IndividualDetail *xenditIndividualDetail `json:"individual_detail,omitempty"`
 }
 
@@ -157,6 +163,58 @@ func (p *XenditProcessor) toResult(
 	}
 }
 
+type xenditPayoutRequest struct {
+	ReferenceID       string                        `json:"reference_id"`
+	Currency          string                        `json:"currency"`
+	ChannelCode       string                        `json:"channel_code"`
+	ChannelProperties xenditPayoutChannelProperties `json:"channel_properties"`
+	Amount            int64                         `json:"amount"`
+	Description       string                        `json:"description,omitempty"`
+	Type              string                        `json:"type"`
+}
+
+type xenditPayoutChannelProperties struct {
+	AccountHolderName string `json:"account_holder_name"`
+	AccountNumber     string `json:"account_number"`
+}
+
+type xenditPayoutResponse struct {
+	ID          string `json:"id"`
+	ReferenceID string `json:"reference_id"`
+	Status      string `json:"status"`
+}
+
+// CreatePayout sends funds to the organizer's bank account through the Xendit
+// Payouts API. A 4xx (except 429) is classified as a permanent rejection so the
+// dispatcher fails the payout instead of retrying forever.
+func (p *XenditProcessor) CreatePayout(
+	ctx context.Context,
+	req domain.PayoutRequest,
+) (*domain.PayoutResult, error) {
+	body := xenditPayoutRequest{
+		ReferenceID: req.ReferenceID,
+		Currency:    req.Currency,
+		ChannelCode: "ID_" + strings.ToUpper(req.BankCode),
+		ChannelProperties: xenditPayoutChannelProperties{
+			AccountHolderName: req.AccountHolderName,
+			AccountNumber:     req.AccountNumber,
+		},
+		Amount:      req.AmountRupiah,
+		Description: req.Description,
+		Type:        "DIRECT_DISBURSEMENT",
+	}
+
+	var out xenditPayoutResponse
+	if err := p.doURL(ctx, http.MethodPost, p.payoutBaseURL+p.payoutPath,
+		req.IdempotencyKey, body, &out); err != nil {
+		return nil, err
+	}
+	return &domain.PayoutResult{
+		ProviderRef: firstNonEmpty(out.ID, out.ReferenceID, req.ReferenceID),
+		Status:      out.Status,
+	}, nil
+}
+
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {
 		if v != "" {
@@ -171,7 +229,23 @@ func (p *XenditProcessor) do(
 	method, path, idempotencyKey string,
 	body, out interface{},
 ) error {
-	data, err := p.doRaw(ctx, method, path, idempotencyKey, body)
+	return p.doURL(ctx, method, p.baseURL+path, idempotencyKey, body, out)
+}
+
+func (p *XenditProcessor) doRaw(
+	ctx context.Context,
+	method, path, idempotencyKey string,
+	body interface{},
+) ([]byte, error) {
+	return p.doURLRaw(ctx, method, p.baseURL+path, idempotencyKey, body)
+}
+
+func (p *XenditProcessor) doURL(
+	ctx context.Context,
+	method, url, idempotencyKey string,
+	body, out interface{},
+) error {
+	data, err := p.doURLRaw(ctx, method, url, idempotencyKey, body)
 	if err != nil {
 		return err
 	}
@@ -181,9 +255,9 @@ func (p *XenditProcessor) do(
 	return nil
 }
 
-func (p *XenditProcessor) doRaw(
+func (p *XenditProcessor) doURLRaw(
 	ctx context.Context,
-	method, path, idempotencyKey string,
+	method, url, idempotencyKey string,
 	body interface{},
 ) ([]byte, error) {
 	var buf bytes.Buffer
@@ -193,7 +267,7 @@ func (p *XenditProcessor) doRaw(
 		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, p.baseURL+path, &buf)
+	req, err := http.NewRequestWithContext(ctx, method, url, &buf)
 	if err != nil {
 		return nil, fmt.Errorf("xendit: new request: %w", err)
 	}
@@ -219,13 +293,25 @@ func (p *XenditProcessor) doRaw(
 		return nil, fmt.Errorf("xendit: read response: %w", err)
 	}
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf(
+		httpErr := fmt.Errorf(
 			"xendit: %s %s -> %d: %s",
 			method,
-			path,
+			url,
 			resp.StatusCode,
 			buffer.String(),
 		)
+		// 401/403 are credential problems (a missing API key scope, for
+		// example): the payout is retried until the configuration is fixed.
+		// 429 is a rate limit and is retryable too. The other 4xx are
+		// permanent rejections (invalid account, unsupported channel, ...).
+		switch {
+		case resp.StatusCode == http.StatusUnauthorized,
+			resp.StatusCode == http.StatusForbidden:
+			return nil, &domain.AuthProcessorError{Err: httpErr}
+		case resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != http.StatusTooManyRequests:
+			return nil, &domain.PermanentProcessorError{Err: httpErr}
+		}
+		return nil, httpErr
 	}
 	return buffer.Bytes(), nil
 }

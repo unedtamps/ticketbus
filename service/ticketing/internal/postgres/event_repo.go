@@ -4,24 +4,24 @@ import (
 	"context"
 	"time"
 
-	shareddb "github.com/nedo/TicketSaas/pkg/db"
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	"github.com/jackc/pgx/v5/pgxpool"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
 // EventRepo implements domain.EventRepository.
 type EventRepo struct {
-	db shareddb.DBTx
+	pool *pgxpool.Pool
 }
 
 // NewEventRepo creates a new EventRepo.
-func NewEventRepo(db shareddb.DBTx) *EventRepo {
-	return &EventRepo{db: db}
+func NewEventRepo(pool *pgxpool.Pool) *EventRepo {
+	return &EventRepo{pool: pool}
 }
 
 // CreateEvent inserts a new event.
 func (r *EventRepo) CreateEvent(ctx context.Context, event *domain.Event) error {
-	_, err := r.db.Exec(
+	_, err := r.pool.Exec(
 		ctx,
 		`
 		INSERT INTO events (id, organizer_id, title, description, venue_name, venue_address, venue_capacity, start_at, end_at, status)
@@ -42,7 +42,7 @@ func (r *EventRepo) CreateEvent(ctx context.Context, event *domain.Event) error 
 
 // UpdateEvent updates an existing event.
 func (r *EventRepo) UpdateEvent(ctx context.Context, event *domain.Event) error {
-	_, err := r.db.Exec(
+	_, err := r.pool.Exec(
 		ctx,
 		`
 		UPDATE events SET title=$1, description=$2, start_at=$3, end_at=$4, status=$5, reviewed_by=$6, reviewed_at=$7, updated_at=$8
@@ -64,7 +64,7 @@ func (r *EventRepo) UpdateEvent(ctx context.Context, event *domain.Event) error 
 func (r *EventRepo) FindEventByID(ctx context.Context, id string) (*domain.Event, error) {
 	var e domain.Event
 	var status string
-	err := r.db.QueryRow(ctx, `
+	err := r.pool.QueryRow(ctx, `
 		SELECT id, organizer_id, title, description, venue_name, venue_address, venue_capacity, start_at, end_at, status, reviewed_by, reviewed_at, created_at, updated_at
 		FROM events WHERE id=$1`, id).
 		Scan(&e.ID, &e.OrganizerID, &e.Title, &e.Description, &e.VenueName, &e.VenueAddress, &e.VenueCapacity, &e.StartAt, &e.EndAt, &status, &e.ReviewedBy, &e.ReviewedAt, &e.CreatedAt, &e.UpdatedAt)
@@ -81,11 +81,18 @@ func (r *EventRepo) ListPublished(
 	limit, offset int,
 ) ([]domain.Event, int, error) {
 	var total int
-	r.db.QueryRow(ctx, `SELECT COUNT(*) FROM events WHERE status='published'`).Scan(&total)
+	r.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM events
+		WHERE status='published' AND start_at <= NOW() AND NOW() < end_at`).
+		Scan(&total)
 
-	rows, err := r.db.Query(ctx, `
+	// Only live events are listed: a not-yet-started event cannot be booked
+	// (no presale) and an ended event is over.
+	rows, err := r.pool.Query(ctx, `
 		SELECT id, organizer_id, title, description, venue_name, venue_address, venue_capacity, start_at, end_at, status, created_at, updated_at
-		FROM events WHERE status='published' ORDER BY start_at ASC LIMIT $1 OFFSET $2`, limit, offset)
+		FROM events
+		WHERE status='published' AND start_at <= NOW() AND NOW() < end_at
+		ORDER BY start_at ASC LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -117,14 +124,36 @@ func (r *EventRepo) ListPublished(
 	return events, total, nil
 }
 
-// ListByOrganizer returns events for an organizer.
+// ListByOrganizer returns events for an organizer, including the payout view
+// fields (status/amount/timestamps) via a LEFT JOIN.
 func (r *EventRepo) ListByOrganizer(
 	ctx context.Context,
 	organizerID string,
 ) ([]domain.Event, error) {
-	rows, err := r.db.Query(ctx, `
-		SELECT id, organizer_id, title, description, venue_name, venue_address, venue_capacity, start_at, end_at, status, created_at, updated_at
-		FROM events WHERE organizer_id=$1 ORDER BY created_at DESC`, organizerID)
+	// The payout state is aggregated over the event's attempts: paid_out if any
+	// attempt paid out, otherwise the latest attempt's status, and the amount
+	// paid out so far.
+	rows, err := r.pool.Query(ctx, `
+		SELECT e.id, e.organizer_id, e.title, e.description, e.venue_name, e.venue_address,
+		       e.venue_capacity, e.start_at, e.end_at, e.status, e.created_at, e.updated_at,
+		       COALESCE(p.status, 'none'), COALESCE(p.amount, 0),
+		       p.requested_at, p.completed_at
+		FROM events e
+		LEFT JOIN LATERAL (
+			SELECT
+				CASE
+					WHEN COUNT(*) FILTER (WHERE a.status = 'paid_out') > 0 THEN 'paid_out'
+					ELSE COALESCE((array_agg(a.status ORDER BY a.attempt DESC))[1], 'none')
+				END AS status,
+				COALESCE(SUM(a.amount_rupiah) FILTER (WHERE a.status = 'paid_out'), 0) AS amount,
+				(array_agg(a.requested_at ORDER BY a.attempt DESC))[1] AS requested_at,
+				(array_agg(a.completed_at ORDER BY a.attempt DESC)
+					FILTER (WHERE a.completed_at IS NOT NULL))[1] AS completed_at
+			FROM event_payout_attempts a
+			WHERE a.event_id = e.id
+		) p ON TRUE
+		WHERE e.organizer_id=$1
+		ORDER BY e.created_at DESC`, organizerID)
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +162,7 @@ func (r *EventRepo) ListByOrganizer(
 	for rows.Next() {
 		var e domain.Event
 		var status string
+		var payoutStatus string
 		if err := rows.Scan(
 			&e.ID,
 			&e.OrganizerID,
@@ -146,13 +176,18 @@ func (r *EventRepo) ListByOrganizer(
 			&status,
 			&e.CreatedAt,
 			&e.UpdatedAt,
+			&payoutStatus,
+			&e.PayoutAmountRupiah,
+			&e.PayoutRequestedAt,
+			&e.PayoutCompletedAt,
 		); err != nil {
 			return nil, err
 		}
 		e.Status = sdomain.EventStatus(status)
+		e.PayoutStatus = sdomain.PayoutStatus(payoutStatus)
 		events = append(events, e)
 	}
-	return events, nil
+	return events, rows.Err()
 }
 
 // ListPending returns pending events with pagination.
@@ -161,9 +196,9 @@ func (r *EventRepo) ListPending(
 	limit, offset int,
 ) ([]domain.Event, int, error) {
 	var total int
-	r.db.QueryRow(ctx, `SELECT COUNT(*) FROM events WHERE status='pending'`).Scan(&total)
+	r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM events WHERE status='pending'`).Scan(&total)
 
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.pool.Query(ctx, `
 		SELECT id, organizer_id, title, description, venue_name, venue_address, venue_capacity, start_at, end_at, status, created_at, updated_at
 		FROM events WHERE status='pending' ORDER BY created_at ASC LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
@@ -203,10 +238,10 @@ func (r *EventRepo) FindAll(
 	limit, offset int,
 ) ([]domain.Event, int, error) {
 	var total int
-	r.db.QueryRow(ctx, `SELECT COUNT(*) FROM events WHERE ($1 = '' OR status = $1)`, status).
+	r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM events WHERE ($1 = '' OR status = $1)`, status).
 		Scan(&total)
 
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.pool.Query(ctx, `
 		SELECT id, organizer_id, title, description, venue_name, venue_address, venue_capacity, start_at, end_at, status, created_at, updated_at
 		FROM events WHERE ($1 = '' OR status = $1) ORDER BY created_at DESC LIMIT $2 OFFSET $3`, status, limit, offset)
 	if err != nil {
@@ -242,7 +277,7 @@ func (r *EventRepo) FindAll(
 // CreateTicketTypes inserts multiple ticket types.
 func (r *EventRepo) CreateTicketTypes(ctx context.Context, types []domain.TicketType) error {
 	for _, tt := range types {
-		_, err := r.db.Exec(
+		_, err := r.pool.Exec(
 			ctx,
 			`INSERT INTO ticket_types (id, event_id, name, price_rupiah, quantity, max_per_order) VALUES ($1,$2,$3,$4,$5,$6)`,
 			tt.ID,
@@ -264,7 +299,7 @@ func (r *EventRepo) ListTicketTypesByEvent(
 	ctx context.Context,
 	eventID string,
 ) ([]domain.TicketType, error) {
-	rows, err := r.db.Query(
+	rows, err := r.pool.Query(
 		ctx,
 		`SELECT id, event_id, name, price_rupiah, quantity, max_per_order FROM ticket_types WHERE event_id=$1`,
 		eventID,

@@ -7,6 +7,7 @@ package mocks
 import (
 	"context"
 
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -268,4 +269,9 @@ func (_c *MockEventConsumer_Start_Call) Return(err error) *MockEventConsumer_Sta
 func (_c *MockEventConsumer_Start_Call) RunAndReturn(run func(ctx context.Context) error) *MockEventConsumer_Start_Call {
 	_c.Call.Return(run)
 	return _c
+}
+
+// OnPayoutCompleted provides a mock function for the type MockEventConsumer
+func (_mock *MockEventConsumer) OnPayoutCompleted(ctx context.Context, fn func(ctx context.Context, evt sdomain.PayoutCompleted) error) {
+	_mock.Called(ctx, fn)
 }

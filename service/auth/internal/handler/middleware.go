@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	sharedhttp "github.com/nedo/TicketSaas/pkg/http"
+	sharedhttp "github.com/unedtamps/ticketbus/pkg/http"
 )
 
 // BearerAuth middleware verifies the Authorization Bearer token

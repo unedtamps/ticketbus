@@ -56,8 +56,17 @@ export default function CreateEventPage() {
     setTicketTypes(p => p.map((tt, j) => j === i ? { ...tt, [f]: v } : tt));
   }
 
+  // The end must be after the start: an event whose window is inverted can
+  // never be booked (it is neither "not started yet" nor "not over").
+  const windowInvalid =
+    startAt !== "" && endAt !== "" && new Date(endAt) <= new Date(startAt);
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (windowInvalid) {
+      toast.error("The end time must be after the start time.");
+      return;
+    }
     const tt = ticketTypes.map(t => ({
       name: t.name,
       // Input is in rupiah; the backend stores rupiah directly.
@@ -147,9 +156,14 @@ export default function CreateEventPage() {
             <div>
               <label className="block text-xs text-[#8B8580] mb-1">End</label>
               <input type="datetime-local" required value={endAt} onChange={e => setEndAt(e.target.value)}
-                className="input-field" />
+                className={`input-field ${windowInvalid ? "border-[#D9381E]" : ""}`} />
             </div>
           </div>
+          {windowInvalid && (
+            <p className="text-xs text-[#D9381E]">
+              The end time must be after the start time.
+            </p>
+          )}
         </div>
 
         <div className="card space-y-4">

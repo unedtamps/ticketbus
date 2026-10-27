@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	shareddb "github.com/nedo/TicketSaas/pkg/db"
-	"github.com/nedo/TicketSaas/service/auth/internal/domain"
+	shareddb "github.com/unedtamps/ticketbus/pkg/db"
+	"github.com/unedtamps/ticketbus/service/auth/internal/domain"
 )
 
 // RefreshTokenRepo implements domain.RefreshTokenRepository using PostgreSQL.

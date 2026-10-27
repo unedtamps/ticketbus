@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/go-playground/validator/v10"
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
-	sharedhttp "github.com/nedo/TicketSaas/pkg/http"
-	"github.com/nedo/TicketSaas/service/auth/internal/application"
-	adomain "github.com/nedo/TicketSaas/service/auth/internal/domain"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	sharedhttp "github.com/unedtamps/ticketbus/pkg/http"
+	"github.com/unedtamps/ticketbus/service/auth/internal/application"
+	adomain "github.com/unedtamps/ticketbus/service/auth/internal/domain"
 )
 
 // AuthHandler handles HTTP requests for the auth service.

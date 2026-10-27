@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
 // EventOption is a functional option for NewTestEvent.

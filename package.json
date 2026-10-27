@@ -1,5 +1,5 @@
 {
-  "name": "ticketsaas",
+  "name": "ticketbus",
   "version": "1.0.0",
   "private": true,
   "description": "Ticketing platform microservices monorepo",

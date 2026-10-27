@@ -66,12 +66,32 @@ http:
         - forward-auth
       priority: 10
 
+
+    event-payout:
+      rule: PathRegexp(`^/api/events/[^/]+/payout$`)
+      service: ticketing
+      middlewares:
+        - cors
+        - ratelimit
+        - forward-auth
+      priority: 30
+
     event-public:
       rule: PathPrefix(`/api/events`) && Method(`GET`) && !Path(`/api/events/mine`) && !Path(`/api/events/pending`) && !Path(`/api/events/organizers`) && !Path(`/api/events/organizers/me`)
       service: ticketing
       middlewares:
         - cors
         - ratelimit
+      priority: 20
+
+
+    payout-account:
+      rule: PathPrefix(`/api/payout-account`)
+      service: ticketing
+      middlewares:
+        - cors
+        - ratelimit
+        - forward-auth
       priority: 20
 
     bookings:

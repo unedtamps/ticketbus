@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"time"
 
-	shareddb "github.com/nedo/TicketSaas/pkg/db"
-	sdto "github.com/nedo/TicketSaas/pkg/dto"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	shareddb "github.com/unedtamps/ticketbus/pkg/db"
+	sdto "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 )

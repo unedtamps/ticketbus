@@ -2,8 +2,8 @@ package handler
 
 import (
 	"github.com/go-chi/chi/v5"
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
-	sharedhttp "github.com/nedo/TicketSaas/pkg/http"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	sharedhttp "github.com/unedtamps/ticketbus/pkg/http"
 )
 
 // Routes registers the booking HTTP routes onto the provided router.

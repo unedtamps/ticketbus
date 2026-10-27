@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
-	"github.com/nedo/TicketSaas/service/auth/internal/domain"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/service/auth/internal/domain"
 )
 
 // TokensConfig holds token TTL values.

@@ -7,9 +7,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	sharedhttp "github.com/nedo/TicketSaas/pkg/http"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/application/booking"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	sharedhttp "github.com/unedtamps/ticketbus/pkg/http"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/application/booking"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
 // BookingHandler handles HTTP requests for booking operations.
@@ -58,6 +58,12 @@ func (h *BookingHandler) Reserve(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, domain.ErrPriceMismatch) {
 			sharedhttp.BadRequest(w, err.Error())
+			return
+		}
+		if errors.Is(err, domain.ErrEventNotActive) ||
+			errors.Is(err, domain.ErrEventNotStarted) ||
+			errors.Is(err, domain.ErrEventEnded) {
+			sharedhttp.Conflict(w, err.Error())
 			return
 		}
 		sharedhttp.InternalServerError(w, "reservation failed")

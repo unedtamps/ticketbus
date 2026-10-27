@@ -7,7 +7,7 @@ package mocks
 import (
 	"context"
 
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 	mock "github.com/stretchr/testify/mock"
 )
 

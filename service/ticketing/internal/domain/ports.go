@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"time"
+
+	"github.com/unedtamps/ticketbus/pkg/dto"
 )
 
 // EventRepository defines the persistence contract for events and ticket types.
@@ -18,6 +20,29 @@ type EventRepository interface {
 	// Ticket types
 	CreateTicketTypes(ctx context.Context, types []TicketType) error
 	ListTicketTypesByEvent(ctx context.Context, eventID string) ([]TicketType, error)
+
+	// Payouts
+	UpsertPayoutAccount(ctx context.Context, acct *OrganizerPayoutAccount) error
+	FindPayoutAccount(ctx context.Context, organizerID string) (*OrganizerPayoutAccount, error)
+	// RequestPayout inserts the next payout attempt for an event and its
+	// outbox event in one transaction. The attempt number is allocated inside
+	// the transaction, so the payload is built by the given function once the
+	// number is known. It returns false when an attempt is already in flight
+	// (the organizer must wait) or when the attempt number collides with a
+	// concurrent request.
+	RequestPayout(
+		ctx context.Context,
+		attempt *EventPayoutAttempt,
+		payload func(attempt int) any,
+	) (bool, error)
+	// ListPayoutAttempts returns every payout attempt of an event, oldest
+	// attempt first.
+	ListPayoutAttempts(ctx context.Context, eventID string) ([]EventPayoutAttempt, error)
+	// PayoutSummary aggregates the attempts of an event into its payout state.
+	PayoutSummary(ctx context.Context, eventID string) (*EventPayoutSummary, error)
+	// SetPayoutResult applies the gateway result to one attempt while it is
+	// still pending. Returns false for duplicate deliveries.
+	SetPayoutResult(ctx context.Context, eventID string, attempt int, status dto.PayoutStatus, amountRupiah int64, providerRef, reason string) (bool, error)
 }
 
 // SeatReader reads live seat availability from Redis.
@@ -77,6 +102,7 @@ type EventConsumer interface {
 	OnPaymentCompleted(ctx context.Context, fn func(ctx context.Context, bookingID, transactionID string) error)
 	OnPaymentExpired(ctx context.Context, fn func(ctx context.Context, bookingID string) error)
 	OnEventCancelled(ctx context.Context, fn func(ctx context.Context, eventID string) error)
+	OnPayoutCompleted(ctx context.Context, fn func(ctx context.Context, evt dto.PayoutCompleted) error)
 	Start(ctx context.Context) error
 	Close() error
 }
@@ -84,4 +110,8 @@ type EventConsumer interface {
 // EventStatusRepository provides event status for guard checks.
 type EventStatusRepository interface {
 	IsPublished(ctx context.Context, eventID string) (bool, error)
+	// EventWindow returns the event status and its reservation window. It is
+	// used to reject reservations before the event starts, after it ends, and
+	// too close to the end to complete a payment.
+	EventWindow(ctx context.Context, eventID string) (status string, startAt, endAt time.Time, err error)
 }

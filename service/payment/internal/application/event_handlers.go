@@ -4,8 +4,9 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
 
-	"github.com/nedo/TicketSaas/service/payment/internal/domain"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
 // HandleEventCancelled creates refund requests for completed transactions of
@@ -74,6 +75,10 @@ func (s *PaymentService) StartConsumer(ctx context.Context) error {
 	s.consumer.OnEventCancelled(ctx, func(ctx context.Context, eventID string) error {
 		s.logger.Info("event cancelled received", "event_id", eventID)
 		return s.HandleEventCancelled(ctx, eventID)
+	})
+	s.consumer.OnPayoutRequested(ctx, func(ctx context.Context, evt sdomain.PayoutRequested) error {
+		s.logger.Info("payout requested received", "event_id", evt.EventID)
+		return s.HandlePayoutRequested(ctx, evt)
 	})
 
 	go func() {

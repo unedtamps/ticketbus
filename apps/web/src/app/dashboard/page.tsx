@@ -8,10 +8,13 @@ import { adminApi } from "@/lib/admin-api";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PayoutAccountDialog } from "@/components/ui/payout-account-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import {
-  LayoutDashboard,
   CalendarPlus,
+  Building2,
+  History,
+  Wallet,
   Shield,
   ShoppingBag,
   Ticket,
@@ -27,7 +30,8 @@ import {
   Users,
 } from "lucide-react";
 import { fmtIDR, fmtShortDate } from "@/lib/format";
-import type { EventItem, TransactionResponse } from "@/types";
+import { LocalTime } from "@/components/ui/local-time";
+import type { EventItem, EventPayout, PayoutAccount, TransactionResponse } from "@/types";
 
 type AdminFilter = "" | "pending" | "published" | "cancelled";
 
@@ -63,6 +67,11 @@ export default function DashboardPage() {
   const [cancelling, setCancelling] = useState<EventItem | null>(null);
   const [reprocessing, setReprocessing] = useState<EventItem | null>(null);
   const [approving, setApproving] = useState<EventItem | null>(null);
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+  const [payoutTarget, setPayoutTarget] = useState<EventItem | null>(null);
+  const [historyFor, setHistoryFor] = useState<string | null>(null);
+  // A stable render-time clock for the "event has ended" check.
+  const [nowMs] = useState(() => Date.now());
 
   // Customer queries
   const bookingsQuery = useQuery({
@@ -82,6 +91,47 @@ export default function DashboardPage() {
     queryKey: ["myEvents"],
     queryFn: () => api.get<EventItem[]>("/api/events/mine"),
     enabled: !!user && isEO,
+  });
+
+  // The event list carries the payout state; the attempt history is fetched
+  // only when the organizer opens it.
+  const payoutHistoryQuery = useQuery({
+    queryKey: ["payoutHistory", historyFor],
+    queryFn: () => api.get<EventPayout>(`/api/events/${historyFor}/payout`),
+    enabled: !!historyFor,
+  });
+
+  const payoutAccountQuery = useQuery({
+    queryKey: ["payoutAccount"],
+    queryFn: () => api.get<PayoutAccount>("/api/payout-account"),
+    enabled: !!user && isEO,
+    retry: false,
+  });
+  const payoutAccount = payoutAccountQuery.data;
+
+  const saveAccountMutation = useMutation({
+    mutationFn: (values: {
+      bank_code: string;
+      bank_account_number: string;
+      bank_account_holder_name: string;
+    }) => api.put<PayoutAccount>("/api/payout-account", values),
+    onSuccess: () => {
+      toast.success("Payout account saved");
+      queryClient.invalidateQueries({ queryKey: ["payoutAccount"] });
+      setAccountDialogOpen(false);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const requestPayoutMutation = useMutation({
+    mutationFn: (eventID: string) =>
+      api.post<EventPayout>(`/api/events/${eventID}/payout`),
+    onSuccess: () => {
+      toast.success("Payout requested — we are preparing the transfer");
+      queryClient.invalidateQueries({ queryKey: ["myEvents"] });
+      setPayoutTarget(null);
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   // Admin query
@@ -213,7 +263,7 @@ export default function DashboardPage() {
                     {event.venue_capacity > 0 && (
                       <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-[#B0A89E]" />{event.venue_capacity}</span>
                     )}
-                    <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-[#B0A89E]" />{fmtShortDate(event.start_at)}</span>
+                    <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-[#B0A89E]" /><LocalTime iso={event.start_at} format="short" /></span>
                   </div>
                   <div className="flex gap-2 pt-2 border-t border-dashed border-[#E8E3DC]">
                     <Link href={`/events/${event.id}`} className="btn-outline text-sm">View</Link>
@@ -236,7 +286,7 @@ export default function DashboardPage() {
       {/* ── EO ── */}
       {isEO && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 mb-12 fade-up">
+          <div className="grid gap-4 sm:grid-cols-3 mb-12 fade-up">
             <Link href="/events" className="card flex items-center gap-4 group p-4">
               <div className="w-10 h-10 rounded-lg bg-[#D9381E]/6 flex items-center justify-center flex-shrink-0">
                 <CalendarPlus className="w-5 h-5 text-[#D9381E]" />
@@ -258,6 +308,23 @@ export default function DashboardPage() {
                 </p>
               </div>
             </div>
+            <button
+              onClick={() => setAccountDialogOpen(true)}
+              className="card flex items-center gap-4 p-4 text-left group"
+            >
+              <div className="w-10 h-10 rounded-lg bg-[#2D7A46]/6 flex items-center justify-center flex-shrink-0">
+                <Building2 className="w-5 h-5 text-[#2D7A46]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-[#1A1817]">Payout Account</p>
+                <p className="text-xs text-[#8B8580] truncate">
+                  {payoutAccount
+                    ? `${payoutAccount.bank_code} · ••••${payoutAccount.bank_account_number.slice(-4)}`
+                    : "Set up your bank account"}
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-[#D4CEC4] group-hover:text-[#2D7A46] transition-colors flex-shrink-0" />
+            </button>
           </div>
 
           <p className="font-[family-name:var(--font-display)] text-xl text-[#1A1817] mb-5">My Events</p>
@@ -279,43 +346,161 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {historyFor && (
+            <div className="card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-[#1A1817]">
+                  Payout attempts
+                </p>
+                <button
+                  onClick={() => setHistoryFor(null)}
+                  className="text-xs text-[#8B8580] hover:text-[#4A4541]"
+                >
+                  Close
+                </button>
+              </div>
+              {payoutHistoryQuery.isLoading && (
+                <p className="text-xs text-[#8B8580]">Loading attempts...</p>
+              )}
+              {payoutHistoryQuery.data && (
+                <>
+                  <p className="text-xs text-[#8B8580]">
+                    Total paid out: {fmtIDR(payoutHistoryQuery.data.amount_rupiah)} over{" "}
+                    {payoutHistoryQuery.data.attempts} attempt
+                    {payoutHistoryQuery.data.attempts === 1 ? "" : "s"}
+                  </p>
+                  <div className="space-y-2">
+                    {(payoutHistoryQuery.data.attempts_list || []).map((a) => (
+                      <div
+                        key={a.attempt}
+                        className="flex items-center justify-between text-xs"
+                      >
+                        <span className="text-[#4A4541]">
+                          Attempt {a.attempt} · <LocalTime iso={a.requested_at} format="short" />
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <span className="text-[#1A1817] font-medium">
+                            {fmtIDR(a.amount_rupiah)}
+                          </span>
+                          <span
+                            className={`badge ${
+                              a.status === "paid_out"
+                                ? "badge-green"
+                                : a.status === "failed"
+                                  ? "badge-red"
+                                  : "badge-yellow"
+                            }`}
+                          >
+                            {a.status}
+                          </span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {!eoLoading && myEvents.length > 0 && (
             <div className="space-y-3">
-              {myEvents.map(e => (
-                <div key={e.id} className="card-stub flex justify-between items-center p-4">
-                  <Link href={`/events/${e.id}`} className="group flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-[#1A1817] group-hover:text-[#D9381E] transition-colors">{e.title}</p>
-                    <p className="text-xs text-[#8B8580] mt-0.5">
-                      {fmtShortDate(e.start_at)} &middot; {e.venue_name}
-                    </p>
-                  </Link>
-                  <div className="flex items-center gap-2 ml-4 flex-shrink-0">
-                    <span className={badgeClass(e.status)}>{e.status}</span>
-                    {e.status === "published" && (
-                      <Tooltip label="Cancel this event. This action cannot be undone — all confirmed bookings will be cancelled and refunds issued.">
-                        <button
-                          onClick={() => setCancelling(e)}
-                          className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md text-[#D9381E] hover:bg-[#FFF5F5] transition-colors duration-150"
+              {myEvents.map(e => {
+                const payoutStatus = e.payout_status || "none";
+                const ended = new Date(e.end_at).getTime() < nowMs;
+                return (
+                  <div key={e.id} className="card-stub flex justify-between items-center p-4">
+                    <Link href={`/events/${e.id}`} className="group flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-[#1A1817] group-hover:text-[#D9381E] transition-colors">{e.title}</p>
+                      <p className="text-xs text-[#8B8580] mt-0.5">
+                        <LocalTime iso={e.start_at} format="short" /> &middot; {e.venue_name}
+                      </p>
+                    </Link>
+                    <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+                      <span className={badgeClass(e.status)}>{e.status}</span>
+
+                      {payoutStatus === "pending" && (
+                        <span className="badge badge-yellow">payout pending</span>
+                      )}
+                      {payoutStatus !== "none" && (
+                        <Tooltip label="Show payout attempts">
+                          <button
+                            onClick={() =>
+                              setHistoryFor(historyFor === e.id ? null : e.id)
+                            }
+                            className="text-[#B0A89E] hover:text-[#4A4541] transition-colors"
+                          >
+                            <History className="w-3.5 h-3.5" />
+                          </button>
+                        </Tooltip>
+                      )}
+                      {payoutStatus === "paid_out" && (
+                        <Tooltip label={e.payout_completed_at ? `Completed ${fmtShortDate(e.payout_completed_at)}` : "Payout completed"}>
+                          <span className="badge badge-green">
+                            paid out{e.payout_amount_rupiah ? ` · ${fmtIDR(e.payout_amount_rupiah)}` : ""}
+                          </span>
+                        </Tooltip>
+                      )}
+                      {payoutStatus === "failed" && (
+                        <Tooltip label="The payout failed. Update your payout account if needed, then retry.">
+                          <span className="badge badge-red">payout failed</span>
+                        </Tooltip>
+                      )}
+
+                      {e.status === "published" && ended && payoutStatus !== "pending" && (
+                        <Tooltip
+                          label={
+                            payoutStatus === "failed"
+                              ? "The payout failed. Update your payout account if needed, then retry."
+                              : payoutStatus === "paid_out"
+                                ? "Collect any earnings that were paid after the last payout."
+                                : "Send this event's completed, non-refunded earnings to your payout account."
+                          }
                         >
-                          <X className="w-3.5 h-3.5" />
-                          Cancel
-                        </button>
-                      </Tooltip>
-                    )}
-                    {e.status === "cancelled" && (
-                      <Tooltip label="Re-run the cancellation — issues refunds for payments that completed after cancelling and cancels remaining pending bookings.">
-                        <button
-                          onClick={() => setReprocessing(e)}
-                          className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md text-[#1A5DB8] hover:bg-[#F2F7FF] transition-colors duration-150"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                          Reprocess
-                        </button>
-                      </Tooltip>
-                    )}
+                          <button
+                            onClick={() => setPayoutTarget(e)}
+                            className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md text-[#2D7A46] hover:bg-[#F3FBF6] transition-colors duration-150"
+                          >
+                            <Wallet className="w-3.5 h-3.5" />
+                            {payoutStatus === "failed"
+                              ? "Retry Payout"
+                              : payoutStatus === "paid_out"
+                                ? "Collect More"
+                                : "Request Payout"}
+                          </button>
+                        </Tooltip>
+                      )}
+                      {e.status === "published" && !ended && payoutStatus === "none" && (
+                        <Tooltip label="Payout becomes available after the event ends.">
+                          <span className="text-xs text-[#B0A89E]">payout after event</span>
+                        </Tooltip>
+                      )}
+
+                      {e.status === "published" && (
+                        <Tooltip label="Cancel this event. This action cannot be undone — all confirmed bookings will be cancelled and refunds issued.">
+                          <button
+                            onClick={() => setCancelling(e)}
+                            className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md text-[#D9381E] hover:bg-[#FFF5F5] transition-colors duration-150"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            Cancel
+                          </button>
+                        </Tooltip>
+                      )}
+                      {e.status === "cancelled" && (
+                        <Tooltip label="Re-run the cancellation — issues refunds for payments that completed after cancelling and cancels remaining pending bookings.">
+                          <button
+                            onClick={() => setReprocessing(e)}
+                            className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md text-[#1A5DB8] hover:bg-[#F2F7FF] transition-colors duration-150"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            Reprocess
+                          </button>
+                        </Tooltip>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
@@ -376,7 +561,7 @@ export default function DashboardPage() {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-sm font-semibold text-[#1A1817]">Booking {b.id.slice(0, 8)}&hellip;</p>
-                      <p className="text-xs text-[#8B8580] mt-0.5">{fmtShortDate(b.created_at)}</p>
+                      <p className="text-xs text-[#8B8580] mt-0.5"><LocalTime iso={b.created_at} format="short" /></p>
                     </div>
                     <div className="text-right">
                       <p className="font-semibold text-[#1A1817]">{fmtIDR(b.total_rupiah)}</p>
@@ -434,7 +619,7 @@ export default function DashboardPage() {
                 <div key={t.id} className="card-stub flex justify-between items-center p-4">
                   <div>
                     <p className="text-sm font-semibold text-[#1A1817]">Txn {t.id.slice(0, 8)}&hellip;</p>
-                    <p className="text-xs text-[#8B8580] mt-0.5">{fmtShortDate(t.created_at)}</p>
+                    <p className="text-xs text-[#8B8580] mt-0.5"><LocalTime iso={t.created_at} format="short" /></p>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-[#1A1817]">{fmtIDR(t.amount_rupiah)}</p>
@@ -533,6 +718,38 @@ export default function DashboardPage() {
         }}
         onClose={() => setRejecting(null)}
       />
+      {accountDialogOpen && (
+        <PayoutAccountDialog
+          account={payoutAccount}
+          loading={saveAccountMutation.isPending}
+          onSubmit={(values) => saveAccountMutation.mutate(values)}
+          onClose={() => setAccountDialogOpen(false)}
+        />
+      )}
+
+      {payoutTarget && (
+        <ConfirmDialog
+          open
+          title={
+            payoutTarget.payout_status === "failed"
+              ? "Retry Payout"
+              : payoutTarget.payout_status === "paid_out"
+                ? "Collect More"
+                : "Request Payout"
+          }
+          message={`Send the completed, non-refunded earnings from "${payoutTarget.title}" to ${
+            payoutAccount
+              ? `${payoutAccount.bank_code} ••••${payoutAccount.bank_account_number.slice(-4)}`
+              : "your saved payout account"
+          }? The amount is calculated automatically and any earlier payout is kept.`}
+          confirmLabel="Request Payout"
+          variant="success"
+          loading={requestPayoutMutation.isPending}
+          onConfirm={() => requestPayoutMutation.mutate(payoutTarget.id)}
+          onClose={() => setPayoutTarget(null)}
+        />
+      )}
+
     </div>
   );
 }

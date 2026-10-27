@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
-	"github.com/nedo/TicketSaas/service/auth/internal/application"
-	"github.com/nedo/TicketSaas/service/auth/internal/domain"
-	"github.com/nedo/TicketSaas/service/auth/internal/domain/mocks"
-	fixtures "github.com/nedo/TicketSaas/service/auth/internal/testfixtures"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/service/auth/internal/application"
+	"github.com/unedtamps/ticketbus/service/auth/internal/domain"
+	"github.com/unedtamps/ticketbus/service/auth/internal/domain/mocks"
+	fixtures "github.com/unedtamps/ticketbus/service/auth/internal/testfixtures"
 )
 
 var tokensConfig = application.TokensConfig{
@@ -379,16 +379,16 @@ func TestSeedAdmins_CreatesAdmin(t *testing.T) {
 
 	ctx := context.Background()
 
-	userRepo.EXPECT().FindByEmail(ctx, "admin@ticketsaas.com").Return(nil, pgx.ErrNoRows)
+	userRepo.EXPECT().FindByEmail(ctx, "admin@ticketbus.com").Return(nil, pgx.ErrNoRows)
 	hasher.EXPECT().Hash("admin123").Return("$2a$admin", nil)
 	userRepo.EXPECT().Create(ctx, mock.MatchedBy(func(u *domain.User) bool {
-		return u.Email == "admin@ticketsaas.com" && u.Role == sdomain.RoleAdmin
+		return u.Email == "admin@ticketbus.com" && u.Role == sdomain.RoleAdmin
 	})).Return(nil)
 
 	svc := newAuthService(t, userRepo, tokenRepo, hasher, tokenSvc)
 
 	n, err := svc.SeedAdmins(ctx, []application.AdminSeed{
-		{Email: "admin@ticketsaas.com", Password: "admin123", Name: "Admin"},
+		{Email: "admin@ticketbus.com", Password: "admin123", Name: "Admin"},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
@@ -402,16 +402,16 @@ func TestSeedAdmins_AlreadyExists(t *testing.T) {
 
 	ctx := context.Background()
 	existing := fixtures.NewTestUser(
-		fixtures.WithUserEmail("admin@ticketsaas.com"),
+		fixtures.WithUserEmail("admin@ticketbus.com"),
 		fixtures.WithUserRole(sdomain.RoleAdmin),
 	)
 
-	userRepo.EXPECT().FindByEmail(ctx, "admin@ticketsaas.com").Return(existing, nil)
+	userRepo.EXPECT().FindByEmail(ctx, "admin@ticketbus.com").Return(existing, nil)
 
 	svc := newAuthService(t, userRepo, tokenRepo, hasher, tokenSvc)
 
 	n, err := svc.SeedAdmins(ctx, []application.AdminSeed{
-		{Email: "admin@ticketsaas.com", Password: "admin123", Name: "Admin"},
+		{Email: "admin@ticketbus.com", Password: "admin123", Name: "Admin"},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, n)

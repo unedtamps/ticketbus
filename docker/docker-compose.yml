@@ -1,7 +1,7 @@
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.7.0
-    container_name: ticketsaas-zookeeper
+    container_name: ticketbus-zookeeper
     ports:
       - "2181:2181"
     environment:
@@ -11,11 +11,11 @@ services:
       - zookeeper_data:/var/lib/zookeeper/data
       - zookeeper_log:/var/lib/zookeeper/log
     networks:
-      - ticketsaas-network
+      - ticketbus-network
 
   kafka-1:
     image: confluentinc/cp-kafka:7.7.0
-    container_name: ticketsaas-kafka-1
+    container_name: ticketbus-kafka-1
     ports:
       - "9092:9092"
     environment:
@@ -34,11 +34,11 @@ services:
     volumes:
       - kafka1_data:/var/lib/kafka/data
     networks:
-      - ticketsaas-network
+      - ticketbus-network
 
   kafka-2:
     image: confluentinc/cp-kafka:7.7.0
-    container_name: ticketsaas-kafka-2
+    container_name: ticketbus-kafka-2
     ports:
       - "9093:9093"
     environment:
@@ -57,11 +57,11 @@ services:
     volumes:
       - kafka2_data:/var/lib/kafka/data
     networks:
-      - ticketsaas-network
+      - ticketbus-network
 
   kafka-3:
     image: confluentinc/cp-kafka:7.7.0
-    container_name: ticketsaas-kafka-3
+    container_name: ticketbus-kafka-3
     ports:
       - "9094:9094"
     environment:
@@ -80,11 +80,11 @@ services:
     volumes:
       - kafka3_data:/var/lib/kafka/data
     networks:
-      - ticketsaas-network
+      - ticketbus-network
 
   kafka-4:
     image: confluentinc/cp-kafka:7.7.0
-    container_name: ticketsaas-kafka-4
+    container_name: ticketbus-kafka-4
     ports:
       - "9095:9095"
     environment:
@@ -103,68 +103,68 @@ services:
     volumes:
       - kafka4_data:/var/lib/kafka/data
     networks:
-      - ticketsaas-network
+      - ticketbus-network
 
   postgres-auth:
     image: postgres:16-alpine
-    container_name: ticketsaas-postgres-auth
+    container_name: ticketbus-postgres-auth
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: ticketsaas
-      POSTGRES_PASSWORD: ticketsaas
+      POSTGRES_USER: ticketbus
+      POSTGRES_PASSWORD: ticketbus
       POSTGRES_DB: auth_db
     volumes:
       - pg_auth_data:/var/lib/postgresql/data
     networks:
-      - ticketsaas-network
+      - ticketbus-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ticketsaas -d auth_db"]
+      test: ["CMD-SHELL", "pg_isready -U ticketbus -d auth_db"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   postgres-ticketing:
     image: postgres:16-alpine
-    container_name: ticketsaas-postgres-ticketing
+    container_name: ticketbus-postgres-ticketing
     ports:
       - "5433:5432"
     environment:
-      POSTGRES_USER: ticketsaas
-      POSTGRES_PASSWORD: ticketsaas
+      POSTGRES_USER: ticketbus
+      POSTGRES_PASSWORD: ticketbus
       POSTGRES_DB: ticketing_db
     volumes:
       - pg_ticketing_data:/var/lib/postgresql/data
     networks:
-      - ticketsaas-network
+      - ticketbus-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ticketsaas -d ticketing_db"]
+      test: ["CMD-SHELL", "pg_isready -U ticketbus -d ticketing_db"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   postgres-payment:
     image: postgres:16-alpine
-    container_name: ticketsaas-postgres-payment
+    container_name: ticketbus-postgres-payment
     ports:
       - "5435:5432"
     environment:
-      POSTGRES_USER: ticketsaas
-      POSTGRES_PASSWORD: ticketsaas
+      POSTGRES_USER: ticketbus
+      POSTGRES_PASSWORD: ticketbus
       POSTGRES_DB: payment_db
     volumes:
       - pg_pay_data:/var/lib/postgresql/data
     networks:
-      - ticketsaas-network
+      - ticketbus-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ticketsaas -d payment_db"]
+      test: ["CMD-SHELL", "pg_isready -U ticketbus -d payment_db"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   traefik:
     image: traefik:v3.3
-    container_name: ticketsaas-traefik
+    container_name: ticketbus-traefik
     ports:
       - "8000:8000"
       - "8085:8085"
@@ -173,13 +173,13 @@ services:
       - ../traefik/dynamic.yml:/etc/traefik/dynamic/dynamic.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - ticketsaas-network
+      - ticketbus-network
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
-    container_name: ticketsaas-kafka-ui
+    container_name: ticketbus-kafka-ui
     ports:
       - "8080:8080"
     environment:
@@ -191,7 +191,7 @@ services:
       - kafka-3
       - kafka-4
     networks:
-      - ticketsaas-network
+      - ticketbus-network
 
 volumes:
   zookeeper_data:
@@ -205,5 +205,5 @@ volumes:
   pg_pay_data:
 
 networks:
-  ticketsaas-network:
+  ticketbus-network:
     driver: bridge

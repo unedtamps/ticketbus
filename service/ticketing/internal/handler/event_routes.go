@@ -2,8 +2,8 @@ package handler
 
 import (
 	"github.com/go-chi/chi/v5"
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
-	sharedhttp "github.com/nedo/TicketSaas/pkg/http"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	sharedhttp "github.com/unedtamps/ticketbus/pkg/http"
 )
 
 // Routes registers the event HTTP routes onto the provided router.
@@ -25,6 +25,14 @@ func (h *EventHandler) Routes(r chi.Router) chi.Router {
 			Post("/api/events/{id}/cancel-reprocess", h.ReprocessCancellation)
 		r.With(sharedhttp.RequireRole(sdomain.RoleEO)).
 			Get("/api/events/mine", h.ListMyEvents)
+		r.With(sharedhttp.RequireRole(sdomain.RoleEO)).
+			Get("/api/payout-account", h.GetPayoutAccount)
+		r.With(sharedhttp.RequireRole(sdomain.RoleEO)).
+			Put("/api/payout-account", h.SetPayoutAccount)
+		r.With(sharedhttp.RequireRole(sdomain.RoleEO)).
+			Post("/api/events/{id}/payout", h.RequestPayout)
+		r.With(sharedhttp.RequireRole(sdomain.RoleEO)).
+			Get("/api/events/{id}/payout", h.GetPayout)
 	})
 
 	// Admin routes

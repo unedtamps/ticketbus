@@ -12,20 +12,21 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	bookingpkg "github.com/nedo/TicketSaas/service/ticketing/internal/application/booking"
-	eventpkg "github.com/nedo/TicketSaas/service/ticketing/internal/application/event"
-	eventhandler "github.com/nedo/TicketSaas/service/ticketing/internal/handler"
-	eventkafka "github.com/nedo/TicketSaas/service/ticketing/internal/kafka"
-	ticketingpayment "github.com/nedo/TicketSaas/service/ticketing/internal/payment"
-	eventpostgres "github.com/nedo/TicketSaas/service/ticketing/internal/postgres"
+	bookingpkg "github.com/unedtamps/ticketbus/service/ticketing/internal/application/booking"
+	eventpkg "github.com/unedtamps/ticketbus/service/ticketing/internal/application/event"
+	eventhandler "github.com/unedtamps/ticketbus/service/ticketing/internal/handler"
+	eventkafka "github.com/unedtamps/ticketbus/service/ticketing/internal/kafka"
+	ticketingpayment "github.com/unedtamps/ticketbus/service/ticketing/internal/payment"
+	eventpostgres "github.com/unedtamps/ticketbus/service/ticketing/internal/postgres"
 
-	"github.com/nedo/TicketSaas/pkg/db"
-	sharedhttp "github.com/nedo/TicketSaas/pkg/http"
-	sharedkafka "github.com/nedo/TicketSaas/pkg/kafka"
-	"github.com/nedo/TicketSaas/pkg/log"
-	"github.com/nedo/TicketSaas/pkg/outbox"
-	"github.com/nedo/TicketSaas/pkg/telemetry"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/config"
+	"github.com/unedtamps/ticketbus/pkg/db"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	sharedhttp "github.com/unedtamps/ticketbus/pkg/http"
+	sharedkafka "github.com/unedtamps/ticketbus/pkg/kafka"
+	"github.com/unedtamps/ticketbus/pkg/log"
+	"github.com/unedtamps/ticketbus/pkg/outbox"
+	"github.com/unedtamps/ticketbus/pkg/telemetry"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/config"
 )
 
 func main() {
@@ -85,6 +86,7 @@ func main() {
 		"event.cancelled",
 		"ticket.issued",
 		"payment.completed", "payment.expired",
+		sdomain.TopicPayoutRequested, sdomain.TopicPayoutCompleted,
 	}, 4, 3); err != nil {
 		logger.Error("failed to ensure kafka topics", "error", err)
 		os.Exit(1)
@@ -97,7 +99,7 @@ func main() {
 		logger,
 		cfg.OutboxConcurrency,
 		cfg.OutboxPollMs,
-		[]string{"event.cancelled", "ticket.issued"},
+		[]string{"event.cancelled", "ticket.issued", sdomain.TopicPayoutRequested},
 	)
 
 	bookingSvc := bookingpkg.NewBookingService(
@@ -118,6 +120,9 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	consumer.OnPayoutCompleted(ctx, func(ctx context.Context, evt sdomain.PayoutCompleted) error {
+		return eventSvc.HandlePayoutCompleted(ctx, evt)
+	})
 	go outboxWorker.Run(ctx)
 	go restDispatcher.Run(ctx)
 	if err := bookingSvc.StartConsumers(ctx); err != nil {

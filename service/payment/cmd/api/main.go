@@ -11,19 +11,21 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	shareddb "github.com/nedo/TicketSaas/pkg/db"
-	sharedhttp "github.com/nedo/TicketSaas/pkg/http"
-	sharedkafka "github.com/nedo/TicketSaas/pkg/kafka"
-	"github.com/nedo/TicketSaas/pkg/log"
-	"github.com/nedo/TicketSaas/pkg/outbox"
-	"github.com/nedo/TicketSaas/pkg/telemetry"
-	"github.com/nedo/TicketSaas/service/payment/internal/application"
-	"github.com/nedo/TicketSaas/service/payment/internal/config"
-	"github.com/nedo/TicketSaas/service/payment/internal/domain"
-	"github.com/nedo/TicketSaas/service/payment/internal/handler"
-	paykafka "github.com/nedo/TicketSaas/service/payment/internal/kafka"
-	"github.com/nedo/TicketSaas/service/payment/internal/postgres"
-	"github.com/nedo/TicketSaas/service/payment/internal/processor"
+	shareddb "github.com/unedtamps/ticketbus/pkg/db"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	sharedhttp "github.com/unedtamps/ticketbus/pkg/http"
+	sharedkafka "github.com/unedtamps/ticketbus/pkg/kafka"
+	"github.com/unedtamps/ticketbus/pkg/log"
+	"github.com/unedtamps/ticketbus/pkg/outbox"
+	"github.com/unedtamps/ticketbus/pkg/telemetry"
+	"github.com/unedtamps/ticketbus/service/payment/internal/application"
+	"github.com/unedtamps/ticketbus/service/payment/internal/config"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
+	"github.com/unedtamps/ticketbus/service/payment/internal/handler"
+	paykafka "github.com/unedtamps/ticketbus/service/payment/internal/kafka"
+	payoutpkg "github.com/unedtamps/ticketbus/service/payment/internal/payout"
+	"github.com/unedtamps/ticketbus/service/payment/internal/postgres"
+	"github.com/unedtamps/ticketbus/service/payment/internal/processor"
 )
 
 func main() {
@@ -60,11 +62,14 @@ func main() {
 
 	txnRepo := postgres.NewTransactionRepo(pool)
 	refundRepo := postgres.NewRefundRepo(pool)
+	payoutRepo := postgres.NewPayoutRepo(pool, cfg.Provider)
 
 	var payProcessor domain.PaymentProcessor
 	switch cfg.Provider {
 	case "xendit":
-		payProcessor = processor.NewXenditProcessor(cfg.XenditBaseURL, cfg.XenditAPIKey)
+		payProcessor = processor.NewXenditProcessor(
+			cfg.XenditBaseURL, cfg.XenditPayoutBaseURL, cfg.XenditPayoutPath, cfg.XenditAPIKey,
+		)
 	case "mock":
 		fallthrough
 	default:
@@ -80,16 +85,18 @@ func main() {
 	if err := sharedkafka.EnsureTopics(kafkaBrokers, []string{
 		"event.cancelled",
 		"payment.completed", "payment.expired",
+		sdomain.TopicPayoutRequested, sdomain.TopicPayoutCompleted,
 	}, 4, 3); err != nil {
 		logger.Error("failed to ensure kafka topics", "error", err)
 		os.Exit(1)
 	}
 	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger, cfg.OutboxConcurrency, cfg.OutboxPollMs,
-		[]string{"payment.completed", "payment.expired"})
+		[]string{"payment.completed", "payment.expired", sdomain.TopicPayoutCompleted})
 
 	svc := application.NewPaymentService(
 		txnRepo,
 		refundRepo,
+		payoutRepo,
 		payProcessor,
 		consumer,
 		outboxStore,
@@ -99,9 +106,14 @@ func main() {
 		cfg.EnabledMethods(),
 	)
 
+	payoutDispatcher := payoutpkg.NewDispatcher(
+		pool, payoutRepo, payProcessor, logger, cfg.PayoutDispatchPollMs,
+	)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go outboxWorker.Run(ctx)
+	go payoutDispatcher.Run(ctx)
 	_ = svc.StartConsumer(ctx)
 	svc.StartExpiryPoller(ctx, cfg.ExpiryPollSec)
 

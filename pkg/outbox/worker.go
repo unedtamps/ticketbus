@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	shareddb "github.com/nedo/TicketSaas/pkg/db"
-	"github.com/nedo/TicketSaas/pkg/kafka"
+	shareddb "github.com/unedtamps/ticketbus/pkg/db"
+	"github.com/unedtamps/ticketbus/pkg/kafka"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
@@ -49,7 +49,7 @@ func NewWorker(
 		store: NewStore(db),
 		// Captured after telemetry.Init has run in main, so the worker publishes
 		// under the same provider as the rest of the process.
-		tracer:       otel.Tracer("github.com/nedo/TicketSaas/pkg/outbox"),
+		tracer:       otel.Tracer("github.com/unedtamps/ticketbus/pkg/outbox"),
 		producer:     producer,
 		logger:       logger,
 		topics:       kafkaTopics,
@@ -86,9 +86,11 @@ func (w *Worker) processBatch(ctx context.Context) {
 	if len(w.topics) == 0 {
 		return
 	}
-	rows, err := w.store.db.Query(ctx,
+	rows, err := w.store.db.Query(
+		ctx,
 		`SELECT id, topic, key, payload, trace_context FROM outbox WHERE delivered = false AND topic = ANY($1) ORDER BY id LIMIT 100`,
-		w.topics)
+		w.topics,
+	)
 	if err != nil {
 		w.logger.Error("outbox worker query failed", "error", err)
 		return

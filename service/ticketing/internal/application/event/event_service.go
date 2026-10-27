@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
-	"github.com/nedo/TicketSaas/pkg/outbox"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/pkg/outbox"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
 // EventService orchestrates event management operations.
@@ -43,6 +43,9 @@ func (s *EventService) CreateEvent(
 ) (*domain.Event, error) {
 	if len(ticketTypes) == 0 {
 		return nil, domain.ErrTicketTypesEmpty
+	}
+	if !endAt.After(startAt) {
+		return nil, domain.ErrEventInvalidWindow
 	}
 	totalQty := 0
 	for _, tt := range ticketTypes {
@@ -96,6 +99,9 @@ func (s *EventService) UpdateEvent(
 	}
 	if event.Status != sdomain.EventStatusDraft && event.Status != sdomain.EventStatusPending {
 		return nil, domain.ErrEventNotEditable
+	}
+	if !endAt.After(startAt) {
+		return nil, domain.ErrEventInvalidWindow
 	}
 	event.Title = title
 	event.Description = description

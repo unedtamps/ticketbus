@@ -32,15 +32,16 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/nedo/TicketSaas/pkg/log"
-	"github.com/nedo/TicketSaas/pkg/outbox"
-	"github.com/nedo/TicketSaas/pkg/testinfra"
-	bookingpkg "github.com/nedo/TicketSaas/service/ticketing/internal/application/booking"
-	eventpkg "github.com/nedo/TicketSaas/service/ticketing/internal/application/event"
-	ticketinghandler "github.com/nedo/TicketSaas/service/ticketing/internal/handler"
-	eventkafka "github.com/nedo/TicketSaas/service/ticketing/internal/kafka"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/payment"
-	eventpostgres "github.com/nedo/TicketSaas/service/ticketing/internal/postgres"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/pkg/log"
+	"github.com/unedtamps/ticketbus/pkg/outbox"
+	"github.com/unedtamps/ticketbus/pkg/testinfra"
+	bookingpkg "github.com/unedtamps/ticketbus/service/ticketing/internal/application/booking"
+	eventpkg "github.com/unedtamps/ticketbus/service/ticketing/internal/application/event"
+	ticketinghandler "github.com/unedtamps/ticketbus/service/ticketing/internal/handler"
+	eventkafka "github.com/unedtamps/ticketbus/service/ticketing/internal/kafka"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/payment"
+	eventpostgres "github.com/unedtamps/ticketbus/service/ticketing/internal/postgres"
 )
 
 const consumerGroup = "ticketing-service-test"
@@ -110,8 +111,11 @@ func startContainers() *TestEnv {
 	// Kafka-bound outbox rows only; payment.initiate goes through the REST
 	// dispatcher, which is wired to the fake payment client here.
 	go outbox.NewWorker(infra.Pool, infra.Producer, logger, 1, 200,
-		[]string{"event.cancelled", "ticket.issued"}).Run(ctxBg)
+		[]string{"event.cancelled", "ticket.issued", "payout.requested"}).Run(ctxBg)
 	go payment.NewDispatcher(infra.Pool, fakePay, logger, 100).Run(ctxBg)
+	consumer.OnPayoutCompleted(ctxBg, func(ctx context.Context, evt sdomain.PayoutCompleted) error {
+		return eventSvc.HandlePayoutCompleted(ctx, evt)
+	})
 	go func() { _ = bookSvc.StartConsumers(ctxBg) }()
 
 	// Allow the outbox worker and Kafka writer to warm up; the first produce

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/nedo/TicketSaas/pkg/dto"
+	"github.com/unedtamps/ticketbus/pkg/dto"
 )
 
 // UserRepository defines the contract for user persistence.

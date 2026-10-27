@@ -1,4 +1,4 @@
-# TicketSaas
+# TicketBus
 
 A ticketing platform built with Go microservices, Kafka, PostgreSQL, Traefik, and Next.js.
 
@@ -19,11 +19,16 @@ Services communicate asynchronously via Kafka (4 brokers, RF=3, 4 partitions per
   ├─ event.cancelled    ticketing → ticketing (event status cache) + payment (refund requests)
   ├─ payment.completed  payment   → ticketing (confirm booking, issue tickets)
   ├─ payment.expired    payment   → ticketing (expire booking, release seats)
-  └─ ticket.issued      ticketing → (emitted per booking item on confirmation)
+  ├─ ticket.issued      ticketing → (emitted per booking item on confirmation)
+  ├─ payout.requested   ticketing → payment (prepare an event payout)
+  └─ payout.completed   payment   → ticketing (settle event payout status)
 
 Reserve → payment handoff is asynchronous too, but over REST (never Kafka):
   └─ payment.initiate   ticketing → payment (outbox row → background REST dispatcher
                           → POST /api/payments/internal; payment idempotent per booking_id)
+
+Payout → gateway uses the same outbox-rest pattern inside payment:
+  └─ payment.disbursement payment → Xendit Payouts API (outbox row → payout REST dispatcher)
 
 Seat availability is authoritative in PostgreSQL:
   └─ ticket_types.available_seat — atomic seat counter (conditional UPDATE ... WHERE available_seat >= qty)
@@ -58,8 +63,8 @@ All inter-service communication flows through the **transactional outbox pattern
 | Service | Produces via Outbox | Consumes |
 |---------|-------------------|----------|
 | Auth | — | — |
-| Ticketing | `event.cancelled`, `ticket.issued` (Kafka), `payment.initiate` (REST dispatch) | `payment.completed`, `payment.expired` |
-| Payment | `payment.completed`, `payment.expired` | `event.cancelled` |
+| Ticketing | `event.cancelled`, `ticket.issued`, `payout.requested` (Kafka), `payment.initiate` (REST dispatch) | `payment.completed`, `payment.expired`, `payout.completed` |
+| Payment | `payment.completed`, `payment.expired`, `payout.completed` (Kafka), `payment.disbursement` (REST dispatch) | `event.cancelled`, `payout.requested` |
 
 This guarantees **at-least-once delivery** and eliminates the dual-write problem (no DB write that can succeed while the REST/Kafka write fails). Consumers are idempotent via guarded status transitions (`TransitionIfActive`, `UpdateStatusIfPending`), so a redelivered message is a no-op instead of a double write. The same holds across the REST hop: the payment service upserts on `booking_id` (201 `created=true` on first insert, 200 `created=false` on redelivery — both 2xx, so the dispatcher treats either as delivered).
 
@@ -68,8 +73,8 @@ This guarantees **at-least-once delivery** and eliminates the dual-write problem
 | Service | Language | Port | Database | Responsibilities |
 |---------|----------|------|----------|-----------------|
 | `auth-service` | Go | 8081 | `auth_db` (5432) | Customer/organizer registration, login, JWT (access 15m, refresh 7d), Traefik ForwardAuth `verify`, organizer profiles, admin seed from `ADMIN_SEEDS` |
-| `ticketing-service` | Go | 8082 | `ticketing_db` (5433) | Event CRUD, admin approval workflow, live seat counters, reservation holds (`RESERVATION_TTL`), booking transitions, cancel cascade, outbox: `event.cancelled`, `ticket.issued` (Kafka) + `payment.initiate` (REST dispatcher → payment) |
-| `payment-service` | Go | 8083 | `payment_db` (5435) | Transaction lifecycle (`initiated → pending → completed \| expired`), gateway session creation via pluggable `mock`/`xendit` processor, webhook ingestion, expiry poller, refund requests, outbox: `payment.*` |
+| `ticketing-service` | Go | 8082 | `ticketing_db` (5433) | Event CRUD, admin approval workflow, live seat counters, reservation holds (`RESERVATION_TTL`), booking transitions, cancel cascade, organizer payout accounts + per-event payouts, outbox: `event.cancelled`, `ticket.issued`, `payout.requested` (Kafka) + `payment.initiate` (REST dispatcher → payment) |
+| `payment-service` | Go | 8083 | `payment_db` (5435) | Transaction lifecycle (`initiated → pending → completed \| expired`), gateway session creation via pluggable `mock`/`xendit` processor, webhook ingestion, expiry poller, refund requests, event payout aggregation + Xendit Payouts API, outbox: `payment.*`, `payout.completed` |
 | `web` | Next.js 16 | 3000 | — | TanStack Query data fetching, `proxy.ts` route guards, ticket-stub UI, toasts, ConfirmDialog, Tooltip, SSR homepage |
 
 All amounts are stored and sent to the gateway as whole rupiah integers (`amount_rupiah`, `price_rupiah`, currency `IDR`) — no minor-unit conversion anywhere in the payment path.
@@ -96,9 +101,53 @@ Customer pays → POST /api/payments/booking/{booking_id}
   ↓
 ┌─ payment_session.completed  → status=completed → outbox: payment.completed → booking confirmed → ticket.issued per item
 └─ payment_session.expired    → status=expired   → outbox: payment.expired   → booking expired, seats released
+  ↓
+After end_at passes, the organizer can request a payout for the event
+    (see Event Payouts below)
 ```
 
 `ProcessPayment` refuses to start a session when the transaction has less than a minute of life left, and clamps the gateway expiry to at least 10 minutes in the future (gateway minimum) while never exceeding `expires_at - GATEWAY_EXPIRY_BUFFER_MIN`. A session can only be created once — the `initiated → pending` transition is guarded, so a duplicate call returns `409` and voids the orphaned gateway session.
+
+### Reservation window
+
+A ticket can only be reserved while the event is **live**:
+
+```
+published  AND  start_at <= now()  AND  now() < end_at
+```
+
+- **No presale** — an event that has not started yet cannot be booked.
+- **No late booking** — once the event has ended, reservations are closed.
+- **A reservation made while the event was live stays payable afterwards.** The
+  hold is `RESERVATION_TTL` from the reservation and is *not* clamped to the
+  event's end, so a customer who booked at 14:19 of a 14:20 event can still pay
+  at 14:30. The gateway session always expires before the hold (session =
+  hold − `GATEWAY_EXPIRY_BUFFER_MIN`, floored at the gateway's ten-minute
+  minimum), so a payment made inside the hold is always honoured.
+- The hold, not the event's end, is what expires a booking: the payment
+  poller expires the transaction once `expires_at` passes, emits
+  `payment.expired`, and ticketing expires the booking and releases the seats.
+  A payment that arrives after the hold died is refunded (`late_payment`).
+- `RESERVATION_TTL` must therefore exceed the gateway's ten-minute minimum
+  session lifetime plus `GATEWAY_EXPIRY_BUFFER_MIN`.
+- The check runs twice: the service rejects early with a precise error, and the
+  booking insert inside the transaction is conditional on the event still being
+  reservable — so an event cancelled in between cannot be booked.
+- The public event list only shows live events; organizer and admin views show all.
+
+### Timezones
+
+Timestamps are absolute instants everywhere: the columns are `TIMESTAMPTZ`, the
+API speaks RFC3339 with an offset, and every comparison (`start_at <= now`,
+`expires_at <= NOW()`, the reservation window) is instant-based — a local wall
+clock is never persisted, so the server's timezone cannot shift a result.
+
+The web app renders those instants in the **visitor's own timezone**: the event
+form converts the entered local time with `toISOString()`, and the format
+helpers use the browser's clock (`LocalTime` for the server-rendered homepage
+paints UTC first and switches to the local clock on hydration). An event created
+at 15:08 in Jakarta therefore shows as 15:08 in Jakarta and at the reader's
+local time elsewhere.
 
 ### Reservation expiry (race-safe)
 
@@ -153,6 +202,62 @@ and totals are derived from `booking_items.total_price_rupiah`.
 | `succeeded` | Provider confirmed the refund |
 | `failed` | Provider rejected the refund |
 
+## Event Payouts
+
+Organizers withdraw an event's earnings after it ends. The bank destination is
+stored per organizer (`organizer_payout_accounts`) and snapshotted into every
+payout attempt (`event_payout_attempts`), so changing the account later never
+rewrites history.
+
+An event may have several **attempts**: a retry after a failure, or a top-up
+that collects transactions which completed after an earlier payout. The attempt
+number is allocated by the ticketing service inside the same transaction that
+inserts the attempt, so a double click cannot create two attempts, and only one
+attempt may be in flight per event.
+
+```
+PUT /api/payout-account                      (EO) save bank_code + account number + holder
+POST /api/events/{id}/payout                 (EO) request a payout → 202
+  guards: owner, status=published, end_at < now, no attempt in flight, account set
+  ONE TX: INSERT event_payout_attempts(status=pending, bank snapshot, attempt=n)
+          + outbox payout.requested{attempt=n}
+        │ outbox worker → Kafka
+payment consumes payout.requested
+  ONE TX (Prepare): INSERT payouts(event_id, attempt) — a repeated delivery is a no-op
+          + lock completed / refund_status='none' / payout_status IN ('none','failed') txns
+          + transactions.payout_status='pending'
+          + outbox payment.disbursement{attempt}
+        │ payment REST dispatcher → Xendit Payouts API
+  POST /v2/payouts  channel_code=ID_<BANK>, account_holder_name, account_number,
+                    Idempotency-Key=payout-<payout_id>-<attempt>
+  2xx  → ONE TX (Complete): payouts + transactions = paid_out + outbox payout.completed
+  4xx  → failed (permanent: bad data); 401/403 → retried (credentials, e.g. a missing
+          MONEY-OUT scope); 429/5xx/network → retried with backoff
+        │ outbox worker → Kafka
+ticketing consumes payout.completed
+  event_payout_attempts → paid_out/failed + amount + provider_ref + completed_at
+```
+
+| Event-level state | Rule |
+|-------------------|------|
+| `status` | `paid_out` if **any** attempt paid out, else the latest attempt's status, else `none` — a successful payout is never downgraded by a later failure |
+| `amount_rupiah` | `SUM` of the paid out attempts — what the organizer actually received |
+| `attempts` | number of attempts |
+
+Notes:
+
+- Only `completed` transactions with `refund_status='none'` are included; pending
+  refunds are excluded. A transaction whose earlier attempt failed is included
+  again by the next attempt; a paid out transaction never is.
+- A request with nothing to collect never reaches the gateway: the attempt is
+  recorded as `failed / no_earnings`.
+- The Xendit API key needs the **MONEY-OUT** permission. A 401/403 is treated as a
+  configuration problem — the payout stays pending and is retried instead of
+  failing the organizer's money.
+- Config: `XENDIT_PAYOUT_BASE_URL` (default `https://api.xendit.co`),
+  `XENDIT_PAYOUT_PATH` (default `/v2/payouts`), `PAYOUT_DISPATCH_POLL_MS` (default 200).
+  With `PROVIDER=mock` the gateway is simulated (`dis-mock-<payout_id>`).
+
 ## Quick Start
 
 ### Prerequisites
@@ -198,8 +303,8 @@ below is required at startup unless marked optional.
 | Service | Key env vars |
 |---------|-------------|
 | auth | `APP_ENV`, `PORT`, `DATABASE_URL`, `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `ADMIN_SEEDS` (optional, JSON array) |
-| ticketing | `APP_ENV`, `PORT`, `DATABASE_URL`, `KAFKA_BROKERS`, `RESERVATION_TTL`, `CONSUMER_CONCURRENCY`, `OUTBOX_CONCURRENCY`, `OUTBOX_POLL_MS`, `PAYMENT_SERVICE_URL`, `PAYMENT_TIMEOUT_SEC`, `INTERNAL_API_KEY` |
-| payment | `APP_ENV`, `PORT`, `DATABASE_URL`, `KAFKA_BROKERS`, `WEBHOOK_BASE_URL`, `PROVIDER`, `XENDIT_BASE_URL`, `WEBHOOK_CALLBACK_TOKEN`, `CONSUMER_CONCURRENCY`, `OUTBOX_CONCURRENCY`, `OUTBOX_POLL_MS`, `GATEWAY_EXPIRY_BUFFER_MIN`, `EXPIRY_POLL_SEC`, `INTERNAL_API_KEY`, `XENDIT_API_KEY` (required only when `PROVIDER=xendit`), `PAYMENT_METHODS` (optional) |
+| ticketing | `APP_ENV`, `PORT`, `DATABASE_URL`, `KAFKA_BROKERS`, `RESERVATION_TTL`, `CONSUMER_CONCURRENCY`, `OUTBOX_CONCURRENCY`, `OUTBOX_POLL_MS`, `REST_DISPATCH_POLL_MS` (optional, default 200), `PAYMENT_SERVICE_URL`, `PAYMENT_TIMEOUT_SEC`, `INTERNAL_API_KEY` |
+| payment | `APP_ENV`, `PORT`, `DATABASE_URL`, `KAFKA_BROKERS`, `WEBHOOK_BASE_URL`, `PROVIDER`, `XENDIT_BASE_URL`, `XENDIT_PAYOUT_BASE_URL` (optional, default `https://api.xendit.co`), `XENDIT_PAYOUT_PATH` (optional, default `/v2/payouts`), `PAYOUT_DISPATCH_POLL_MS` (optional, default 200), `WEBHOOK_CALLBACK_TOKEN`, `CONSUMER_CONCURRENCY`, `OUTBOX_CONCURRENCY`, `OUTBOX_POLL_MS`, `GATEWAY_EXPIRY_BUFFER_MIN`, `EXPIRY_POLL_SEC`, `INTERNAL_API_KEY`, `XENDIT_API_KEY` (required only when `PROVIDER=xendit`; needs the **MONEY-OUT** scope for payouts), `PAYMENT_METHODS` (optional) |
 
 Notable values:
 
@@ -207,10 +312,11 @@ Notable values:
 |-----|---------|---------|
 | `PROVIDER` | payment | `mock` (deterministic in-process sessions) or `xendit` (Payment Sessions API) |
 | `WEBHOOK_CALLBACK_TOKEN` | payment | Shared `x-callback-token` secret required on every webhook, both providers |
-| `RESERVATION_TTL` | ticketing | Seat-hold lifetime in seconds; must be > 0. Also becomes the transaction expiry |
+| `RESERVATION_TTL` | ticketing | Seat-hold lifetime in seconds; must be > 0 and exceed the gateway's ten-minute session minimum plus `GATEWAY_EXPIRY_BUFFER_MIN`. Also becomes the transaction expiry |
 | `GATEWAY_EXPIRY_BUFFER_MIN` | payment | Gateway session is set to `expires_at - buffer`, floored at the provider minimum |
 | `EXPIRY_POLL_SEC` | payment | Interval of the fallback expiry poller |
 | `INTERNAL_API_KEY` | ticketing, payment | `X-Internal-Key` for service-to-service calls (reserve → payment) |
+| `XENDIT_PAYOUT_BASE_URL` / `XENDIT_PAYOUT_PATH` | payment | Payouts API root and path (default `/v2/payouts`); the API key needs the MONEY-OUT scope |
 
 ## Ports
 
@@ -438,7 +544,11 @@ pipeline, not the selector:
 | PUT | `/api/events/{id}` | Bearer | EO |
 | POST | `/api/events/{id}/cancel` | Bearer | EO (owner) |
 | POST | `/api/events/{id}/cancel-reprocess` | Bearer | EO (owner) |
-| GET | `/api/events/mine` | Bearer | EO |
+| GET | `/api/events/mine` | Bearer | EO (includes payout status/amount) |
+| GET | `/api/payout-account` | Bearer | EO |
+| PUT | `/api/payout-account` | Bearer | EO |
+| POST | `/api/events/{id}/payout` | Bearer | EO (owner) — `202`, `409` if not eligible |
+| GET | `/api/events/{id}/payout` | Bearer | EO (owner) |
 | GET | `/api/admin/events` | Bearer | Admin |
 | GET | `/api/events/pending` | Bearer | Admin |
 | POST | `/api/events/{id}/approve` | Bearer | Admin |
@@ -474,7 +584,7 @@ reachable only on the payment service port.
 
 ## Testing
 
-### Unit tests (106 tests, 6 packages)
+### Unit tests (127 tests, 8 packages)
 
 ```bash
 make test        # go test -race -count=1 ./...
@@ -487,14 +597,17 @@ All infrastructure is mocked via [mockery](https://github.com/vektra/mockery) (1
 |---------|-------|
 | `auth/application` | 22 |
 | `auth/jwt` | 10 |
-| `ticketing/application/event` | 30 |
-| `ticketing/application/booking` | 19 |
+| `ticketing/application/event` | 40 |
+| `ticketing/application/booking` | 24 |
+| `ticketing/internal/payment` | 2 |
 | `payment/application` | 23 |
+| `payment/internal/payout` | 4 |
+| `payment/internal/processor` | 2 |
 
-### Integration tests (39 tests)
+### Integration tests (45 tests)
 
 ```bash
-make integration-test      # go test -tags=integration -count=1 -v ./tests/integration/...
+make integration-test      # go test -tags=integration -count=1 -v ./service/*/tests/integration/...
 make integration-test-race # with race detector
 ```
 
@@ -506,7 +619,7 @@ concurrency, and error-path coverage.
 
 Tests are grouped per area and named `Test<Area>_<Scenario>` (`Auth`, `Event`, `Booking`,
 `Payment`, `Webhook`, `Expiry`, `Refund`, `Mock`, `E2E`, `Concurrency`), so a single area can be run
-with `go test -tags integration -run 'TestPayment' ./tests/integration/`.
+with `go test -tags integration -run 'TestPayment' ./service/payment/tests/integration/`.
 
 ## CI/CD
 
@@ -515,7 +628,7 @@ GitHub Actions on push and pull request to `master` (`.github/workflows/test.yml
 | Job | Command | Timeout |
 |-----|---------|---------|
 | Unit Tests | `go test -race -count=1 ./...` | 10 min |
-| Integration Tests | `go test -tags=integration -race -count=1 -v ./tests/integration/...` | 15 min |
+| Integration Tests | `go test -tags=integration -race -count=1 -v ./service/auth/tests/integration/... ./service/ticketing/tests/integration/... ./service/payment/tests/integration/...` | 15 min |
 
 Both jobs run in parallel on `ubuntu-latest`.
 

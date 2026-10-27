@@ -41,7 +41,7 @@ export function Header() {
       <div className="container flex items-center justify-between h-14">
         <Link href="/" className="flex items-center gap-2 group">
           <span className="font-[family-name:var(--font-display)] text-xl text-[#D9381E] group-hover:text-[#B82E1A] transition-colors">
-            TicketSaas
+            TicketBus
           </span>
         </Link>
 

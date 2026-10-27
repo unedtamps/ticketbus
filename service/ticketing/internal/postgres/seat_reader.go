@@ -3,7 +3,7 @@ package postgres
 import (
 	"context"
 
-	shareddb "github.com/nedo/TicketSaas/pkg/db"
+	shareddb "github.com/unedtamps/ticketbus/pkg/db"
 )
 
 // SeatReader reads live seat availability from PostgreSQL.

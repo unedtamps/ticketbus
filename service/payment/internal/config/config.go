@@ -9,14 +9,14 @@ import (
 
 // Config holds all configuration for the payment service.
 type Config struct {
-	AppEnv                 string `env:"APP_ENV,required,notEmpty"`
-	Port                   string `env:"PORT,required,notEmpty"`
-	DatabaseURL            string `env:"DATABASE_URL,required,notEmpty"`
-	KafkaBrokers           string `env:"KAFKA_BROKERS,required,notEmpty"`
-	WebhookBaseURL         string `env:"WEBHOOK_BASE_URL,required,notEmpty"`
-	ConsumerConcurrency    int    `env:"CONSUMER_CONCURRENCY,required,notEmpty"`
-	OutboxConcurrency      int    `env:"OUTBOX_CONCURRENCY,required,notEmpty"`
-	OutboxPollMs           int    `env:"OUTBOX_POLL_MS,required,notEmpty"`
+	AppEnv              string `env:"APP_ENV,required,notEmpty"`
+	Port                string `env:"PORT,required,notEmpty"`
+	DatabaseURL         string `env:"DATABASE_URL,required,notEmpty"`
+	KafkaBrokers        string `env:"KAFKA_BROKERS,required,notEmpty"`
+	WebhookBaseURL      string `env:"WEBHOOK_BASE_URL,required,notEmpty"`
+	ConsumerConcurrency int    `env:"CONSUMER_CONCURRENCY,required,notEmpty"`
+	OutboxConcurrency   int    `env:"OUTBOX_CONCURRENCY,required,notEmpty"`
+	OutboxPollMs        int    `env:"OUTBOX_POLL_MS,required,notEmpty"`
 
 	// Provider: "mock" (dev/tests) or "xendit" (sandbox/live).
 	Provider string `env:"PROVIDER,required,notEmpty"`
@@ -24,6 +24,14 @@ type Config struct {
 	// Xendit configuration (required when PROVIDER=xendit).
 	XenditAPIKey  string `env:"XENDIT_API_KEY"`
 	XenditBaseURL string `env:"XENDIT_BASE_URL,required,notEmpty"`
+	// Payouts API. XENDIT_BASE_URL points at /v1 for Payment Sessions; the
+	// Payouts API lives at the API root.
+	XenditPayoutBaseURL string `env:"XENDIT_PAYOUT_BASE_URL" envDefault:"https://api.xendit.co"`
+	XenditPayoutPath    string `env:"XENDIT_PAYOUT_PATH" envDefault:"/v2/payouts"`
+
+	// PayoutDispatchPollMs is how often the payout REST dispatcher looks for
+	// undelivered payment.disbursement rows.
+	PayoutDispatchPollMs int `env:"PAYOUT_DISPATCH_POLL_MS" envDefault:"200"`
 
 	// Shared webhook verification token (both providers). Must match the
 	// token the gateway includes as the x-callback-token header.

@@ -8,7 +8,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/nedo/TicketSaas/service/payment/internal/domain"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -260,4 +260,22 @@ func (_c *MockPaymentProcessor_GetSession_Call) Return(sessionResult *domain.Ses
 func (_c *MockPaymentProcessor_GetSession_Call) RunAndReturn(run func(ctx context.Context, providerRef string) (*domain.SessionResult, error)) *MockPaymentProcessor_GetSession_Call {
 	_c.Call.Return(run)
 	return _c
+}
+
+// CreatePayout provides a mock function for the type MockPaymentProcessor
+func (_mock *MockPaymentProcessor) CreatePayout(ctx context.Context, req domain.PayoutRequest) (*domain.PayoutResult, error) {
+	ret := _mock.Called(ctx, req)
+	if len(ret) == 0 {
+		panic("no return value specified for CreatePayout")
+	}
+	var r0 *domain.PayoutResult
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.PayoutRequest) (*domain.PayoutResult, error)); ok {
+		return returnFunc(ctx, req)
+	}
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*domain.PayoutResult)
+	}
+	r1 = ret.Error(1)
+	return r0, r1
 }

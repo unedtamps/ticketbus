@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Calendar, MapPin } from "lucide-react";
-import { fmtDate } from "@/lib/format";
+import { LocalTime } from "@/components/ui/local-time";
 import type { EventListResponse, EventItem } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -38,7 +38,7 @@ function EventStub({ event, index }: { event: EventItem; index: number }) {
       <div className="flex items-center gap-4 text-xs text-[#B0A89E] pt-3 border-t border-dashed border-[#E8E3DC]">
         <span className="flex items-center gap-1.5">
           <Calendar className="w-3.5 h-3.5" />
-          {fmtDate(event.start_at)}
+          <LocalTime iso={event.start_at} format="date" />
         </span>
         {event.venue_name ? (
           <span className="flex items-center gap-1.5">
@@ -92,7 +92,7 @@ export default async function HomePage() {
               No events yet
             </p>
             <p className="text-[#8B8580] text-sm">
-              Check back soon for upcoming events
+              Check back soon for live events
             </p>
           </div>
         </div>

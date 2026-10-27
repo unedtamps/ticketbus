@@ -30,14 +30,15 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/nedo/TicketSaas/pkg/log"
-	"github.com/nedo/TicketSaas/pkg/outbox"
-	"github.com/nedo/TicketSaas/pkg/testinfra"
-	payapp "github.com/nedo/TicketSaas/service/payment/internal/application"
-	payhandler "github.com/nedo/TicketSaas/service/payment/internal/handler"
-	paykafka "github.com/nedo/TicketSaas/service/payment/internal/kafka"
-	paypostgres "github.com/nedo/TicketSaas/service/payment/internal/postgres"
-	"github.com/nedo/TicketSaas/service/payment/internal/processor"
+	"github.com/unedtamps/ticketbus/pkg/log"
+	"github.com/unedtamps/ticketbus/pkg/outbox"
+	"github.com/unedtamps/ticketbus/pkg/testinfra"
+	payapp "github.com/unedtamps/ticketbus/service/payment/internal/application"
+	payhandler "github.com/unedtamps/ticketbus/service/payment/internal/handler"
+	paykafka "github.com/unedtamps/ticketbus/service/payment/internal/kafka"
+	payoutpkg "github.com/unedtamps/ticketbus/service/payment/internal/payout"
+	paypostgres "github.com/unedtamps/ticketbus/service/payment/internal/postgres"
+	"github.com/unedtamps/ticketbus/service/payment/internal/processor"
 )
 
 const (
@@ -85,12 +86,13 @@ func startContainers() *TestEnv {
 
 	txnRepo := paypostgres.NewTransactionRepo(infra.Pool)
 	refundRepo := paypostgres.NewRefundRepo(infra.Pool)
+	payoutRepo := paypostgres.NewPayoutRepo(infra.Pool, "mock")
 	mockProcessor := processor.NewMockProcessor()
 	payConsumer := paykafka.NewPaymentConsumer(infra.Brokers, consumerGroup, 1)
 	payOutbox := outbox.NewStore(infra.Pool)
 
 	svc := payapp.NewPaymentService(
-		txnRepo, refundRepo, mockProcessor, payConsumer, payOutbox,
+		txnRepo, refundRepo, payoutRepo, mockProcessor, payConsumer, payOutbox,
 		logger, "mock", 5, []string{"ID_QRIS", "ID_BCA_VA"},
 	)
 
@@ -100,7 +102,8 @@ func startContainers() *TestEnv {
 	ctxBg, cancelBg := context.WithCancel(context.Background())
 
 	go outbox.NewWorker(infra.Pool, infra.Producer, logger, 1, 200,
-		[]string{"payment.completed", "payment.expired"}).Run(ctxBg)
+		[]string{"payment.completed", "payment.expired", "payout.completed"}).Run(ctxBg)
+	go payoutpkg.NewDispatcher(infra.Pool, payoutRepo, mockProcessor, logger, 100).Run(ctxBg)
 	go func() { _ = svc.StartConsumer(ctxBg) }()
 	svc.StartExpiryPoller(ctxBg, 1)
 

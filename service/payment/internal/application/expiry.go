@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
-	"github.com/nedo/TicketSaas/service/payment/internal/domain"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
 // ProcessExpired expires pending transactions whose deadline passed and whose

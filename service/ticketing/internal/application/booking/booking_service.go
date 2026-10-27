@@ -4,8 +4,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/nedo/TicketSaas/pkg/outbox"
-	"github.com/nedo/TicketSaas/service/ticketing/internal/domain"
+	"github.com/unedtamps/ticketbus/pkg/outbox"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
 // BookingService orchestrates reservation and booking operations.

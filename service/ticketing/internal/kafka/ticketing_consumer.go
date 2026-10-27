@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"time"
 
-	sdomain "github.com/nedo/TicketSaas/pkg/dto"
-	sharedkafka "github.com/nedo/TicketSaas/pkg/kafka"
+	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	sharedkafka "github.com/unedtamps/ticketbus/pkg/kafka"
 )
 
 // TicketingConsumer implements domain.EventConsumer using Kafka.
@@ -18,6 +18,7 @@ type TicketingConsumer struct {
 	paymentCompletedFn func(context.Context, string, string) error
 	paymentFailedFn    func(context.Context, string) error
 	eventCancelledFn   func(context.Context, string) error
+	payoutCompletedFn  func(context.Context, sdomain.PayoutCompleted) error
 }
 
 // NewTicketingConsumer creates a new Kafka consumer for payment events.
@@ -39,6 +40,10 @@ func (c *TicketingConsumer) OnPaymentExpired(ctx context.Context, fn func(contex
 
 func (c *TicketingConsumer) OnEventCancelled(ctx context.Context, fn func(context.Context, string) error) {
 	c.eventCancelledFn = fn
+}
+
+func (c *TicketingConsumer) OnPayoutCompleted(ctx context.Context, fn func(context.Context, sdomain.PayoutCompleted) error) {
+	c.payoutCompletedFn = fn
 }
 
 // Start begins consuming from all relevant topics.
@@ -72,6 +77,17 @@ func (c *TicketingConsumer) Start(ctx context.Context) error {
 		}
 		if c.eventCancelledFn != nil {
 			return c.eventCancelledFn(ctx, event.EventID)
+		}
+		return nil
+	})
+
+	startConsumer(ctx, c.brokers, c.groupID, c.concurrency, sdomain.TopicPayoutCompleted, func(ctx context.Context, msg sharedkafka.Message) error {
+		var event sdomain.PayoutCompleted
+		if err := json.Unmarshal(msg.Value, &event); err != nil {
+			return err
+		}
+		if c.payoutCompletedFn != nil {
+			return c.payoutCompletedFn(ctx, event)
 		}
 		return nil
 	})

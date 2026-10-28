@@ -66,3 +66,22 @@ func TestWebhook_Expired_RealPayload(t *testing.T) {
 	assert.Equal(t, 1, env.outboxCountForBooking(t, "payment.expired", bookingID),
 		"payment.expired published exactly once")
 }
+
+// TestWebhook_NonBookingReferenceAcknowledged covers Xendit's dashboard test
+// payloads (and sessions created outside our flow): their reference_id is not
+// one of our booking UUIDs, which Postgres rejects with a syntax error rather
+// than ErrNoRows. The handler must acknowledge them with 2xx instead of
+// answering 400 "invalid webhook payload" — no retry can make them match.
+func TestWebhook_NonBookingReferenceAcknowledged(t *testing.T) {
+	env := getTestEnv()
+
+	payload := `{
+		"event": "payment_session.expired",
+		"data": {
+			"id": "ps-579c8d61f23fa4ca35e52da4",
+			"reference_id": "test_session",
+			"status": "EXPIRED"
+		}
+	}`
+	postRawWebhook(t, env.payURL, payload)
+}

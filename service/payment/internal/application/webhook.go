@@ -50,6 +50,17 @@ func (s *PaymentService) HandleSessionWebhook(
 	if event.Data.ReferenceID == "" {
 		return errors.New("webhook missing reference_id")
 	}
+	// Gateway test payloads (and sessions created outside our flow) carry a
+	// reference_id that is not one of our booking UUIDs. Postgres answers a
+	// non-UUID input with a syntax error — not ErrNoRows — so validate before
+	// querying and acknowledge: no retry can ever make this match a booking.
+	if _, err := uuid.Parse(event.Data.ReferenceID); err != nil {
+		s.logger.Warn("session webhook with non-booking reference, ignoring",
+			"reference_id", event.Data.ReferenceID,
+			"event", event.Event,
+		)
+		return nil
+	}
 
 	txn, err := s.txnRepo.FindByBookingID(ctx, event.Data.ReferenceID)
 	if err != nil {

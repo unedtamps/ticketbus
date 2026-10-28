@@ -56,16 +56,16 @@ func TestInitiateTxnForBooking_Success(t *testing.T) {
 	expiresAt := time.Now().Add(15 * time.Minute)
 
 	txnRepo.EXPECT().Create(ctx, mock.MatchedBy(func(tx *domain.Transaction) bool {
-		return tx.BookingID == "book-1" && tx.EventID == "event-1" && tx.UserID == "user-1" &&
+		return tx.BookingID == "11111111-1111-4111-8111-111111111111" && tx.EventID == "event-1" && tx.UserID == "user-1" &&
 			tx.CustomerEmail == "user@example.com" && tx.AmountRupiah == 10000 &&
 			tx.Currency == "IDR" && tx.Status == domain.StatusInitiated &&
 			tx.ExpiresAt != nil && tx.ExpiresAt.Equal(expiresAt)
 	})).Return(nil)
 
-	txn, created, err := svc.InitiateTxnForBooking(ctx, "book-1", "event-1", "user-1", "user@example.com", 10000, expiresAt)
+	txn, created, err := svc.InitiateTxnForBooking(ctx, "11111111-1111-4111-8111-111111111111", "event-1", "user-1", "user@example.com", 10000, expiresAt)
 	require.NoError(t, err)
 	assert.True(t, created, "first call for a booking must report created=true")
-	assert.Equal(t, "book-1", txn.BookingID)
+	assert.Equal(t, "11111111-1111-4111-8111-111111111111", txn.BookingID)
 	assert.Equal(t, "IDR", txn.Currency)
 }
 
@@ -76,13 +76,13 @@ func TestInitiateTxnForBooking_Idempotent(t *testing.T) {
 	ctx := context.Background()
 	existing := fixtures.NewTestTransaction(
 		fixtures.WithTransactionID("txn-1"),
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 	)
 
 	txnRepo.EXPECT().Create(ctx, mock.Anything).Return(&pgconn.PgError{Code: "23505", Message: "duplicate key"})
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(existing, nil)
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(existing, nil)
 
-	txn, created, err := svc.InitiateTxnForBooking(ctx, "book-1", "event-1", "user-1", "", 10000, time.Now().Add(15*time.Minute))
+	txn, created, err := svc.InitiateTxnForBooking(ctx, "11111111-1111-4111-8111-111111111111", "event-1", "user-1", "", 10000, time.Now().Add(15*time.Minute))
 	require.NoError(t, err)
 	assert.False(t, created, "duplicate booking must report created=false (idempotent success)")
 	assert.Equal(t, "txn-1", txn.ID)
@@ -98,7 +98,7 @@ func TestProcessPayment_Success(t *testing.T) {
 	expiresAt := time.Now().Add(60 * time.Minute)
 	txn := fixtures.NewTestTransaction(
 		fixtures.WithTransactionID("txn-1"),
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionUserID("user-1"),
 		fixtures.WithTransactionAmount(10000),
 		fixtures.WithTransactionCurrency("IDR"),
@@ -112,13 +112,13 @@ func TestProcessPayment_Success(t *testing.T) {
 		ExpiresAt:      expiresAt.Add(-5 * time.Minute),
 	}
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
-	processor.EXPECT().CreateSession(ctx, "book-1", 10000, "IDR", expiresAt.Add(-5*time.Minute),
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
+	processor.EXPECT().CreateSession(ctx, "11111111-1111-4111-8111-111111111111", 10000, "IDR", expiresAt.Add(-5*time.Minute),
 		[]string{"ID_QRIS"}, "user@example.com").Return(result, nil)
 	txnRepo.EXPECT().TransitionIfInitiated(ctx, "txn-1", domain.StatusPending, "ps-1").Return(true, nil)
 	txnRepo.EXPECT().UpdateSession(ctx, "txn-1", "ps-1", "https://checkout.example/ps-1").Return(nil)
 
-	gotTxn, gotResult, err := svc.ProcessPayment(ctx, "book-1", "user-1")
+	gotTxn, gotResult, err := svc.ProcessPayment(ctx, "11111111-1111-4111-8111-111111111111", "user-1")
 	require.NoError(t, err)
 	assert.Equal(t, "txn-1", gotTxn.ID)
 	assert.Equal(t, "ps-1", gotResult.ProviderRef)
@@ -131,8 +131,8 @@ func TestProcessPayment_NotFound(t *testing.T) {
 		mocks.NewMockEventConsumer(t))
 	ctx := context.Background()
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(nil, pgx.ErrNoRows)
-	_, _, err := svc.ProcessPayment(ctx, "book-1", "user-1")
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(nil, pgx.ErrNoRows)
+	_, _, err := svc.ProcessPayment(ctx, "11111111-1111-4111-8111-111111111111", "user-1")
 	assert.ErrorIs(t, err, domain.ErrTransactionNotFound)
 }
 
@@ -142,12 +142,12 @@ func TestProcessPayment_AlreadyInitiated(t *testing.T) {
 		mocks.NewMockEventConsumer(t))
 	ctx := context.Background()
 	txn := fixtures.NewTestTransaction(
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionStatus(domain.StatusPending),
 	)
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
-	_, _, err := svc.ProcessPayment(ctx, "book-1", "user-1")
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
+	_, _, err := svc.ProcessPayment(ctx, "11111111-1111-4111-8111-111111111111", "user-1")
 	assert.ErrorIs(t, err, domain.ErrAlreadyProcessed)
 }
 
@@ -157,12 +157,12 @@ func TestProcessPayment_AlreadyCompleted(t *testing.T) {
 		mocks.NewMockEventConsumer(t))
 	ctx := context.Background()
 	txn := fixtures.NewTestTransaction(
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionStatus(domain.StatusCompleted),
 	)
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
-	_, _, err := svc.ProcessPayment(ctx, "book-1", "user-1")
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
+	_, _, err := svc.ProcessPayment(ctx, "11111111-1111-4111-8111-111111111111", "user-1")
 	assert.ErrorIs(t, err, domain.ErrAlreadyProcessed)
 }
 
@@ -174,7 +174,7 @@ func TestProcessPayment_TransitionRace_CancelsSession(t *testing.T) {
 	expiresAt := time.Now().Add(60 * time.Minute)
 	txn := fixtures.NewTestTransaction(
 		fixtures.WithTransactionID("txn-1"),
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionUserID("user-1"),
 		fixtures.WithTransactionCurrency("IDR"),
 		fixtures.WithTransactionStatus(domain.StatusInitiated),
@@ -182,13 +182,13 @@ func TestProcessPayment_TransitionRace_CancelsSession(t *testing.T) {
 	)
 	result := &domain.SessionResult{ProviderRef: "ps-1", PaymentLinkURL: "https://checkout.example/ps-1"}
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
-	processor.EXPECT().CreateSession(ctx, "book-1", 10000, "IDR", expiresAt.Add(-5*time.Minute),
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
+	processor.EXPECT().CreateSession(ctx, "11111111-1111-4111-8111-111111111111", 10000, "IDR", expiresAt.Add(-5*time.Minute),
 		[]string{"ID_QRIS"}, "").Return(result, nil)
 	txnRepo.EXPECT().TransitionIfInitiated(ctx, "txn-1", domain.StatusPending, "ps-1").Return(false, nil)
 	processor.EXPECT().CancelSession(ctx, "ps-1").Return(nil)
 
-	_, _, err := svc.ProcessPayment(ctx, "book-1", "user-1")
+	_, _, err := svc.ProcessPayment(ctx, "11111111-1111-4111-8111-111111111111", "user-1")
 	assert.ErrorIs(t, err, domain.ErrAlreadyProcessed)
 }
 
@@ -199,14 +199,14 @@ func TestProcessPayment_Expired(t *testing.T) {
 	ctx := context.Background()
 	past := time.Now().Add(-1 * time.Minute)
 	txn := fixtures.NewTestTransaction(
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionUserID("user-1"),
 		fixtures.WithTransactionStatus(domain.StatusInitiated),
 		fixtures.WithTransactionExpiresAt(past),
 	)
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
-	_, _, err := svc.ProcessPayment(ctx, "book-1", "user-1")
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
+	_, _, err := svc.ProcessPayment(ctx, "11111111-1111-4111-8111-111111111111", "user-1")
 	assert.ErrorIs(t, err, domain.ErrTransactionExpired)
 }
 
@@ -217,14 +217,14 @@ func TestProcessPayment_LessThanOneMinuteRemaining(t *testing.T) {
 	ctx := context.Background()
 	soon := time.Now().Add(30 * time.Second)
 	txn := fixtures.NewTestTransaction(
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionUserID("user-1"),
 		fixtures.WithTransactionStatus(domain.StatusInitiated),
 		fixtures.WithTransactionExpiresAt(soon),
 	)
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
-	_, _, err := svc.ProcessPayment(ctx, "book-1", "user-1")
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
+	_, _, err := svc.ProcessPayment(ctx, "11111111-1111-4111-8111-111111111111", "user-1")
 	assert.ErrorIs(t, err, domain.ErrTransactionExpired)
 }
 
@@ -234,14 +234,14 @@ func TestProcessPayment_WrongOwner(t *testing.T) {
 		mocks.NewMockEventConsumer(t))
 	ctx := context.Background()
 	txn := fixtures.NewTestTransaction(
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionUserID("user-other"),
 		fixtures.WithTransactionStatus(domain.StatusInitiated),
 		fixtures.WithTransactionExpiresAt(time.Now().Add(15*time.Minute)),
 	)
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
-	_, _, err := svc.ProcessPayment(ctx, "book-1", "user-1")
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
+	_, _, err := svc.ProcessPayment(ctx, "11111111-1111-4111-8111-111111111111", "user-1")
 	assert.ErrorIs(t, err, domain.ErrTransactionNotFound)
 }
 
@@ -253,13 +253,13 @@ func TestGetPaymentStatus_Success(t *testing.T) {
 		mocks.NewMockEventConsumer(t))
 	ctx := context.Background()
 	txn := fixtures.NewTestTransaction(
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionProviderRef("ps-1"),
 		fixtures.WithTransactionPaymentLinkURL("https://checkout.example/ps-1"),
 	)
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
-	got, err := svc.GetPaymentStatus(ctx, "book-1")
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
+	got, err := svc.GetPaymentStatus(ctx, "11111111-1111-4111-8111-111111111111")
 	require.NoError(t, err)
 	assert.Equal(t, "https://checkout.example/ps-1", got.PaymentLinkURL)
 }
@@ -270,13 +270,16 @@ func TestGetPaymentStatus_NotFound(t *testing.T) {
 		mocks.NewMockEventConsumer(t))
 	ctx := context.Background()
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(nil, pgx.ErrNoRows)
-	_, err := svc.GetPaymentStatus(ctx, "book-1")
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(nil, pgx.ErrNoRows)
+	_, err := svc.GetPaymentStatus(ctx, "11111111-1111-4111-8111-111111111111")
 	assert.ErrorIs(t, err, domain.ErrTransactionNotFound)
 }
 
 // ── HandleSessionWebhook ─────────────────────────────────────────────────────
 
+// webhookPayload builds a session webhook body. referenceID must be a UUID —
+// the handler acknowledges non-UUID references before querying, mirroring how
+// Postgres would reject them against the UUID booking_id column.
 func webhookPayload(event, referenceID, sessionID, status string) []byte {
 	return []byte(`{"event":"` + event + `","data":{"reference_id":"` + referenceID +
 		`","payment_session_id":"` + sessionID + `","status":"` + status + `"}}`)
@@ -289,15 +292,15 @@ func TestHandleSessionWebhook_Completed(t *testing.T) {
 	ctx := context.Background()
 	txn := fixtures.NewTestTransaction(
 		fixtures.WithTransactionID("txn-1"),
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionProviderRef("ps-1"),
 		fixtures.WithTransactionStatus(domain.StatusPending),
 	)
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
 	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusCompleted, "ps-1").Return(true, nil)
 
-	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.completed", "book-1", "ps-1", "COMPLETED"))
+	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.completed", "11111111-1111-4111-8111-111111111111", "ps-1", "COMPLETED"))
 	require.NoError(t, err)
 }
 
@@ -309,19 +312,19 @@ func TestHandleSessionWebhook_CompletedAfterExpired_Refund(t *testing.T) {
 	ctx := context.Background()
 	txn := fixtures.NewTestTransaction(
 		fixtures.WithTransactionID("txn-1"),
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionProviderRef("ps-1"),
 		fixtures.WithTransactionStatus(domain.StatusExpired),
 	)
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
 	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusCompleted, "ps-1").Return(false, nil)
 	refundRepo.EXPECT().Create(ctx, mock.MatchedBy(func(r *domain.RefundRequest) bool {
 		return r.Reason == "late_payment" && r.IdempotencyKey == "late-payment:txn-1"
 	})).Return(nil)
 	txnRepo.EXPECT().UpdateRefundStatus(ctx, "txn-1", "pending").Return(nil)
 
-	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.completed", "book-1", "ps-1", "COMPLETED"))
+	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.completed", "11111111-1111-4111-8111-111111111111", "ps-1", "COMPLETED"))
 	require.NoError(t, err)
 }
 
@@ -332,15 +335,15 @@ func TestHandleSessionWebhook_CompletedDuplicate(t *testing.T) {
 	ctx := context.Background()
 	txn := fixtures.NewTestTransaction(
 		fixtures.WithTransactionID("txn-1"),
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionProviderRef("ps-1"),
 		fixtures.WithTransactionStatus(domain.StatusCompleted),
 	)
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
 	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusCompleted, "ps-1").Return(false, nil)
 
-	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.completed", "book-1", "ps-1", "COMPLETED"))
+	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.completed", "11111111-1111-4111-8111-111111111111", "ps-1", "COMPLETED"))
 	require.NoError(t, err)
 }
 
@@ -351,15 +354,15 @@ func TestHandleSessionWebhook_Expired(t *testing.T) {
 	ctx := context.Background()
 	txn := fixtures.NewTestTransaction(
 		fixtures.WithTransactionID("txn-1"),
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionProviderRef("ps-1"),
 		fixtures.WithTransactionStatus(domain.StatusPending),
 	)
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
 	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusExpired, "ps-1").Return(true, nil)
 
-	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.expired", "book-1", "ps-1", "EXPIRED"))
+	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.expired", "11111111-1111-4111-8111-111111111111", "ps-1", "EXPIRED"))
 	require.NoError(t, err)
 }
 
@@ -373,12 +376,12 @@ func TestHandleSessionWebhook_RealXenditPayload(t *testing.T) {
 	ctx := context.Background()
 	txn := fixtures.NewTestTransaction(
 		fixtures.WithTransactionID("txn-1"),
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionProviderRef("ps-579c8d61f23fa4ca35e52da4"),
 		fixtures.WithTransactionStatus(domain.StatusPending),
 	)
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
 	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusCompleted, "ps-579c8d61f23fa4ca35e52da4").Return(true, nil)
 
 	payload := []byte(`{
@@ -397,7 +400,7 @@ func TestHandleSessionWebhook_RealXenditPayload(t *testing.T) {
 			"mode": "PAYMENT_LINK",
 			"payment_link_url": "https://checkout.xendit.co/latest/65c8b6916b68a555078489a5",
 			"payment_request_id": "pr-8363892-f4d9-421c-dhdy-jdh9e30380",
-			"reference_id": "book-1",
+			"reference_id": "11111111-1111-4111-8111-111111111111",
 			"session_type": "SAVE",
 			"status": "COMPLETED",
 			"updated": "2020-04-20T16:25:52Z"
@@ -418,14 +421,14 @@ func TestHandleSessionWebhook_SessionMismatch_Ignored(t *testing.T) {
 	ctx := context.Background()
 	txn := fixtures.NewTestTransaction(
 		fixtures.WithTransactionID("txn-1"),
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionProviderRef("ps-abc"),
 		fixtures.WithTransactionStatus(domain.StatusPending),
 	)
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "book-1").Return(txn, nil)
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
 
-	payload := []byte(`{"event":"payment_session.completed","data":{"payment_session_id":"ps-some-other-session","reference_id":"book-1","status":"COMPLETED"}}`)
+	payload := []byte(`{"event":"payment_session.completed","data":{"payment_session_id":"ps-some-other-session","reference_id":"11111111-1111-4111-8111-111111111111","status":"COMPLETED"}}`)
 	err := svc.HandleSessionWebhook(ctx, payload)
 	require.NoError(t, err)
 }
@@ -436,9 +439,23 @@ func TestHandleSessionWebhook_TxnMissing_ReturnsError(t *testing.T) {
 		mocks.NewMockEventConsumer(t))
 	ctx := context.Background()
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "ghost-booking").Return(nil, pgx.ErrNoRows)
-	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.completed", "ghost-booking", "ps-1", "COMPLETED"))
+	txnRepo.EXPECT().FindByBookingID(ctx, "22222222-2222-4222-8222-222222222222").Return(nil, pgx.ErrNoRows)
+	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.completed", "22222222-2222-4222-8222-222222222222", "ps-1", "COMPLETED"))
 	assert.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+// TestHandleSessionWebhook_NonBookingReference_Acknowledged covers gateway
+// test payloads (and sessions created outside our flow): their reference_id is
+// not one of our booking UUIDs, which Postgres would reject with a syntax
+// error rather than ErrNoRows. They are acknowledged — no repo call, no error.
+func TestHandleSessionWebhook_NonBookingReference_Acknowledged(t *testing.T) {
+	txnRepo := mocks.NewMockTransactionRepository(t)
+	svc := newPaymentServiceDefaults(t, txnRepo, mocks.NewMockPaymentProcessor(t),
+		mocks.NewMockEventConsumer(t))
+	ctx := context.Background()
+
+	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.expired", "test_session", "ps-1", "EXPIRED"))
+	require.NoError(t, err)
 }
 
 func TestHandleSessionWebhook_MissingReference(t *testing.T) {
@@ -460,7 +477,7 @@ func TestProcessExpired_WithSessionRef(t *testing.T) {
 	past := time.Now().Add(-1 * time.Minute)
 	txn := fixtures.NewTestTransaction(
 		fixtures.WithTransactionID("txn-1"),
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionProviderRef("ps-1"),
 		fixtures.WithTransactionStatus(domain.StatusPending),
 		fixtures.WithTransactionExpiresAt(past),
@@ -482,7 +499,7 @@ func TestProcessExpired_WithoutSessionRef_SkipsGateway(t *testing.T) {
 	past := time.Now().Add(-1 * time.Minute)
 	txn := fixtures.NewTestTransaction(
 		fixtures.WithTransactionID("txn-1"),
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionStatus(domain.StatusPending),
 		fixtures.WithTransactionExpiresAt(past),
 	)
@@ -505,7 +522,7 @@ func TestHandleEventCancelled_RefundsCompletedLeavesPending(t *testing.T) {
 	ctx := context.Background()
 	completedTxn := fixtures.NewTestTransaction(
 		fixtures.WithTransactionID("txn-completed"),
-		fixtures.WithTransactionBookingID("book-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
 		fixtures.WithTransactionStatus(domain.StatusCompleted),
 	)
 	pendingTxn := fixtures.NewTestTransaction(

@@ -23,8 +23,11 @@ package integration
 
 import (
 	"context"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -35,6 +38,7 @@ import (
 	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
 	"github.com/unedtamps/ticketbus/pkg/log"
 	"github.com/unedtamps/ticketbus/pkg/outbox"
+	"github.com/unedtamps/ticketbus/pkg/s3"
 	"github.com/unedtamps/ticketbus/pkg/testinfra"
 	bookingpkg "github.com/unedtamps/ticketbus/service/ticketing/internal/application/booking"
 	eventpkg "github.com/unedtamps/ticketbus/service/ticketing/internal/application/event"
@@ -58,6 +62,7 @@ type TestEnv struct {
 	eventSvc  *eventpkg.EventService
 	bookSvc   *bookingpkg.BookingService
 	fakePay   *fakePaymentClient
+	fakeS3    *fakeS3Store
 	infra     *testinfra.Infra
 	apiURL    string
 	srv       *httptest.Server
@@ -99,10 +104,25 @@ func startContainers() *TestEnv {
 		bookingRepo, seatCounter, consumer, eventStatusRepo,
 		ticketingOutbox, logger, 3600,
 	)
-	eventSvc := eventpkg.NewEventService(eventRepo, seatReader, seatCounter, ticketingOutbox)
+	// Event photos go to a fake S3 endpoint: pkg/s3 (minio-go, signing
+	// included) is exercised for real, but nothing leaves the process.
+	fakeS3 := newFakeS3()
+	s3Client, err := s3.New(s3.Config{
+		Endpoint:  fakeS3.endpoint,
+		Secure:    false,
+		Region:    "auto",
+		AccessKey: "test",
+		SecretKey: "test",
+		Bucket:    "test-bucket",
+		PublicURL: fakeS3.url + "/test-bucket",
+	})
+	if err != nil {
+		panic("fake s3 client: " + err.Error())
+	}
+	eventSvc := eventpkg.NewEventService(eventRepo, seatReader, seatCounter, ticketingOutbox, s3Client)
 
 	router := chi.NewRouter()
-	ticketinghandler.NewEventHandler(eventSvc).Routes(router)
+	ticketinghandler.NewEventHandler(eventSvc, s3Client).Routes(router)
 	ticketinghandler.NewBookingHandler(bookSvc).Routes(router)
 	srv := httptest.NewServer(router)
 
@@ -127,12 +147,57 @@ func startContainers() *TestEnv {
 		eventSvc:  eventSvc,
 		bookSvc:   bookSvc,
 		fakePay:   fakePay,
+		fakeS3:    fakeS3,
 		infra:     infra,
 		apiURL:    srv.URL,
 		srv:       srv,
 		cancel:    cancelBg,
 		infraPool: infra.Pool,
 	}
+}
+
+// fakeS3Store stands in for any S3-compatible store: it accepts every PUT and
+// keeps the bytes in memory, so pkg/s3 (minio-go, SigV4 signing included) is
+// exercised for real without touching Cloudflare.
+type fakeS3Store struct {
+	url      string
+	endpoint string
+	srv      *httptest.Server
+	mu       sync.Mutex
+	objects  map[string][]byte
+}
+
+func (f *fakeS3Store) get(key string) []byte {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.objects[key]
+}
+
+func newFakeS3() *fakeS3Store {
+	store := &fakeS3Store{objects: map[string][]byte{}}
+	store.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// PutObject targets /{bucket}/{key}; any other call (e.g. bucket
+		// location) is answered with an empty success so the client proceeds.
+		if r.Method != http.MethodPut {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		key := strings.TrimPrefix(r.URL.Path, "/")
+		store.mu.Lock()
+		store.objects[key] = body
+		store.mu.Unlock()
+		w.Header().Set("ETag", `"fake"`)
+		w.WriteHeader(http.StatusOK)
+	}))
+	endpoint := strings.TrimPrefix(store.srv.URL, "http://")
+	store.url = store.srv.URL
+	store.endpoint = endpoint
+	return store
 }
 
 func getTestEnv() *TestEnv {

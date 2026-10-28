@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/unedtamps/ticketbus/pkg/dto"
@@ -43,6 +44,16 @@ type EventRepository interface {
 	// SetPayoutResult applies the gateway result to one attempt while it is
 	// still pending. Returns false for duplicate deliveries.
 	SetPayoutResult(ctx context.Context, eventID string, attempt int, status dto.PayoutStatus, amountRupiah int64, providerRef, reason string) (bool, error)
+
+	// SetEventImage records the object key of the event's photo.
+	SetEventImage(ctx context.Context, eventID, imageKey string) error
+}
+
+// ImageStorage persists event images in object storage and resolves their
+// public URLs.
+type ImageStorage interface {
+	Upload(ctx context.Context, key string, r io.Reader, size int64, contentType string) error
+	PublicURL(key string) string
 }
 
 // SeatReader reads live seat availability from Redis.

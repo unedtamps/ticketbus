@@ -2,6 +2,8 @@ package event
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,12 +12,23 @@ import (
 	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
+// MaxImageBytes bounds one event photo.
+const MaxImageBytes = 5 << 20
+
+// allowedImageTypes maps an accepted image content type to its file extension.
+var allowedImageTypes = map[string]string{
+	"image/jpeg": "jpg",
+	"image/png":  "png",
+	"image/webp": "webp",
+}
+
 // EventService orchestrates event management operations.
 type EventService struct {
 	repo            domain.EventRepository
 	seatReader      domain.SeatReader
 	seatInitializer domain.SeatInitializer
 	outbox          outbox.StoreInterface
+	images          domain.ImageStorage
 }
 
 // NewEventService creates a new EventService.
@@ -24,12 +37,14 @@ func NewEventService(
 	seatReader domain.SeatReader,
 	seatInitializer domain.SeatInitializer,
 	ob outbox.StoreInterface,
+	images domain.ImageStorage,
 ) *EventService {
 	return &EventService{
 		repo:            repo,
 		seatReader:      seatReader,
 		seatInitializer: seatInitializer,
 		outbox:          ob,
+		images:          images,
 	}
 }
 
@@ -112,4 +127,43 @@ func (s *EventService) UpdateEvent(
 		return nil, err
 	}
 	return event, nil
+}
+
+// UploadEventPhoto stores an event's photo in object storage and records its
+// key on the event. Photos are cosmetic, so any non-cancelled event accepts
+// one — unlike field edits, which are limited to draft/pending. The content
+// type has already been sniffed by the handler; the size limit is re-checked
+// here so nothing bypasses it.
+func (s *EventService) UploadEventPhoto(
+	ctx context.Context,
+	eventID, organizerID, contentType string,
+	r io.Reader,
+	size int64,
+) (string, error) {
+	ext, ok := allowedImageTypes[contentType]
+	if !ok {
+		return "", domain.ErrImageUnsupported
+	}
+	if size <= 0 || size > MaxImageBytes {
+		return "", domain.ErrImageTooLarge
+	}
+	event, err := s.repo.FindEventByID(ctx, eventID)
+	if err != nil {
+		return "", domain.ErrEventNotFound
+	}
+	if event.OrganizerID != organizerID {
+		return "", domain.ErrNotEventOwner
+	}
+	if event.Status == sdomain.EventStatusCancelled {
+		return "", domain.ErrEventNotEditable
+	}
+
+	key := fmt.Sprintf("events/%s/%s.%s", eventID, uuid.NewString(), ext)
+	if err := s.images.Upload(ctx, key, r, size, contentType); err != nil {
+		return "", err
+	}
+	if err := s.repo.SetEventImage(ctx, eventID, key); err != nil {
+		return "", err
+	}
+	return s.images.PublicURL(key), nil
 }

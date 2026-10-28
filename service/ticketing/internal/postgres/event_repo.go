@@ -65,9 +65,9 @@ func (r *EventRepo) FindEventByID(ctx context.Context, id string) (*domain.Event
 	var e domain.Event
 	var status string
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, organizer_id, title, description, venue_name, venue_address, venue_capacity, start_at, end_at, status, reviewed_by, reviewed_at, created_at, updated_at
+		SELECT id, organizer_id, title, description, image_key, venue_name, venue_address, venue_capacity, start_at, end_at, status, reviewed_by, reviewed_at, created_at, updated_at
 		FROM events WHERE id=$1`, id).
-		Scan(&e.ID, &e.OrganizerID, &e.Title, &e.Description, &e.VenueName, &e.VenueAddress, &e.VenueCapacity, &e.StartAt, &e.EndAt, &status, &e.ReviewedBy, &e.ReviewedAt, &e.CreatedAt, &e.UpdatedAt)
+		Scan(&e.ID, &e.OrganizerID, &e.Title, &e.Description, &e.ImageKey, &e.VenueName, &e.VenueAddress, &e.VenueCapacity, &e.StartAt, &e.EndAt, &status, &e.ReviewedBy, &e.ReviewedAt, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (r *EventRepo) ListPublished(
 	// Only live events are listed: a not-yet-started event cannot be booked
 	// (no presale) and an ended event is over.
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, organizer_id, title, description, venue_name, venue_address, venue_capacity, start_at, end_at, status, created_at, updated_at
+		SELECT id, organizer_id, title, description, image_key, venue_name, venue_address, venue_capacity, start_at, end_at, status, created_at, updated_at
 		FROM events
 		WHERE status='published' AND start_at <= NOW() AND NOW() < end_at
 		ORDER BY start_at ASC LIMIT $1 OFFSET $2`, limit, offset)
@@ -107,6 +107,7 @@ func (r *EventRepo) ListPublished(
 			&e.OrganizerID,
 			&e.Title,
 			&e.Description,
+			&e.ImageKey,
 			&e.VenueName,
 			&e.VenueAddress,
 			&e.VenueCapacity,
@@ -134,7 +135,7 @@ func (r *EventRepo) ListByOrganizer(
 	// attempt paid out, otherwise the latest attempt's status, and the amount
 	// paid out so far.
 	rows, err := r.pool.Query(ctx, `
-		SELECT e.id, e.organizer_id, e.title, e.description, e.venue_name, e.venue_address,
+		SELECT e.id, e.organizer_id, e.title, e.description, e.image_key, e.venue_name, e.venue_address,
 		       e.venue_capacity, e.start_at, e.end_at, e.status, e.created_at, e.updated_at,
 		       COALESCE(p.status, 'none'), COALESCE(p.amount, 0),
 		       p.requested_at, p.completed_at
@@ -168,6 +169,7 @@ func (r *EventRepo) ListByOrganizer(
 			&e.OrganizerID,
 			&e.Title,
 			&e.Description,
+			&e.ImageKey,
 			&e.VenueName,
 			&e.VenueAddress,
 			&e.VenueCapacity,
@@ -199,7 +201,7 @@ func (r *EventRepo) ListPending(
 	r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM events WHERE status='pending'`).Scan(&total)
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, organizer_id, title, description, venue_name, venue_address, venue_capacity, start_at, end_at, status, created_at, updated_at
+		SELECT id, organizer_id, title, description, image_key, venue_name, venue_address, venue_capacity, start_at, end_at, status, created_at, updated_at
 		FROM events WHERE status='pending' ORDER BY created_at ASC LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
 		return nil, 0, err
@@ -214,6 +216,7 @@ func (r *EventRepo) ListPending(
 			&e.OrganizerID,
 			&e.Title,
 			&e.Description,
+			&e.ImageKey,
 			&e.VenueName,
 			&e.VenueAddress,
 			&e.VenueCapacity,
@@ -242,7 +245,7 @@ func (r *EventRepo) FindAll(
 		Scan(&total)
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, organizer_id, title, description, venue_name, venue_address, venue_capacity, start_at, end_at, status, created_at, updated_at
+		SELECT id, organizer_id, title, description, image_key, venue_name, venue_address, venue_capacity, start_at, end_at, status, created_at, updated_at
 		FROM events WHERE ($1 = '' OR status = $1) ORDER BY created_at DESC LIMIT $2 OFFSET $3`, status, limit, offset)
 	if err != nil {
 		return nil, 0, err
@@ -257,6 +260,7 @@ func (r *EventRepo) FindAll(
 			&e.OrganizerID,
 			&e.Title,
 			&e.Description,
+			&e.ImageKey,
 			&e.VenueName,
 			&e.VenueAddress,
 			&e.VenueCapacity,
@@ -272,6 +276,15 @@ func (r *EventRepo) FindAll(
 		events = append(events, e)
 	}
 	return events, total, nil
+}
+
+// SetEventImage records the object key of the event's photo.
+func (r *EventRepo) SetEventImage(ctx context.Context, eventID, imageKey string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE events SET image_key=$2, updated_at=NOW() WHERE id=$1`,
+		eventID, imageKey,
+	)
+	return err
 }
 
 // CreateTicketTypes inserts multiple ticket types.

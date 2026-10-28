@@ -28,6 +28,17 @@ type Config struct {
 	// RestDispatchPollMs is how often the REST dispatcher wakes to look for
 	// undelivered payment.initiate outbox rows. Defaults to 200ms.
 	RestDispatchPollMs int `env:"REST_DISPATCH_POLL_MS" envDefault:"200"`
+
+	// Object storage (S3-compatible; Cloudflare R2 in production). Event
+	// photos are uploaded server-side and served through the bucket's public
+	// base URL (R2.dev subdomain or a custom domain).
+	S3Endpoint  string `env:"S3_ENDPOINT,required,notEmpty"`
+	S3Secure    bool   `env:"S3_SECURE" envDefault:"true"`
+	S3Region    string `env:"S3_REGION" envDefault:"auto"`
+	S3AccessKey string `env:"S3_ACCESS_KEY_ID,required,notEmpty"`
+	S3SecretKey string `env:"S3_SECRET_ACCESS_KEY,required,notEmpty"`
+	S3Bucket    string `env:"S3_BUCKET_NAME,required,notEmpty"`
+	S3PublicURL string `env:"S3_PUBLIC_URL,required,notEmpty"`
 }
 
 // Load reads configuration from environment variables.

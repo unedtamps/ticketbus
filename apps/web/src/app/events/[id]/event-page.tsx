@@ -129,6 +129,14 @@ export default function EventPage() {
     <div className="max-w-2xl mx-auto">
       {/* Hero */}
       <div className="card-stub mb-6">
+        {event.event.image_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={event.event.image_url}
+            alt={event.event.title}
+            className="w-full h-48 object-cover rounded-md mb-4"
+          />
+        ) : null}
         <span
           className={`badge mb-3 ${event.event.status === "published" ? "badge-green" : "badge-yellow"}`}
         >

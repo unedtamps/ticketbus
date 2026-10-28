@@ -25,6 +25,7 @@ import (
 	sharedkafka "github.com/unedtamps/ticketbus/pkg/kafka"
 	"github.com/unedtamps/ticketbus/pkg/log"
 	"github.com/unedtamps/ticketbus/pkg/outbox"
+	"github.com/unedtamps/ticketbus/pkg/s3"
 	"github.com/unedtamps/ticketbus/pkg/telemetry"
 	"github.com/unedtamps/ticketbus/service/ticketing/internal/config"
 )
@@ -66,6 +67,21 @@ func main() {
 	eventStatusRepo := eventpostgres.NewEventStatusRepo(pool)
 	seatCounter := eventpostgres.NewSeatCounter(pool)
 	seatReader := eventpostgres.NewSeatReader(pool)
+	// Event photos live in S3-compatible object storage (Cloudflare R2 in
+	// production); the client is offline until the first upload.
+	images, err := s3.New(s3.Config{
+		Endpoint:  cfg.S3Endpoint,
+		Secure:    cfg.S3Secure,
+		Region:    cfg.S3Region,
+		AccessKey: cfg.S3AccessKey,
+		SecretKey: cfg.S3SecretKey,
+		Bucket:    cfg.S3Bucket,
+		PublicURL: cfg.S3PublicURL,
+	})
+	if err != nil {
+		logger.Error("failed to create s3 client", "error", err)
+		os.Exit(1)
+	}
 	// The payment client is used only by the outbox REST dispatcher, which
 	// runs in the background and creates the payment transaction for each
 	// reservation after it commits. The HTTP reserve path never calls payment.
@@ -116,6 +132,7 @@ func main() {
 		seatReader,
 		seatCounter,
 		outboxStore,
+		images,
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -130,7 +147,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	eventHandler := eventhandler.NewEventHandler(eventSvc)
+	eventHandler := eventhandler.NewEventHandler(eventSvc, images)
 	bookingHandler := eventhandler.NewBookingHandler(bookingSvc)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)

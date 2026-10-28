@@ -33,4 +33,7 @@ var (
 	ErrEventEnded          = errors.New("event has already ended")
 	ErrPriceMismatch       = errors.New("unit_price_rupiah does not match ticket type price")
 	ErrPaymentUnavailable  = errors.New("payment service unavailable")
+
+	ErrImageUnsupported = errors.New("image must be jpeg, png, or webp")
+	ErrImageTooLarge    = errors.New("image exceeds the 5 MB limit")
 )

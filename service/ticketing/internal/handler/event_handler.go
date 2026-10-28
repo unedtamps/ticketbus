@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -18,12 +19,22 @@ import (
 // EventHandler handles HTTP requests for the event service.
 type EventHandler struct {
 	svc      *event.EventService
+	images   domain.ImageStorage
 	validate *validator.Validate
 }
 
 // NewEventHandler creates a new EventHandler.
-func NewEventHandler(svc *event.EventService) *EventHandler {
-	return &EventHandler{svc: svc, validate: validator.New()}
+func NewEventHandler(svc *event.EventService, images domain.ImageStorage) *EventHandler {
+	return &EventHandler{svc: svc, images: images, validate: validator.New()}
+}
+
+// imageURL resolves an event's photo URL; events without a photo get an empty
+// string so the JSON field is omitted.
+func (h *EventHandler) imageURL(e *domain.Event) string {
+	if e.ImageKey == "" {
+		return ""
+	}
+	return h.images.PublicURL(e.ImageKey)
 }
 
 // CreateEvent handles POST /events.
@@ -78,6 +89,7 @@ func (h *EventHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		OrganizerID:   event.OrganizerID,
 		Title:         event.Title,
 		Description:   event.Description,
+		ImageURL:      h.imageURL(event),
 		VenueName:     event.VenueName,
 		VenueAddress:  event.VenueAddress,
 		VenueCapacity: event.VenueCapacity,
@@ -135,6 +147,7 @@ func (h *EventHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 		VenueCapacity: event.VenueCapacity,
 		Title:         event.Title,
 		Description:   event.Description,
+		ImageURL:      h.imageURL(event),
 		StartAt:       event.StartAt,
 		EndAt:         event.EndAt,
 		Status:        event.Status,
@@ -164,6 +177,7 @@ func (h *EventHandler) ApproveEvent(w http.ResponseWriter, r *http.Request) {
 		VenueCapacity: event.VenueCapacity,
 		Title:         event.Title,
 		Description:   event.Description,
+		ImageURL:      h.imageURL(event),
 		StartAt:       event.StartAt,
 		EndAt:         event.EndAt,
 		Status:        event.Status,
@@ -202,6 +216,7 @@ func (h *EventHandler) RejectEvent(w http.ResponseWriter, r *http.Request) {
 		VenueCapacity: event.VenueCapacity,
 		Title:         event.Title,
 		Description:   event.Description,
+		ImageURL:      h.imageURL(event),
 		StartAt:       event.StartAt,
 		EndAt:         event.EndAt,
 		Status:        event.Status,
@@ -231,6 +246,7 @@ func (h *EventHandler) CancelEvent(w http.ResponseWriter, r *http.Request) {
 		VenueCapacity: event.VenueCapacity,
 		Title:         event.Title,
 		Description:   event.Description,
+		ImageURL:      h.imageURL(event),
 		StartAt:       event.StartAt,
 		EndAt:         event.EndAt,
 		Status:        event.Status,
@@ -298,6 +314,7 @@ func (h *EventHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
 			VenueCapacity:    event.VenueCapacity,
 			Title:            event.Title,
 			Description:      event.Description,
+			ImageURL:         h.imageURL(event),
 			StartAt:          event.StartAt,
 			EndAt:            event.EndAt,
 			Status:           event.Status,
@@ -334,6 +351,7 @@ func (h *EventHandler) ListPublished(w http.ResponseWriter, r *http.Request) {
 				VenueCapacity:    e.VenueCapacity,
 				Title:            e.Title,
 				Description:      e.Description,
+				ImageURL:         h.imageURL(&e),
 				StartAt:          e.StartAt,
 				EndAt:            e.EndAt,
 				Status:           e.Status,
@@ -366,6 +384,7 @@ func (h *EventHandler) ListMyEvents(w http.ResponseWriter, r *http.Request) {
 					VenueCapacity: e.VenueCapacity,
 					Title:         e.Title,
 					Description:   e.Description,
+					ImageURL:      h.imageURL(&e),
 					StartAt:       e.StartAt,
 					EndAt:         e.EndAt,
 					Status:        e.Status,
@@ -407,6 +426,7 @@ func (h *EventHandler) ListPending(w http.ResponseWriter, r *http.Request) {
 				VenueCapacity:    e.VenueCapacity,
 				Title:            e.Title,
 				Description:      e.Description,
+				ImageURL:         h.imageURL(&e),
 				StartAt:          e.StartAt,
 				EndAt:            e.EndAt,
 				Status:           e.Status,
@@ -444,6 +464,7 @@ func (h *EventHandler) ListAll(w http.ResponseWriter, r *http.Request) {
 				VenueCapacity:    e.VenueCapacity,
 				Title:            e.Title,
 				Description:      e.Description,
+				ImageURL:         h.imageURL(&e),
 				StartAt:          e.StartAt,
 				EndAt:            e.EndAt,
 				Status:           e.Status,
@@ -453,6 +474,51 @@ func (h *EventHandler) ListAll(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 	sharedhttp.OK(w, EventListResponse{Events: resp, Total: total})
+}
+
+// UploadEventPhoto handles POST /api/events/{id}/photo (EO). Multipart field
+// "photo"; the whole body is capped at 6 MB (5 MB image + multipart overhead)
+// and the real content type is sniffed from the bytes, not from the filename.
+func (h *EventHandler) UploadEventPhoto(w http.ResponseWriter, r *http.Request) {
+	eventID := chi.URLParam(r, "id")
+	r.Body = http.MaxBytesReader(w, r.Body, 6<<20)
+	if err := r.ParseMultipartForm(5 << 20); err != nil {
+		sharedhttp.BadRequest(w, "invalid or oversized upload")
+		return
+	}
+	file, header, err := r.FormFile("photo")
+	if err != nil {
+		sharedhttp.BadRequest(w, "missing photo field")
+		return
+	}
+	defer file.Close()
+
+	sniff := make([]byte, 512)
+	n, _ := io.ReadFull(file, sniff)
+	contentType := http.DetectContentType(sniff[:n])
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		sharedhttp.InternalServerError(w, "failed to read upload")
+		return
+	}
+
+	userID := sharedhttp.UserIDFromContext(r.Context())
+	imageURL, err := h.svc.UploadEventPhoto(
+		r.Context(), eventID, userID, contentType, file, header.Size,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrEventNotFound), errors.Is(err, domain.ErrNotEventOwner):
+			sharedhttp.NotFound(w, err.Error())
+		case errors.Is(err, domain.ErrImageUnsupported),
+			errors.Is(err, domain.ErrImageTooLarge),
+			errors.Is(err, domain.ErrEventNotEditable):
+			sharedhttp.BadRequest(w, err.Error())
+		default:
+			sharedhttp.InternalServerError(w, "failed to upload photo")
+		}
+		return
+	}
+	sharedhttp.OK(w, map[string]string{"image_url": imageURL})
 }
 
 // GetPayoutAccount handles GET /api/payout-account (EO).

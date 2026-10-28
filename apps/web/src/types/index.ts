@@ -18,6 +18,7 @@ export interface EventItem {
   organizer_id: string;
   title: string;
   description: string;
+  image_url?: string;
   venue_name: string;
   venue_address: string;
   venue_capacity: number;

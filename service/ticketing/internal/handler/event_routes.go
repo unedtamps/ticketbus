@@ -33,6 +33,8 @@ func (h *EventHandler) Routes(r chi.Router) chi.Router {
 			Post("/api/events/{id}/payout", h.RequestPayout)
 		r.With(sharedhttp.RequireRole(sdomain.RoleEO)).
 			Get("/api/events/{id}/payout", h.GetPayout)
+		r.With(sharedhttp.RequireRole(sdomain.RoleEO)).
+			Post("/api/events/{id}/photo", h.UploadEventPhoto)
 	})
 
 	// Admin routes

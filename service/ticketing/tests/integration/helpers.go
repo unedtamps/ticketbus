@@ -159,12 +159,14 @@ type eventResp struct {
 	Title         string `json:"title"`
 	Status        string `json:"status"`
 	VenueCapacity int    `json:"venue_capacity"`
+	ImageURL      string `json:"image_url"`
 }
 
 type eventDetailResp struct {
 	Event struct {
-		ID    string `json:"id"`
-		Title string `json:"title"`
+		ID       string `json:"id"`
+		Title    string `json:"title"`
+		ImageURL string `json:"image_url"`
 	} `json:"event"`
 	TicketTypes []struct {
 		ID          string `json:"id"`

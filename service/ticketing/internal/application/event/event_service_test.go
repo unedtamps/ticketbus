@@ -25,7 +25,7 @@ func newEventService(
 	seatReader domain.SeatReader,
 ) *event.EventService {
 	t.Helper()
-	return event.NewEventService(repo, seatReader, nil, outbox.NoopStore{})
+	return event.NewEventService(repo, seatReader, nil, outbox.NoopStore{}, mocks.NewMockImageStorage(t))
 }
 
 func TestCreateEvent_Success(t *testing.T) {

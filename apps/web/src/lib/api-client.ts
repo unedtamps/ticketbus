@@ -93,9 +93,13 @@ class ApiClient {
   ): Promise<T> {
     const token = this.getToken();
     const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      ...(options.headers as Record<string, string>),
+      ...((options.headers as Record<string, string>) || {}),
     };
+    // FormData bodies set their own multipart boundary; forcing a
+    // Content-Type here would break them.
+    if (!(options.body instanceof FormData)) {
+      headers["Content-Type"] = "application/json";
+    }
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
@@ -132,6 +136,9 @@ class ApiClient {
       method: "POST",
       body: body ? JSON.stringify(body) : undefined,
     });
+  }
+  postForm<T>(path: string, form: FormData) {
+    return this.request<T>(path, { method: "POST", body: form });
   }
   put<T>(path: string, body?: unknown) {
     return this.request<T>(path, {

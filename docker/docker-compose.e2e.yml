@@ -214,6 +214,15 @@ services:
       PAYMENT_SERVICE_URL: http://payment:8083
       PAYMENT_TIMEOUT_SEC: "5"
       INTERNAL_API_KEY: e2e-internal-key
+      # Photo upload is not exercised in e2e; the S3 config is required, so
+      # placeholders boot the service (the client is offline until first use).
+      S3_ENDPOINT: unused
+      S3_SECURE: "false"
+      S3_REGION: auto
+      S3_ACCESS_KEY_ID: unused
+      S3_SECRET_ACCESS_KEY: unused
+      S3_BUCKET_NAME: unused
+      S3_PUBLIC_URL: http://unused/unused
     depends_on:
       migrate-ticketing:
         condition: service_completed_successfully

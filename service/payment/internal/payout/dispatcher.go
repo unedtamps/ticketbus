@@ -176,9 +176,17 @@ func (d *Dispatcher) deliver(ctx context.Context, row disbursementRow) error {
 			// The gateway rejected the credentials, not the payout. The job
 			// stays undelivered and is retried, so the money is not lost
 			// because of a missing API key scope.
-			d.logger.Error("payout gateway auth rejected — check the Xendit key has the MONEY-OUT permission",
-				"event_id", job.EventID, "payout_id", job.PayoutID,
-				"attempt", job.Attempt, "error", err)
+			d.logger.Error(
+				"payout gateway auth rejected — check the Xendit key has the MONEY-OUT permission",
+				"event_id",
+				job.EventID,
+				"payout_id",
+				job.PayoutID,
+				"attempt",
+				job.Attempt,
+				"error",
+				err,
+			)
 			return err
 
 		case domain.IsPermanentProcessorError(err):
@@ -214,7 +222,12 @@ func (d *Dispatcher) deliver(ctx context.Context, row disbursementRow) error {
 		return nil
 	}
 
-	if err := d.repo.AttachProviderRef(ctx, job.EventID, job.Attempt, result.ProviderRef); err != nil {
+	if err := d.repo.AttachProviderRef(
+		ctx,
+		job.EventID,
+		job.Attempt,
+		result.ProviderRef,
+	); err != nil {
 		return err
 	}
 	d.logger.Info("payout submitted, awaiting gateway confirmation",

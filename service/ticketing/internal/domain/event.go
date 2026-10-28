@@ -12,6 +12,7 @@ type Event struct {
 	OrganizerID   string          `json:"organizer_id"`
 	Title         string          `json:"title"`
 	Description   string          `json:"description"`
+	ImageKey      string          `json:"image_key,omitempty"`
 	VenueName     string          `json:"venue_name"`
 	VenueAddress  string          `json:"venue_address"`
 	VenueCapacity int             `json:"venue_capacity"`

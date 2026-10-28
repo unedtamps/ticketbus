@@ -14,6 +14,7 @@ import {
   CalendarPlus,
   Building2,
   History,
+  ImagePlus,
   Wallet,
   Shield,
   ShoppingBag,
@@ -72,6 +73,23 @@ export default function DashboardPage() {
   const [historyFor, setHistoryFor] = useState<string | null>(null);
   // A stable render-time clock for the "event has ended" check.
   const [nowMs] = useState(() => Date.now());
+  const [uploadingPhoto, setUploadingPhoto] = useState<string | null>(null);
+
+  const uploadPhoto = async (eventID: string, file?: File) => {
+    if (!file) return;
+    setUploadingPhoto(eventID);
+    try {
+      const fd = new FormData();
+      fd.append("photo", file);
+      await api.postForm(`/api/events/${eventID}/photo`, fd);
+      toast.success("Event photo uploaded.");
+      myEventsQuery.refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Photo upload failed.");
+    } finally {
+      setUploadingPhoto(null);
+    }
+  };
 
   // Customer queries
   const bookingsQuery = useQuery({
@@ -417,6 +435,29 @@ export default function DashboardPage() {
                     </Link>
                     <div className="flex items-center gap-2 ml-4 flex-shrink-0">
                       <span className={badgeClass(e.status)}>{e.status}</span>
+
+                      {e.status !== "cancelled" && (
+                        <Tooltip label={e.image_url ? "Replace the event photo" : "Upload an event photo (jpeg/png/webp, max 5 MB)"}>
+                          <label className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md text-[#4A4541] hover:bg-[#F5F2EE] transition-colors duration-150 cursor-pointer">
+                            <ImagePlus className="w-3.5 h-3.5" />
+                            {uploadingPhoto === e.id
+                              ? "Uploading…"
+                              : e.image_url
+                                ? "Replace Photo"
+                                : "Photo"}
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              className="hidden"
+                              disabled={uploadingPhoto === e.id}
+                              onChange={ev => {
+                                uploadPhoto(e.id, ev.target.files?.[0]);
+                                ev.target.value = "";
+                              }}
+                            />
+                          </label>
+                        </Tooltip>
+                      )}
 
                       {payoutStatus === "pending" && (
                         <span className="badge badge-yellow">payout pending</span>

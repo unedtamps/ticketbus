@@ -42,15 +42,15 @@ export const toast = {
 };
 
 const iconMap: Record<ToastType, React.ReactNode> = {
-  error: <AlertCircle className="w-4 h-4 text-[#D9381E]" />,
-  success: <CheckCircle2 className="w-4 h-4 text-[#2D7A46]" />,
-  info: <Info className="w-4 h-4 text-[#1A5DB8]" />,
+  error: <AlertCircle className="w-4 h-4 text-[#8A6400]" />,
+  success: <CheckCircle2 className="w-4 h-4 text-[#2450D9]" />,
+  info: <Info className="w-4 h-4 text-[#2450D9]" />,
 };
 
 const borderMap: Record<ToastType, string> = {
-  error: "border-l-[#D9381E]",
-  success: "border-l-[#2D7A46]",
-  info: "border-l-[#1A5DB8]",
+  error: "border-l-[#FFD43B]",
+  success: "border-l-[#2450D9]",
+  info: "border-l-[#2450D9]",
 };
 
 function ToastBar({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) => void }) {
@@ -63,14 +63,14 @@ function ToastBar({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) 
 
   return (
     <div
-      className={`pointer-events-auto flex items-start gap-3 w-full max-w-sm bg-white border border-[#E8E3DC] border-l-4 ${borderMap[toast.type]} rounded-md shadow-lg p-4 animate-toast-in`}
+      className={`pointer-events-auto flex items-start gap-3 w-full max-w-sm bg-white border border-[#E4EAF4] border-l-4 ${borderMap[toast.type]} rounded-xl shadow-lg p-4 animate-toast-in`}
       role="alert"
     >
       <div className="flex-shrink-0 mt-0.5">{iconMap[toast.type]}</div>
-      <p className="flex-1 text-sm text-[#4A4541] leading-snug">{toast.message}</p>
+      <p className="flex-1 text-sm text-[#3D4A66] leading-snug">{toast.message}</p>
       <button
         onClick={() => onDismiss(toast.id)}
-        className="flex-shrink-0 text-[#B0A89E] hover:text-[#1A1817] transition-colors"
+        className="flex-shrink-0 text-[#9AA6BC] hover:text-[#16224A] transition-colors"
       >
         <X className="w-4 h-4" />
       </button>

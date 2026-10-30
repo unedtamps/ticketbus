@@ -54,7 +54,7 @@ export function PayoutAccountDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-[#1A1817]/40 backdrop-blur-sm"
+        className="absolute inset-0 bg-[#16224A]/40 backdrop-blur-sm"
         onClick={onClose}
       />
       <form
@@ -63,8 +63,8 @@ export function PayoutAccountDialog({
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-[#D9381E]" />
-            <p className="font-[family-name:var(--font-display)] text-lg text-[#1A1817]">
+            <Building2 className="w-5 h-5 text-[#2450D9]" />
+            <p className="font-[family-name:var(--font-display)] text-lg text-[#16224A]">
               Payout Account
             </p>
           </div>
@@ -73,12 +73,12 @@ export function PayoutAccountDialog({
           </button>
         </div>
 
-        <p className="text-sm text-[#8B8580]">
+        <p className="text-sm text-[#6E7B96]">
           Earnings from your events are sent to this bank account.
         </p>
 
         <div>
-          <label className="block text-xs text-[#8B8580] mb-1">Bank</label>
+          <label className="block text-xs text-[#6E7B96] mb-1">Bank</label>
           <select
             value={bankCode}
             onChange={(e) => setBankCode(e.target.value)}
@@ -93,7 +93,7 @@ export function PayoutAccountDialog({
         </div>
 
         <div>
-          <label className="block text-xs text-[#8B8580] mb-1">
+          <label className="block text-xs text-[#6E7B96] mb-1">
             Account Number
           </label>
           <input
@@ -108,7 +108,7 @@ export function PayoutAccountDialog({
         </div>
 
         <div>
-          <label className="block text-xs text-[#8B8580] mb-1">
+          <label className="block text-xs text-[#6E7B96] mb-1">
             Account Holder Name
           </label>
           <input
@@ -120,7 +120,7 @@ export function PayoutAccountDialog({
           />
         </div>
 
-        {error && <p className="text-xs text-[#D9381E]">{error}</p>}
+        {error && <p className="text-xs text-[#8A6400]">{error}</p>}
 
         <div className="flex gap-3 justify-end pt-2">
           <button

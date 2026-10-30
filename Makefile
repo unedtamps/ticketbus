@@ -1,5 +1,6 @@
 .PHONY: help infra-up infra-down infra-logs infra-clean \
         dev dev-auth dev-ticketing dev-payment dev-web \
+        web web-build web-start \
         build build-auth build-ticketing build-payment clean \
         migrate migrate-auth-up migrate-ticketing-up migrate-payment-up \
         test lint format direnv-allow integration-test integration-test-race \
@@ -36,6 +37,7 @@ help:
 	@echo "  make dev-ticketing         Run ticketing service"
 	@echo "  make dev-payment           Run payment service"
 	@echo "  make dev-web               Run Next.js frontend"
+	@echo "  make web                   Build frontend and run with next start (production)"
 	@echo ""
 	@echo "  make build                 Build all binaries to bin/"
 	@echo "  make clean                 Remove bin/ directory"
@@ -87,7 +89,7 @@ dev:
 	@$(MAKE) dev-auth & \
 	$(MAKE) dev-ticketing & \
 	$(MAKE) dev-payment & \
-	$(MAKE) dev-web & \
+	$(MAKE) web-start & \
 	wait
 
 # Services
@@ -112,6 +114,17 @@ dev-payment:
 
 dev-web:
 	pnpm run dev
+
+# Next.js frontend in production mode (no `next dev`, no HMR).
+# web-build runs `next build`; web-start depends on it and serves the result
+# with `next start` on :3000. `make web` is shorthand for build + start.
+web-build:
+	pnpm run build
+
+web-start: web-build
+	pnpm run start
+
+web: web-start
 
 direnv-allow:
 	direnv allow service/auth/cmd/api

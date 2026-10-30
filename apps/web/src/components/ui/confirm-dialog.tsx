@@ -38,32 +38,32 @@ export function ConfirmDialog({
 
   const variantClasses =
     variant === "danger"
-      ? "bg-[#D9381E] text-white hover:bg-[#B82E1A]"
+      ? "bg-[#16224A] text-white hover:opacity-85"
       : variant === "warning"
-        ? "bg-[#B85C1A] text-white hover:bg-[#8F4713]"
-        : "bg-[#2D7A46] text-white hover:bg-[#1F5C30]";
+        ? "bg-[#FFD43B] text-[#16224A] hover:bg-[#F0C419]"
+        : "bg-[#2450D9] text-white hover:bg-[#1D3FAE]";
 
   const icon =
     variant === "danger" ? (
-      <AlertTriangle className="w-5 h-5 text-[#D9381E]" />
+      <AlertTriangle className="w-5 h-5 text-[#16224A]" />
     ) : variant === "warning" ? (
-      <AlertTriangle className="w-5 h-5 text-[#B85C1A]" />
+      <AlertTriangle className="w-5 h-5 text-[#8A6400]" />
     ) : (
-      <Check className="w-5 h-5 text-[#2D7A46]" />
+      <Check className="w-5 h-5 text-[#2450D9]" />
     );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#1A1817]/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-[#16224A]/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative card w-full max-w-sm space-y-4 shadow-xl">
         <div className="flex items-center gap-2">
           {icon}
-          <p className="font-[family-name:var(--font-display)] text-lg text-[#1A1817]">{title}</p>
+          <p className="font-[family-name:var(--font-display)] text-lg text-[#16224A]">{title}</p>
         </div>
-        {message ? <p className="text-sm text-[#8B8580]">{message}</p> : null}
+        {message ? <p className="text-sm text-[#6E7B96]">{message}</p> : null}
         {requireReason && (
           <div>
-            <label className="block text-xs text-[#8B8580] mb-1">{reasonLabel}</label>
+            <label className="block text-xs text-[#6E7B96] mb-1">{reasonLabel}</label>
             <textarea
               required
               value={reason}
@@ -81,7 +81,7 @@ export function ConfirmDialog({
           <button
             onClick={() => onConfirm(requireReason ? reason : undefined)}
             disabled={loading || !canSubmit}
-            className={`text-sm flex items-center gap-1.5 px-4 py-2 rounded-md font-medium transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${variantClasses}`}
+            className={`text-sm flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${variantClasses}`}
           >
             {variant === "danger" && <X className="w-4 h-4" />}
             {variant === "success" && <Check className="w-4 h-4" />}

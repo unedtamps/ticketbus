@@ -40,8 +40,8 @@ export default function ConfirmationPage() {
   if (bookingQuery.isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="card-stub text-center max-w-md mx-auto py-12 px-8 space-y-4">
-          <div className="skeleton h-16 w-16 rounded-xl mx-auto" />
+        <div className="card text-center max-w-md mx-auto py-12 px-8 space-y-4 w-full">
+          <div className="skeleton h-16 w-16 rounded-full mx-auto" />
           <div className="skeleton h-8 w-48 mx-auto" />
           <div className="skeleton h-24 w-full" />
         </div>
@@ -52,14 +52,14 @@ export default function ConfirmationPage() {
   if (bookingQuery.isError || !booking) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] fade-up">
-        <div className="card-stub text-center max-w-md mx-auto py-12 px-8 space-y-5">
-          <div className="w-14 h-14 rounded-xl bg-[#D4CEC4]/20 flex items-center justify-center mx-auto">
-            <Ticket className="w-7 h-7 text-[#B0A89E]" />
+        <div className="card text-center max-w-md mx-auto py-12 px-8 space-y-5">
+          <div className="w-14 h-14 rounded-full bg-[#EDF1F7] flex items-center justify-center mx-auto">
+            <Ticket className="w-7 h-7 text-[#9AA6BC]" />
           </div>
-          <p className="font-[family-name:var(--font-display)] text-2xl text-[#1A1817]">
+          <p className="font-[family-name:var(--font-display)] text-2xl text-[#16224A]">
             Booking Not Found
           </p>
-          <p className="text-[#8B8580] text-sm">
+          <p className="text-[#6E7B96] text-sm">
             We couldn&apos;t find this booking. It may have been removed or the link is incorrect.
           </p>
           <button onClick={() => router.push("/dashboard")} className="btn-accent">
@@ -72,45 +72,44 @@ export default function ConfirmationPage() {
 
   return (
     <div className="flex items-center justify-center min-h-[60vh] fade-up">
-      <div className="card-stub max-w-md mx-auto py-10 px-8 space-y-5">
+      <div className="card max-w-md mx-auto py-10 px-8 space-y-5 w-full">
         {/* Success checkmark */}
-        <div className="w-16 h-16 rounded-full bg-[#2D7A46]/10 flex items-center justify-center mx-auto">
-          <CheckCircle2 className="w-9 h-9 text-[#2D7A46]" />
+        <div className="w-16 h-16 rounded-full bg-[#E7EEFF] flex items-center justify-center mx-auto">
+          <CheckCircle2 className="w-9 h-9 text-[#2450D9]" />
         </div>
 
         {/* Heading */}
-        <div className="text-center space-y-1">
-          <p className="font-[family-name:var(--font-display)] text-2xl text-[#1A1817]">
+        <div className="text-center space-y-1.5">
+          <p className="font-[family-name:var(--font-display)] text-[28px] text-[#16224A]">
             Booking Confirmed
           </p>
           <div className="flex items-center justify-center gap-2">
-            <span className="text-xs text-[#8B8580] font-mono">
-              {booking.id.slice(0, 12)}&hellip;
+            <span className="badge badge-blue">
+              BOOKING {booking.id.slice(0, 12).toUpperCase()}
             </span>
             <span className={`badge ${
               booking.status === "confirmed" ? "badge-green" :
-              booking.status === "cancelled" ? "badge-red" : "badge-yellow"
+              booking.status === "cancelled" ? "badge-ink" : "badge-yellow"
             }`}>
-              {booking.status}
+              {booking.status === "confirmed" ? "LUNAS" : booking.status}
             </span>
           </div>
         </div>
 
-        {/* Dashed divider */}
-        <div className="border-t border-dashed border-[#E8E3DC]" />
+        <div className="border-t border-[#E4EAF4]" />
 
         {/* Ticket items */}
         {booking.items.length > 0 && (
           <div className="space-y-2">
-            <p className="text-xs font-medium text-[#B0A89E] uppercase tracking-wider">
+            <p className="text-xs font-extrabold text-[#6E7B96] uppercase tracking-wider">
               Tickets
             </p>
             {booking.items.map((item) => (
               <div key={item.id} className="flex justify-between text-sm">
-                <span className="text-[#4A4541]">
-                  <span className="text-[#8B8580]">{item.quantity} &times;</span> Ticket
+                <span className="text-[#3D4A66] font-semibold">
+                  <span className="text-[#6E7B96]">{item.quantity} &times;</span> Ticket
                 </span>
-                <span className="font-medium text-[#1A1817]">
+                <span className="font-bold text-[#16224A]">
                   {fmtIDR(item.unit_price_rupiah * item.quantity)}
                 </span>
               </div>
@@ -119,16 +118,16 @@ export default function ConfirmationPage() {
         )}
 
         {/* Total */}
-        <div className="border-t border-dashed border-[#E8E3DC] pt-3 flex justify-between items-center">
-          <span className="text-sm font-semibold text-[#1A1817]">Total</span>
-          <span className="font-[family-name:var(--font-display)] text-xl text-[#1A1817]">
+        <div className="border-t border-[#E4EAF4] pt-3 flex justify-between items-center">
+          <span className="text-sm font-bold text-[#6E7B96]">Total</span>
+          <span className="font-[family-name:var(--font-display)] text-2xl text-[#16224A]">
             {fmtIDR(booking.total_rupiah)}
           </span>
         </div>
 
         {/* Actions */}
         <div className="flex gap-3 pt-2">
-          <Link href="/" className="btn-ghost flex-1 text-center text-sm">
+          <Link href="/" className="btn-outline flex-1 text-center text-sm">
             Back to Events
           </Link>
           <Link href="/dashboard" className="btn-accent flex-1 text-center text-sm flex items-center justify-center gap-1.5">

@@ -20,10 +20,10 @@ function NavLink({ href, children, icon: Icon }: { href: string; children: React
   return (
     <Link
       href={href}
-      className={`flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-md transition-colors duration-150 ${
+      className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg transition-colors duration-150 ${
         isActive
-          ? "text-[#D9381E] bg-[#D9381E]/6"
-          : "text-[#4A4541] hover:text-[#1A1817] hover:bg-[#F5F0E8]"
+          ? "text-[#2450D9] bg-[#E7EEFF]"
+          : "text-[#3D4A66] hover:text-[#16224A] hover:bg-[#F6F9FC]"
       }`}
     >
       {Icon && <Icon className="w-4 h-4" />}
@@ -37,12 +37,13 @@ export function Header() {
   const authPending = !hydrated || loading;
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[#E8E3DC] bg-[#FEFBF6]/90 backdrop-blur-sm">
+    <header className="sticky top-0 z-50 border-b border-[#E4EAF4] bg-white/90 backdrop-blur-sm">
       <div className="container flex items-center justify-between h-14">
-        <Link href="/" className="flex items-center gap-2 group">
-          <span className="font-[family-name:var(--font-display)] text-xl text-[#D9381E] group-hover:text-[#B82E1A] transition-colors">
-            TicketBus
+        <Link href="/" className="flex items-center gap-1.5 group">
+          <span className="font-[family-name:var(--font-display)] text-xl text-[#16224A] transition-colors">
+            Ticketbus
           </span>
+          <span className="w-[7px] h-[7px] rounded-full bg-[#FFD43B]" aria-hidden />
         </Link>
 
         <nav className="flex items-center gap-1">
@@ -50,18 +51,18 @@ export function Header() {
 
           {authPending ? (
             <span
-              className="mx-1 h-7 w-32 rounded-md bg-[#F5F0E8] animate-pulse"
+              className="mx-1 h-7 w-32 rounded-lg bg-[#F6F9FC] animate-pulse"
               aria-hidden
             />
           ) : user ? (
             <>
               <NavLink href="/dashboard" icon={isAdmin ? Shield : LayoutDashboard}>Dashboard</NavLink>
               {isEO && <NavLink href="/events" icon={CalendarPlus}>Create</NavLink>}
-              <span className="w-px h-5 bg-[#E8E3DC] mx-1" />
-              <span className="text-xs text-[#8B8580] px-2 font-medium">{user.name}</span>
+              <span className="w-px h-5 bg-[#E4EAF4] mx-1" />
+              <span className="text-xs text-[#6E7B96] px-2 font-semibold">{user.name}</span>
               <button
                 onClick={logout}
-                className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-md text-[#8B8580] hover:text-[#D9381E] hover:bg-[#FFF5F5] transition-colors duration-150"
+                className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg text-[#6E7B96] hover:text-[#16224A] hover:bg-[#F6F9FC] transition-colors duration-150"
               >
                 <LogOut className="w-4 h-4" />
                 Logout
@@ -69,11 +70,11 @@ export function Header() {
             </>
           ) : (
             <>
-              <Link href="/login" className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-md text-[#4A4541] hover:text-[#1A1817] hover:bg-[#F5F0E8] transition-colors duration-150">
+              <Link href="/login" className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg text-[#3D4A66] hover:text-[#16224A] hover:bg-[#F6F9FC] transition-colors duration-150">
                 <LogIn className="w-4 h-4" />
                 Login
               </Link>
-              <Link href="/register" className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-md bg-[#D9381E] text-white hover:bg-[#B82E1A] transition-colors duration-150">
+              <Link href="/register" className="flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-lg bg-[#2450D9] text-white hover:bg-[#1D3FAE] transition-colors duration-150">
                 <UserPlus className="w-4 h-4" />
                 Register
               </Link>

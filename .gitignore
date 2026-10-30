@@ -63,3 +63,7 @@ volumes/
 jwt_private.pem
 jwt_public.pem
 .zcode/
+
+# Local design tooling (generated exports, disposable probes)
+/scripts/pen-export/
+/scripts/xendit-probe/

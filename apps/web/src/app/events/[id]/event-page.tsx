@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
+import { adminApi } from "@/lib/admin-api";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -11,18 +12,60 @@ import {
   Calendar,
   MapPin,
   Users,
-  Clock,
+  Timer,
   Ticket as TicketIcon,
   ArrowRight,
   ChevronLeft,
   Loader2,
   X,
+  Minus,
+  Plus,
+  Check,
+  ShieldCheck,
 } from "lucide-react";
 import { fmtIDR } from "@/lib/format";
 import { LocalTime } from "@/components/ui/local-time";
 import type { EventDetail, ReservationResponse } from "@/types";
 
 type Phase = "selection" | "summary";
+
+function Stepper({
+  value,
+  max,
+  disabled,
+  onChange,
+}: {
+  value: number;
+  max: number;
+  disabled?: boolean;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <button
+        type="button"
+        aria-label="Kurangi"
+        onClick={() => onChange(Math.max(0, value - 1))}
+        disabled={disabled || value <= 0}
+        className="w-7 h-7 rounded-full border border-[#E4EAF4] bg-white flex items-center justify-center text-[#6E7B96] hover:border-[#C9D4E8] disabled:opacity-40 transition-colors"
+      >
+        <Minus className="w-3.5 h-3.5" />
+      </button>
+      <span className="w-5 text-center text-sm font-bold text-[#16224A]">
+        {value}
+      </span>
+      <button
+        type="button"
+        aria-label="Tambah"
+        onClick={() => onChange(Math.min(max, value + 1))}
+        disabled={disabled || value >= max}
+        className="w-7 h-7 rounded-full bg-[#2450D9] text-white flex items-center justify-center hover:bg-[#1D3FAE] disabled:opacity-40 transition-colors"
+      >
+        <Plus className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
 
 export default function EventPage() {
   const { id } = useParams<{ id: string }>();
@@ -33,6 +76,8 @@ export default function EventPage() {
   const [phase, setPhase] = useState<Phase>("selection");
   const [confirming, setConfirming] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
   const [selectedTickets, setSelectedTickets] = useState<
     Record<string, number>
   >({});
@@ -103,10 +148,9 @@ export default function EventPage() {
   }
   if (eventQuery.isLoading) {
     return (
-      <div className="max-w-2xl mx-auto space-y-5">
+      <div className="max-w-5xl mx-auto space-y-5">
+        <div className="skeleton h-56 w-full" />
         <div className="skeleton h-10 w-3/4" />
-        <div className="skeleton h-5 w-1/2" />
-        <div className="skeleton h-40 w-full" />
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="skeleton h-20" />
@@ -119,280 +163,281 @@ export default function EventPage() {
   if (eventQuery.isError || !event) {
     return (
       <div className="card text-center py-16 max-w-md mx-auto">
-        <TicketIcon className="w-8 h-8 text-[#D4CEC4] mx-auto mb-3" />
-        <p className="text-[#8B8580] text-sm">Event not found</p>
+        <TicketIcon className="w-8 h-8 text-[#C9D4E8] mx-auto mb-3" />
+        <p className="text-[#6E7B96] text-sm">Event not found</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      {/* Hero */}
-      <div className="card-stub mb-6">
+    <div className="max-w-5xl mx-auto">
+      {/* Banner */}
+      <div className="relative h-[220px] md:h-[260px] w-full rounded-[20px] overflow-hidden bg-[#F0F5FF] mb-6">
         {event.event.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={event.event.image_url}
             alt={event.event.title}
-            className="w-full h-48 object-cover rounded-md mb-4"
+            className="absolute inset-0 w-full h-full object-cover"
           />
-        ) : null}
-        <span
-          className={`badge mb-3 ${event.event.status === "published" ? "badge-green" : "badge-yellow"}`}
-        >
+        ) : (
+          <span className="absolute inset-0 flex items-center justify-center font-[family-name:var(--font-display)] text-5xl text-[#C9D4E8]">
+            {event.event.title
+              .split(/\s+/)
+              .slice(0, 2)
+              .map((w) => w[0]?.toUpperCase())
+              .join("")}
+          </span>
+        )}
+        <span className="badge badge-green absolute top-3.5 right-3.5">
           {event.event.status}
         </span>
-        <h1 className="font-[family-name:var(--font-display)] text-2xl text-[#1A1817] mb-3">
-          {event.event.title}
-        </h1>
-        <p className="text-[#8B8580] text-sm mb-4">{event.event.description}</p>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div className="flex items-center gap-2 text-[#4A4541]">
-            <Calendar className="w-4 h-4 text-[#B0A89E]" />
-            <span><LocalTime iso={event.event.start_at} format="datetime" /></span>
-          </div>
-          <div className="flex items-center gap-2 text-[#4A4541]">
-            <Clock className="w-4 h-4 text-[#B0A89E]" />
-            <span>
-              <LocalTime iso={event.event.start_at} format="time" /> &mdash;{" "}
-              <LocalTime iso={event.event.end_at} format="time" />{" "}
-              <span className="text-[#B0A89E]">
-                (<LocalTime iso={event.event.start_at} format="zone" />)
-              </span>
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-[#4A4541]">
-            <MapPin className="w-4 h-4 text-[#B0A89E]" />
-            <span>
-              {event.event.venue_name}
-              {event.event.venue_address
-                ? `, ${event.event.venue_address}`
-                : ""}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-[#4A4541]">
-            <Users className="w-4 h-4 text-[#B0A89E]" />
-            <span>Capacity: {event.event.venue_capacity}</span>
-          </div>
-        </div>
-
-        {/* Ticket summary strip */}
-        <div className="border-t border-dashed border-[#E8E3DC] pt-4 mt-3">
-          <p className="text-xs text-[#B0A89E] mb-3 font-medium uppercase tracking-wider">
-            Tickets Available
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {event.ticket_types.map((tt) => {
-              const soldOut = tt.available === 0;
-              return (
-                <div
-                  key={tt.id}
-                  className={`rounded-md px-3 py-2 min-w-[100px] ${
-                    soldOut
-                      ? "bg-[#F5F2EC] opacity-60"
-                      : "bg-[#FEFBF6] border border-[#E8E3DC]"
-                  }`}
-                >
-                  <p className="text-xs font-semibold text-[#1A1817]">
-                    {tt.name}
-                  </p>
-                  <p className="text-xs text-[#D9381E] font-medium">
-                    {fmtIDR(tt.price_rupiah)}
-                  </p>
-                  <p className="text-[0.6rem] text-[#B0A89E]">
-                    {soldOut ? "Sold out" : `${tt.available} left`}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <span className="glass-chip absolute bottom-3.5 left-3.5">
+          <LocalTime iso={event.event.start_at} format="datetime" />
+        </span>
+        {event.event.venue_name ? (
+          <span className="glass-chip absolute bottom-3.5 left-auto right-3.5 max-w-[45%]">
+            <span className="truncate">{event.event.venue_name}</span>
+          </span>
+        ) : null}
       </div>
 
-      {(isEO || isAdmin) && (
-        <div className="card text-center py-6">
-          <p className="text-sm text-[#8B8580] mb-4">
-            Organizers cannot purchase tickets.
-          </p>
-          {isEO && event?.event.status === "published" && (
-            <button
-              onClick={() => setCancelling(true)}
-              className="flex items-center gap-1.5 mx-auto text-xs font-medium px-3 py-1.5 rounded-md text-[#D9381E] hover:bg-[#FFF5F5] transition-colors duration-150"
-            >
-              <X className="w-3.5 h-3.5" />
-              Cancel Event
-            </button>
+      <div className="grid lg:grid-cols-[1fr_380px] gap-8 items-start">
+        {/* Left: title, meta, description */}
+        <div>
+          <h1 className="font-[family-name:var(--font-display)] text-4xl text-[#16224A] leading-tight mb-4">
+            {event.event.title}
+          </h1>
+          <div className="flex flex-wrap gap-x-5 gap-y-2 mb-5">
+            <span className="flex items-center gap-2 text-sm font-semibold text-[#16224A]">
+              <Calendar className="w-4 h-4 text-[#2450D9]" />
+              <LocalTime iso={event.event.start_at} format="datetime" />
+            </span>
+            <span className="flex items-center gap-2 text-sm font-semibold text-[#16224A]">
+              <Timer className="w-4 h-4 text-[#2450D9]" />
+              <LocalTime iso={event.event.start_at} format="time" /> &mdash;{" "}
+              <LocalTime iso={event.event.end_at} format="time" />
+            </span>
+            <span className="flex items-center gap-2 text-sm font-semibold text-[#16224A]">
+              <MapPin className="w-4 h-4 text-[#2450D9]" />
+              {event.event.venue_name}
+            </span>
+            <span className="flex items-center gap-2 text-sm font-semibold text-[#16224A]">
+              <Users className="w-4 h-4 text-[#2450D9]" />
+              Capacity {event.event.venue_capacity}
+            </span>
+          </div>
+          {event.event.description ? (
+            <p className="text-[15px] leading-relaxed text-[#6E7B96] mb-6">
+              {event.event.description}
+            </p>
+          ) : null}
+
+          {(isEO || isAdmin) && (
+            <div className="card text-center py-6">
+              {isAdmin && event?.event.status === "pending" ? (
+                <>
+                  <p className="text-sm font-bold text-[#16224A] mb-1">
+                    Menunggu persetujuan
+                  </p>
+                  <p className="text-sm text-[#6E7B96] mb-4">
+                    Event ini belum tayang. Setujui untuk membuatnya publik.
+                  </p>
+                  <div className="flex gap-3 justify-center">
+                    <button
+                      onClick={() => setRejecting(true)}
+                      className="btn-outline text-sm"
+                    >
+                      <X className="w-4 h-4" /> Tolak
+                    </button>
+                    <button
+                      onClick={() => setApproving(true)}
+                      className="btn-approve text-sm"
+                    >
+                      <Check className="w-4 h-4" /> Setujui
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-[#6E7B96] mb-4">
+                    Organizers cannot purchase tickets.
+                  </p>
+                  {isEO && event?.event.status === "published" && (
+                    <button
+                      onClick={() => setCancelling(true)}
+                      className="btn-ghost text-xs font-bold text-[#16224A] mx-auto"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Cancel Event
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           )}
         </div>
-      )}
 
-      {/* Phase: Selection */}
-      {!isEO && !isAdmin && phase === "selection" && (
-        <>
-          <div className="card">
-            <h2 className="font-[family-name:var(--font-display)] text-lg text-[#1A1817] mb-4">
-              Tickets
+        {/* Right: booking panel */}
+        <div className="card p-5 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-[family-name:var(--font-display)] text-[22px] text-[#16224A]">
+              {phase === "selection" ? "Tiket" : "Order Summary"}
             </h2>
-            <div className="space-y-3">
-              {event.ticket_types.map((tt) => {
-                const soldCount = tt.quantity - tt.available;
-                const soldPercent =
-                  tt.quantity > 0
-                    ? Math.round((soldCount / tt.quantity) * 100)
-                    : 0;
-                const isLowStock = tt.available > 0 && tt.available < 5;
-                const isSoldOut = tt.available === 0;
-
-                return (
-                  <div
-                    key={tt.id}
-                    className="border border-dashed border-[#E8E3DC] rounded-md p-4 space-y-3"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-[#1A1817]">
-                          {tt.name}
-                        </p>
-                        <p className="font-[family-name:var(--font-display)] text-xl text-[#1A1817] mt-0.5">
-                          {fmtIDR(tt.price_rupiah)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {isLowStock && (
-                          <span className="badge badge-red text-[0.6rem]">
-                            Only {tt.available} left!
-                          </span>
-                        )}
-                        {isSoldOut && (
-                          <span className="badge badge-ink text-[0.6rem]">
-                            Sold out
-                          </span>
-                        )}
-                        <select
-                          value={selectedTickets[tt.id] || 0}
-                          onChange={(e) =>
-                            setSelectedTickets((p) => ({
-                              ...p,
-                              [tt.id]: parseInt(e.target.value) || 0,
-                            }))
-                          }
-                          disabled={isSoldOut}
-                          className="input-field w-auto text-sm"
-                        >
-                          {Array.from(
-                            {
-                              length:
-                                Math.min(tt.max_per_order, tt.available) + 1,
-                            },
-                            (_, i) => (
-                              <option key={i} value={i}>
-                                {i}
-                              </option>
-                            ),
-                          )}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Availability bar */}
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-[0.65rem] text-[#B0A89E]">
-                        <span>{soldPercent}% sold</span>
-                        <span>
-                          {tt.available} of {tt.quantity} left
-                        </span>
-                      </div>
-                      <div className="w-full h-1.5 rounded-full bg-[#F0EDE6] overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-[#D9381E] transition-all"
-                          style={{ width: `${soldPercent}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Max per order */}
-                    <p className="text-[0.65rem] text-[#B0A89E]">
-                      Max {tt.max_per_order} per order
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
+            <span className="badge badge-blue">On sale</span>
           </div>
-          {!reservationsOpen && (
-            <p className="text-center text-sm text-[#8B8580] mt-6">
-              Reservations for this event are closed.
-            </p>
-          )}
-          <button
-            onClick={() => setPhase("summary")}
-            disabled={!hasSelection || !hydrated || !user || !reservationsOpen}
-            className="btn-accent w-full mt-6 py-3 text-base"
-          >
-            {!reservationsOpen
-              ? "Reservations Closed"
-              : hydrated && user
-                ? "Review Order"
-                : "Login to Reserve"}
-          </button>
-        </>
-      )}
 
-      {/* Phase: Summary */}
-      {phase === "summary" && (
-        <>
-          <div className="card space-y-4">
-            <h2 className="font-[family-name:var(--font-display)] text-lg text-[#1A1817]">
-              Order Summary
-            </h2>
-            <div className="space-y-2">
-              {orderItems.map((item) => (
-                <div
-                  key={item.ticket_type_id}
-                  className="flex justify-between text-sm"
-                >
-                  <span className="text-[#4A4541]">
-                    {item.name}{" "}
-                    <span className="text-[#B0A89E]">
-                      {item.quantity} &times; {fmtIDR(item.unit_price_rupiah)}
-                    </span>
+          {phase === "selection" && (
+            <>
+              <div className="flex flex-col">
+                {event.ticket_types.map((tt, idx) => {
+                  const soldCount = tt.quantity - tt.available;
+                  const soldPercent =
+                    tt.quantity > 0
+                      ? Math.round((soldCount / tt.quantity) * 100)
+                      : 0;
+                  const isLowStock = tt.available > 0 && tt.available < 5;
+                  const isSoldOut = tt.available === 0;
+                  const max = Math.min(tt.max_per_order, tt.available);
+
+                  return (
+                    <div
+                      key={tt.id}
+                      className={`py-3.5 space-y-2.5 ${idx > 0 ? "border-t border-[#E4EAF4]" : ""}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold text-[#16224A]">
+                            {tt.name}
+                          </p>
+                          <p className="text-sm font-bold text-[#2450D9] mt-0.5">
+                            {fmtIDR(tt.price_rupiah)}
+                          </p>
+                        </div>
+                        {isSoldOut ? (
+                          <span className="badge badge-ink">Sold out</span>
+                        ) : (
+                          <Stepper
+                            value={selectedTickets[tt.id] || 0}
+                            max={max}
+                            onChange={(v) =>
+                              setSelectedTickets((p) => ({ ...p, [tt.id]: v }))
+                            }
+                          />
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[11px] text-[#6E7B96]">
+                          <span>
+                            {isLowStock
+                              ? `Only ${tt.available} left!`
+                              : `${soldPercent}% sold`}
+                          </span>
+                          <span>
+                            {tt.available} of {tt.quantity} available
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 rounded-full bg-[#EDF1F7] overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-[#2450D9] transition-all"
+                            style={{ width: `${soldPercent}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {orderItems.length > 0 && (
+                <div className="border-t border-[#E4EAF4] pt-3 flex justify-between items-center">
+                  <span className="text-sm font-semibold text-[#6E7B96]">
+                    Subtotal
                   </span>
-                  <span className="font-medium text-[#1A1817]">
-                    {fmtIDR(item.unit_price_rupiah * item.quantity)}
+                  <span className="font-bold text-[#16224A]">
+                    {fmtIDR(orderTotal)}
                   </span>
                 </div>
-              ))}
-            </div>
-            <div className="border-t border-dashed border-[#E8E3DC] pt-3 flex justify-between items-center">
-              <span className="font-semibold text-[#1A1817]">Total</span>
-              <span className="font-[family-name:var(--font-display)] text-xl text-[#1A1817]">
-                {fmtIDR(orderTotal)}
-              </span>
-            </div>
-          </div>
-          <div className="flex gap-3 mt-6">
-            <button
-              onClick={() => setPhase("selection")}
-              className="btn-outline flex-1"
-            >
-              <ChevronLeft className="w-4 h-4" /> Back
-            </button>
-            <button
-              onClick={() => setConfirming(true)}
-              disabled={reserveMutation.isPending || !reservationsOpen}
-              className="btn-accent flex-1"
-            >
-              {reserveMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin mx-auto" />
-              ) : (
-                <span className="flex items-center justify-center gap-2">
-                  Checkout <ArrowRight className="w-4 h-4" />
-                </span>
               )}
-            </button>
-          </div>
-        </>
-      )}
+
+              {!reservationsOpen && (
+                <p className="text-center text-sm text-[#6E7B96]">
+                  Reservations for this event are closed.
+                </p>
+              )}
+              <button
+                onClick={() => setPhase("summary")}
+                disabled={!hasSelection || !hydrated || !user || !reservationsOpen}
+                className="btn-accent w-full"
+              >
+                {!reservationsOpen
+                  ? "Reservations Closed"
+                  : hydrated && user
+                    ? "Review Order"
+                    : "Login to Reserve"}
+              </button>
+              <p className="flex items-center gap-1.5 text-xs font-bold text-[#2450D9]">
+                <Timer className="w-3.5 h-3.5" />
+                Kursi ditahan 10 menit setelah reserve
+              </p>
+              <p className="flex items-center gap-1.5 text-xs text-[#6E7B96] -mt-2">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Pembayaran aman via Xendit
+              </p>
+            </>
+          )}
+
+          {phase === "summary" && (
+            <>
+              <div className="flex flex-col gap-2.5">
+                {orderItems.map((item) => (
+                  <div
+                    key={item.ticket_type_id}
+                    className="flex justify-between text-sm"
+                  >
+                    <span className="text-[#3D4A66]">
+                      {item.name}{" "}
+                      <span className="text-[#9AA6BC]">
+                        {item.quantity} &times; {fmtIDR(item.unit_price_rupiah)}
+                      </span>
+                    </span>
+                    <span className="font-bold text-[#16224A]">
+                      {fmtIDR(item.unit_price_rupiah * item.quantity)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-[#E4EAF4] pt-3 flex justify-between items-center">
+                <span className="font-bold text-[#16224A]">Total</span>
+                <span className="font-[family-name:var(--font-display)] text-2xl text-[#16224A]">
+                  {fmtIDR(orderTotal)}
+                </span>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setPhase("selection")}
+                  className="btn-outline flex-1"
+                >
+                  <ChevronLeft className="w-4 h-4" /> Back
+                </button>
+                <button
+                  onClick={() => setConfirming(true)}
+                  disabled={reserveMutation.isPending || !reservationsOpen}
+                  className="btn-accent flex-1"
+                >
+                  {reserveMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                  ) : (
+                    <span className="flex items-center justify-center gap-2">
+                      Checkout <ArrowRight className="w-4 h-4" />
+                    </span>
+                  )}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
 
       <ConfirmDialog
         open={confirming}
@@ -406,6 +451,49 @@ export default function EventPage() {
           handleCheckout();
         }}
         onClose={() => setConfirming(false)}
+      />
+
+      <ConfirmDialog
+        open={approving}
+        title="Approve Event"
+        message={`Approve "${event?.event.title}" and make it public?`}
+        confirmLabel="Yes, Approve"
+        variant="success"
+        onConfirm={() => {
+          if (!event) return;
+          adminApi
+            .approveEvent(event.event.id)
+            .then(() => {
+              toast.success("Event approved");
+              queryClient.invalidateQueries({ queryKey: ["event", id] });
+              queryClient.invalidateQueries({ queryKey: ["adminEvents"] });
+            })
+            .catch((err: Error) => toast.error(err.message))
+            .finally(() => setApproving(false));
+        }}
+        onClose={() => setApproving(false)}
+      />
+
+      <ConfirmDialog
+        open={rejecting}
+        title="Reject Event"
+        message={`Reject "${event?.event.title}" and notify the organizer?`}
+        confirmLabel="Reject"
+        variant="danger"
+        requireReason
+        onConfirm={(reason) => {
+          if (!event) return;
+          adminApi
+            .rejectEvent(event.event.id, reason || "")
+            .then(() => {
+              toast.success("Event rejected");
+              queryClient.invalidateQueries({ queryKey: ["event", id] });
+              queryClient.invalidateQueries({ queryKey: ["adminEvents"] });
+            })
+            .catch((err: Error) => toast.error(err.message))
+            .finally(() => setRejecting(false));
+        }}
+        onClose={() => setRejecting(false)}
       />
 
       <ConfirmDialog

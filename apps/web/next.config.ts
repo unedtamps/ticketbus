@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["lucide-react"],
   },
+  allowedDevOrigins: [
+    "archived-characteristics-leg-completing.trycloudflare.com",
+  ],
 };
 
 export default nextConfig;

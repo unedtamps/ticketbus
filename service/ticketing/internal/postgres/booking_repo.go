@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -87,25 +88,60 @@ func insertBooking(ctx context.Context, tx pgx.Tx, b *domain.Booking) error {
 	return nil
 }
 
-// FindByID retrieves a booking by ID.
+// FindByID retrieves a booking by ID, with the event context and ticket names
+// the payment and confirmation screens need to name what was bought. Items come
+// from the same join, so a booking costs one query rather than one per item.
 func (r *BookingRepo) FindByID(ctx context.Context, id string) (*domain.Booking, error) {
-	var b domain.Booking
-	err := r.pool.QueryRow(ctx, `SELECT id, user_id, event_id, status, expires_at, created_at FROM bookings WHERE id=$1`, id).
-		Scan(&b.ID, &b.UserID, &b.EventID, &b.Status, &b.ExpiresAt, &b.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-
-	rows, err := r.pool.Query(ctx, `SELECT id, booking_id, ticket_type_id, quantity, total_price_rupiah FROM booking_items WHERE booking_id=$1`, id)
+	rows, err := r.pool.Query(ctx, `
+		SELECT b.id, b.user_id, b.event_id, b.status, b.expires_at, b.created_at,
+		       COALESCE(e.title, ''), COALESCE(e.start_at, 'epoch'::timestamptz),
+		       COALESCE(e.venue_name, ''),
+		       bi.id, bi.ticket_type_id, bi.quantity, bi.total_price_rupiah,
+		       COALESCE(tt.name, '')
+		FROM bookings b
+		LEFT JOIN events e ON e.id = b.event_id
+		LEFT JOIN booking_items bi ON bi.booking_id = b.id
+		LEFT JOIN ticket_types tt ON tt.id = bi.ticket_type_id
+		WHERE b.id = $1
+		ORDER BY bi.id`, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
+	var b *domain.Booking
 	for rows.Next() {
-		var item domain.BookingItem
-		if err := rows.Scan(&item.ID, &item.BookingID, &item.TicketTypeID, &item.Quantity, &item.TotalPriceRupiah); err != nil {
+		var (
+			row      domain.Booking
+			rowStart time.Time
+			itemID   *string
+			ticketID *string
+			quantity *int
+			price    *int
+			name     string
+		)
+		if err := rows.Scan(
+			&row.ID, &row.UserID, &row.EventID, &row.Status, &row.ExpiresAt, &row.CreatedAt,
+			&row.EventTitle, &rowStart, &row.EventVenue,
+			&itemID, &ticketID, &quantity, &price, &name,
+		); err != nil {
 			return nil, err
+		}
+		if b == nil {
+			row.EventStartAt = rowStart
+			b = &row
+		}
+		// A booking with no items still yields one row, with NULL item columns.
+		if itemID == nil || quantity == nil || price == nil {
+			continue
+		}
+		item := domain.BookingItem{
+			ID:               *itemID,
+			BookingID:        b.ID,
+			TicketTypeID:     deref(ticketID),
+			Quantity:         *quantity,
+			TotalPriceRupiah: *price,
+			TicketTypeName:   name,
 		}
 		if item.Quantity > 0 {
 			item.UnitPriceRupiah = item.TotalPriceRupiah / item.Quantity
@@ -113,49 +149,90 @@ func (r *BookingRepo) FindByID(ctx context.Context, id string) (*domain.Booking,
 		b.TotalRupiah += item.TotalPriceRupiah
 		b.Items = append(b.Items, item)
 	}
-	return &b, nil
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if b == nil {
+		return nil, pgx.ErrNoRows
+	}
+	return b, nil
 }
 
-// ListByUser returns bookings for a user.
+// ListByUser returns bookings for a user, newest first, with the event context
+// and ticket names the buyer's own list needs. Items come from one join rather
+// than a query per booking.
 func (r *BookingRepo) ListByUser(ctx context.Context, userID string) ([]domain.Booking, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, user_id, event_id, status, expires_at, created_at FROM bookings WHERE user_id=$1 ORDER BY created_at DESC`, userID)
+	rows, err := r.pool.Query(ctx, `
+		SELECT b.id, b.user_id, b.event_id, b.status, b.expires_at, b.created_at,
+		       COALESCE(e.title, ''), COALESCE(e.start_at, 'epoch'::timestamptz),
+		       COALESCE(e.venue_name, ''),
+		       bi.id, bi.ticket_type_id, bi.quantity, bi.total_price_rupiah,
+		       COALESCE(tt.name, '')
+		FROM bookings b
+		LEFT JOIN events e ON e.id = b.event_id
+		LEFT JOIN booking_items bi ON bi.booking_id = b.id
+		LEFT JOIN ticket_types tt ON tt.id = bi.ticket_type_id
+		WHERE b.user_id = $1
+		ORDER BY b.created_at DESC, bi.id`, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	var bookings []domain.Booking
+	// index of the booking the current row belongs to
+	seen := map[string]int{}
 	for rows.Next() {
-		var b domain.Booking
-		if err := rows.Scan(&b.ID, &b.UserID, &b.EventID, &b.Status, &b.ExpiresAt, &b.CreatedAt); err != nil {
+		var (
+			b            domain.Booking
+			startAt      time.Time
+			itemID       *string
+			ticketTypeID *string
+			quantity     *int
+			totalPrice   *int
+			ticketName   string
+		)
+		if err := rows.Scan(
+			&b.ID, &b.UserID, &b.EventID, &b.Status, &b.ExpiresAt, &b.CreatedAt,
+			&b.EventTitle, &startAt, &b.EventVenue,
+			&itemID, &ticketTypeID, &quantity, &totalPrice, &ticketName,
+		); err != nil {
 			return nil, err
 		}
-		bookings = append(bookings, b)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+		b.EventStartAt = startAt
 
-	for i := range bookings {
-		itemRows, err := r.pool.Query(ctx, `SELECT id, booking_id, ticket_type_id, quantity, total_price_rupiah FROM booking_items WHERE booking_id=$1`, bookings[i].ID)
-		if err != nil {
-			return nil, err
+		idx, ok := seen[b.ID]
+		if !ok {
+			idx = len(bookings)
+			seen[b.ID] = idx
+			bookings = append(bookings, b)
 		}
-		for itemRows.Next() {
-			var item domain.BookingItem
-			if err := itemRows.Scan(&item.ID, &item.BookingID, &item.TicketTypeID, &item.Quantity, &item.TotalPriceRupiah); err != nil {
-				itemRows.Close()
-				return nil, err
-			}
-			if item.Quantity > 0 {
-				item.UnitPriceRupiah = item.TotalPriceRupiah / item.Quantity
-			}
-			bookings[i].TotalRupiah += item.TotalPriceRupiah
-			bookings[i].Items = append(bookings[i].Items, item)
+		// A booking with no items still yields one row, with NULL item columns.
+		if itemID == nil || quantity == nil || totalPrice == nil {
+			continue
 		}
-		itemRows.Close()
+		item := domain.BookingItem{
+			ID:               *itemID,
+			BookingID:        b.ID,
+			TicketTypeID:     deref(ticketTypeID),
+			Quantity:         *quantity,
+			TotalPriceRupiah: *totalPrice,
+			TicketTypeName:   ticketName,
+		}
+		if item.Quantity > 0 {
+			item.UnitPriceRupiah = item.TotalPriceRupiah / item.Quantity
+		}
+		bookings[idx].TotalRupiah += item.TotalPriceRupiah
+		bookings[idx].Items = append(bookings[idx].Items, item)
 	}
-	return bookings, nil
+	return bookings, rows.Err()
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // UpdateStatusIfPending transitions a booking only if it is still pending.

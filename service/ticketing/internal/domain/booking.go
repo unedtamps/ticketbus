@@ -16,6 +16,13 @@ type Booking struct {
 	RefundStatus string        `json:"refund_status,omitempty"`
 	Items        []BookingItem `json:"items"`
 	CreatedAt    time.Time     `json:"created_at"`
+
+	// Denormalised event context, populated only by customer-facing list queries
+	// so a buyer's ticket list can name what was bought instead of showing a
+	// bare UUID.
+	EventTitle   string    `json:"event_title,omitempty"`
+	EventStartAt time.Time `json:"event_start_at,omitempty"`
+	EventVenue   string    `json:"event_venue,omitempty"`
 }
 
 // BookingItem is a line item within a booking.
@@ -26,6 +33,8 @@ type BookingItem struct {
 	Quantity         int    `json:"quantity"`
 	UnitPriceRupiah  int    `json:"unit_price_rupiah"`
 	TotalPriceRupiah int    `json:"total_price_rupiah"`
+	// TicketTypeName is joined in for customer-facing lists.
+	TicketTypeName string `json:"ticket_type_name,omitempty"`
 }
 
 // Reservation is a temporary hold in Redis.

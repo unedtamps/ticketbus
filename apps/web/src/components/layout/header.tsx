@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Ticket,
   LayoutDashboard,
@@ -35,9 +37,12 @@ function NavLink({ href, children, icon: Icon }: { href: string; children: React
 export function Header() {
   const { user, hydrated, loading, isAdmin, isEO, logout } = useAuth();
   const authPending = !hydrated || loading;
+  // Logging out drops the session and redirects, so it asks first.
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[#E4EAF4] bg-white/90 backdrop-blur-sm">
+    <>
+      <header className="sticky top-0 z-50 border-b border-[#E4EAF4] bg-white/90 backdrop-blur-sm">
       <div className="container flex items-center justify-between h-14">
         <Link href="/" className="flex items-center gap-1.5 group">
           <span className="font-[family-name:var(--font-display)] text-xl text-[#16224A] transition-colors">
@@ -61,7 +66,7 @@ export function Header() {
               <span className="w-px h-5 bg-[#E4EAF4] mx-1" />
               <span className="text-xs text-[#6E7B96] px-2 font-semibold">{user.name}</span>
               <button
-                onClick={logout}
+                onClick={() => setConfirmingLogout(true)}
                 className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg text-[#6E7B96] hover:text-[#16224A] hover:bg-[#F6F9FC] transition-colors duration-150"
               >
                 <LogOut className="w-4 h-4" />
@@ -83,5 +88,23 @@ export function Header() {
         </nav>
       </div>
     </header>
+
+    {/* Rendered as a sibling of <header>: its backdrop-blur creates a
+        containing block for fixed descendants, which would trap the overlay.
+        Copy stays role-neutral: this header is shared by EO, admin and
+        customer accounts. */}
+    <ConfirmDialog
+      open={confirmingLogout}
+      title="Log out?"
+      message="You will need to sign in again to continue."
+      confirmLabel="Log out"
+      variant="danger"
+      onConfirm={() => {
+        setConfirmingLogout(false);
+        logout();
+      }}
+      onClose={() => setConfirmingLogout(false)}
+    />
+    </>
   );
 }

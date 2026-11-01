@@ -23,7 +23,7 @@ interface Item {
 
 export function DashboardSidebar() {
   const { user, isAdmin, isEO, isCustomer } = useAuth();
-  const [active, setActive] = useState("top");
+  const [active, setActive] = useState("dash-eo-top");
 
   if (!user) return null;
 
@@ -37,7 +37,7 @@ export function DashboardSidebar() {
     items = [
       { id: "dash-eo-top", label: "Dashboard", icon: LayoutDashboard },
       { id: "dash-my-events", label: "My Events", icon: Calendar },
-      { id: "dash-payouts", label: "Payouts", icon: Wallet },
+      { id: "dash-payout-summary", label: "Payouts", icon: Wallet },
       { id: "dash-create", label: "Create Event", icon: CalendarPlus, href: "/events" },
     ];
   } else if (isCustomer) {

@@ -89,7 +89,7 @@ dev:
 	@$(MAKE) dev-auth & \
 	$(MAKE) dev-ticketing & \
 	$(MAKE) dev-payment & \
-	$(MAKE) web-start & \
+	$(MAKE) dev-web & \
 	wait
 
 # Services

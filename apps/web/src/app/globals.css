@@ -176,15 +176,23 @@ select.input-field {
 
 textarea.input-field { resize: vertical; min-height: 80px; }
 
-/* ─── Badges / chips: pill tints, two-color system ─── */
+/* ─── Badges / chips: uppercase label chips, two-color system ─── */
+/* Matches the Riviera status chip: 10px, 800, .06em tracking, uppercase,
+   6px radius. width:fit-content stops the chip stretching to fill a grid
+   cell — without it the badge inherits the column width and looks bloated. */
 .badge {
   display: inline-flex;
   align-items: center;
-  font-size: 0.65rem;
+  justify-content: center;
+  width: fit-content;
+  font-size: 10px;
   font-weight: 800;
-  padding: 0.2rem 0.6rem;
-  border-radius: 999px;
-  letter-spacing: 0.04em;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
   font-family: var(--font-body);
 }
 .badge-green  { background: #E7EEFF; color: #2450D9; }

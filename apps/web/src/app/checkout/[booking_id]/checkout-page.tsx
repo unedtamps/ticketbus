@@ -59,6 +59,20 @@ export default function CheckoutPage() {
 
   const booking = bookingQuery.data;
 
+  // An existing session means the payment already started: the countdown no
+  // longer applies and the button becomes "resume" instead.
+  const paymentQuery = useQuery({
+    queryKey: ["payment-status", booking_id],
+    queryFn: () =>
+      api
+        .get<PaymentStatusResponse>(`/api/payments/booking/${booking_id}`)
+        .catch(() => null),
+    staleTime: 15 * 1000,
+  });
+  const paymentSession = paymentQuery.data ?? null;
+  const paymentInProgress =
+    paymentSession?.status === "pending" || paymentSession?.status === "initiated";
+
   // The summary names ticket types and shows the event line; the booking
   // items only carry ticket_type_id, so the event detail fills in names.
   const eventQuery = useQuery({
@@ -130,11 +144,17 @@ export default function CheckoutPage() {
     (eventQuery.data?.ticket_types || []).map((tt) => [tt.id, tt.name]),
   );
 
-  const holdMsLeft =
-    booking.expires_at && nowMs !== null
-      ? new Date(booking.expires_at).getTime() - nowMs
-      : null;
-  const holdExpired = holdMsLeft !== null && holdMsLeft <= 0;
+  // payment_deadline is expires_at minus the gateway's minimum session, so this
+  // countdown matches the backend guard that decides when paying is too late.
+  const payMsLeft =
+    nowMs === null
+      ? null
+      : booking.payment_deadline
+        ? new Date(booking.payment_deadline).getTime() - nowMs
+        : booking.expires_at
+          ? new Date(booking.expires_at).getTime() - nowMs
+          : null;
+  const payExpired = payMsLeft !== null && payMsLeft <= 0;
 
   const totalItems = booking.items.reduce((sum, i) => sum + i.quantity, 0);
 
@@ -154,16 +174,21 @@ export default function CheckoutPage() {
         </p>
       </div>
 
-      {/* Hold banner with live countdown */}
+      {/* Banner. While the payment is still to be started this is the
+          countdown to the deadline; once a session exists it becomes a nudge
+          to go and pay, with no clock — the running countdown belongs on the
+          payment page, where the customer actually completes it. */}
       {booking.status === "pending" && booking.expires_at && (
         <div className="flex items-center justify-between gap-3 rounded-xl bg-[#FFF4CC] px-4 py-3 mb-6">
           <p className="flex items-center gap-2.5 text-[13px] font-bold text-[#8A6400]">
             <Timer className="w-4 h-4 flex-shrink-0" />
-            {holdExpired
-              ? "Reservasi kedaluwarsa — silakan buat pesanan baru."
-              : holdMsLeft === null
-                ? "Reservasi ditahan — kursi dikunci sampai batas waktu."
-                : `Reservasi ditahan — kursi dikunci sampai ${fmtCountdown(holdMsLeft)} lagi.`}
+            {paymentInProgress
+              ? "Pembayaran sudah dimulai — segera selesaikan di halaman Xendit."
+              : payExpired
+                ? "Waktu pembayaran habis — silakan buat pesanan baru."
+                : payMsLeft === null
+                  ? "Reservasi ditahan — segera selesaikan pembayaran."
+                  : `Selesaikan pembayaran dalam ${fmtCountdown(payMsLeft)}.`}
           </p>
           <p className="text-xs font-bold text-[#8A6400] tracking-wide">
             TB-{booking.id.slice(0, 4).toUpperCase()}
@@ -288,15 +313,33 @@ export default function CheckoutPage() {
 
           {booking.status === "pending" && !txnNotReady && (
             <button
-              onClick={() => initiateMutation.mutate(booking.id)}
-              disabled={initiateMutation.isPending || holdExpired}
+              onClick={() => {
+                // Reuse the existing session; initiating again returns 409.
+                if (paymentInProgress && paymentSession?.transaction_id) {
+                  router.push("/payment/" + paymentSession.transaction_id);
+                  return;
+                }
+                initiateMutation.mutate(booking.id);
+              }}
+              // Only block a payment that has not started yet.
+              disabled={
+                initiateMutation.isPending || (!paymentInProgress && payExpired)
+              }
               className="btn-accent w-full py-3"
             >
               {initiateMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin mx-auto" />
               ) : (
                 <span className="flex items-center justify-center gap-2">
-                  Bayar Sekarang <ArrowRight className="w-4 h-4" />
+                  {paymentInProgress ? (
+                    <>
+                      Lanjutkan Pembayaran <ArrowRight className="w-4 h-4" />
+                    </>
+                  ) : (
+                    <>
+                      Bayar Sekarang <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </span>
               )}
             </button>

@@ -5,29 +5,21 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { fmtIDR } from "@/lib/format";
 import { api } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
 import { CheckCircle2, LayoutDashboard, Ticket } from "lucide-react";
+import type { BookingResponse } from "@/types";
 
-interface BookingItemResp {
-  id: string;
-  ticket_type_id: string;
-  quantity: number;
-  unit_price_rupiah: number;
-}
-
-interface BookingResponse {
-  id: string;
-  event_id: string;
-  status: string;
-  total_rupiah: number;
-  payment_id: string;
-  refund_status?: string;
-  items: BookingItemResp[];
-  created_at: string;
+/** Stub header monogram, e.g. "PSI" for "Pasar Seni Indie Bandung". */
+function initials(title: string) {
+  const words = title.split(/\s+/).filter(Boolean).slice(0, 3);
+  if (words.length === 0) return "TKT";
+  return words.map((w) => w[0]!.toUpperCase()).join("");
 }
 
 export default function ConfirmationPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { user } = useAuth();
 
   const bookingQuery = useQuery({
     queryKey: ["booking", id],
@@ -57,84 +49,142 @@ export default function ConfirmationPage() {
             <Ticket className="w-7 h-7 text-[#9AA6BC]" />
           </div>
           <p className="font-[family-name:var(--font-display)] text-2xl text-[#16224A]">
-            Booking Not Found
+            Pesanan tidak ditemukan
           </p>
           <p className="text-[#6E7B96] text-sm">
-            We couldn&apos;t find this booking. It may have been removed or the link is incorrect.
+            Pesanan ini mungkin sudah dihapus, atau tautannya salah.
           </p>
           <button onClick={() => router.push("/dashboard")} className="btn-accent">
-            View Dashboard
+            Buka Dasbor
           </button>
         </div>
       </div>
     );
   }
 
+  const totalQty = booking.items.reduce((n, i) => n + i.quantity, 0);
+  const eventTitle = booking.event_title || "Tiket";
+  const monogram = initials(eventTitle);
+
   return (
-    <div className="flex items-center justify-center min-h-[60vh] fade-up">
-      <div className="card max-w-md mx-auto py-10 px-8 space-y-5 w-full">
-        {/* Success checkmark */}
-        <div className="w-16 h-16 rounded-full bg-[#E7EEFF] flex items-center justify-center mx-auto">
-          <CheckCircle2 className="w-9 h-9 text-[#2450D9]" />
+    <div className="max-w-4xl mx-auto fade-up">
+      {/* Outcome — driven by the booking's real status, never assumed. */}
+      <div className="text-center mt-4 mb-9">
+        <div className="w-16 h-16 rounded-full bg-[#E7EEFF] flex items-center justify-center mx-auto mb-5">
+          <CheckCircle2 className="w-8 h-8 text-[#2450D9]" />
         </div>
-
-        {/* Heading */}
-        <div className="text-center space-y-1.5">
-          <p className="font-[family-name:var(--font-display)] text-[28px] text-[#16224A]">
-            Booking Confirmed
-          </p>
-          <div className="flex items-center justify-center gap-2">
-            <span className="badge badge-blue">
-              BOOKING {booking.id.slice(0, 12).toUpperCase()}
-            </span>
-            <span className={`badge ${
-              booking.status === "confirmed" ? "badge-green" :
-              booking.status === "cancelled" ? "badge-ink" : "badge-yellow"
-            }`}>
-              {booking.status === "confirmed" ? "LUNAS" : booking.status}
-            </span>
-          </div>
+        <p className="font-[family-name:var(--font-display)] text-[38px] leading-tight text-[#16224A]">
+          {booking.status === "confirmed"
+            ? "Pembayaran diterima!"
+            : booking.status === "pending"
+              ? "Menunggu pembayaran"
+              : "Pesanan dibatalkan"}
+        </p>
+        <p className="text-[#6E7B96] text-[14.5px] mt-3 max-w-lg mx-auto leading-relaxed">
+          {booking.status === "confirmed" ? (
+            <>
+              {totalQty} tiket {booking.items.map((i) => i.ticket_type_name || "Tiket").join(", ")}{" "}
+              untuk {eventTitle} sudah terbit dan dikirim ke {user?.email || "email Anda"}.
+            </>
+          ) : booking.status === "pending" ? (
+            <>Pesanan ini belum lunas — tiket terbit setelah pembayaran dikonfirmasi.</>
+          ) : (
+            <>Pesanan ini sudah tidak aktif.</>
+          )}
+        </p>
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <span className="badge badge-blue">
+            BOOKING {booking.id.slice(0, 8).toUpperCase()}
+          </span>
+          <span
+            className={`badge ${
+              booking.status === "confirmed"
+                ? "badge-green"
+                : booking.status === "cancelled"
+                  ? "badge-ink"
+                  : "badge-yellow"
+            }`}
+          >
+            {booking.status === "confirmed" ? "LUNAS" : booking.status.toUpperCase()}
+          </span>
         </div>
+      </div>
 
-        <div className="border-t border-[#E4EAF4]" />
-
-        {/* Ticket items */}
-        {booking.items.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-extrabold text-[#6E7B96] uppercase tracking-wider">
-              Tickets
-            </p>
-            {booking.items.map((item) => (
-              <div key={item.id} className="flex justify-between text-sm">
-                <span className="text-[#3D4A66] font-semibold">
-                  <span className="text-[#6E7B96]">{item.quantity} &times;</span> Ticket
+      {/* One stub per ticket line, regardless of status — the same layout
+          whether or not the payment has settled, so the page does not change
+          shape under the customer. The backend has no per-attendee ticket
+          entity, so each stub represents the ticket type and quantity bought:
+          it does not invent holder names or seat numbers. */}
+      {booking.items.length > 0 && (
+        <div className="grid gap-5 sm:grid-cols-2 mb-8">
+          {booking.items.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-2xl border border-[#E4EAF4] overflow-hidden bg-white"
+            >
+              <div className="flex items-center justify-between bg-[#FFD43B] px-5 py-3.5">
+                <span className="font-[family-name:var(--font-display)] text-xl font-bold text-[#16224A]">
+                  {monogram}
                 </span>
-                <span className="font-bold text-[#16224A]">
-                  {fmtIDR(item.unit_price_rupiah * item.quantity)}
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#16224A]">
+                  E-Tiket
                 </span>
               </div>
-            ))}
-          </div>
-        )}
+              <div className="px-5 py-4">
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#9AA6BC]">
+                  {eventTitle}
+                </p>
+                <p className="text-[15px] font-extrabold text-[#16224A] mt-1.5">
+                  {item.ticket_type_name || "Tiket"}
+                </p>
+                <div className="flex items-end justify-between gap-3 mt-3">
+                  <div className="space-y-1">
+                    <p className="text-[12.5px] text-[#6E7B96]">
+                      {item.quantity} tiket &middot; {fmtIDR(item.unit_price_rupiah)} / tiket
+                    </p>
+                    {booking.event_venue && (
+                      <p className="text-[12.5px] text-[#6E7B96]">{booking.event_venue}</p>
+                    )}
+                  </div>
+                  <div className="flex-shrink-0 w-11 h-11 rounded-lg bg-[#F6F9FC] border border-[#E4EAF4] grid place-items-center">
+                    <Ticket className="w-5 h-5 text-[#9AA6BC]" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-        {/* Total */}
-        <div className="border-t border-[#E4EAF4] pt-3 flex justify-between items-center">
+      {/* Totals */}
+      <div className="card space-y-2 mb-7">
+        {booking.items.map((item) => (
+          <div key={item.id} className="flex justify-between text-sm">
+            <span className="text-[#3D4A66]">
+              {item.quantity} &times; {item.ticket_type_name || "Tiket"}
+            </span>
+            <span className="font-semibold text-[#16224A]">
+              {fmtIDR(item.unit_price_rupiah * item.quantity)}
+            </span>
+          </div>
+        ))}
+        <div className="border-t border-[#E4EAF4] pt-2.5 flex justify-between items-center">
           <span className="text-sm font-bold text-[#6E7B96]">Total</span>
           <span className="font-[family-name:var(--font-display)] text-2xl text-[#16224A]">
             {fmtIDR(booking.total_rupiah)}
           </span>
         </div>
+      </div>
 
-        {/* Actions */}
-        <div className="flex gap-3 pt-2">
-          <Link href="/" className="btn-outline flex-1 text-center text-sm">
-            Back to Events
-          </Link>
-          <Link href="/dashboard" className="btn-accent flex-1 text-center text-sm flex items-center justify-center gap-1.5">
-            <LayoutDashboard className="w-4 h-4" />
-            View Dashboard
-          </Link>
-        </div>
+      {/* Actions */}
+      <div className="flex flex-wrap justify-center gap-3 pb-8">
+        <Link href="/dashboard" className="btn-accent text-sm flex items-center justify-center gap-1.5 px-6">
+          <LayoutDashboard className="w-4 h-4" />
+          Buka Dasbor
+        </Link>
+        <Link href="/" className="btn-outline text-sm text-center px-6">
+          Kembali ke beranda
+        </Link>
       </div>
     </div>
   );

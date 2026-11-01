@@ -71,8 +71,10 @@ export default async function HomePage() {
   let events: EventItem[] = [];
 
   try {
+    // No-store: a cached copy kept showing a stale list after an event went
+    // live, which read as "the event did not save".
     const res = await fetch(`${API_URL}/api/events?limit=20`, {
-      next: { revalidate: 60 },
+      cache: "no-store",
     });
     if (res.ok) {
       const json = await res.json();

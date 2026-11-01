@@ -159,6 +159,13 @@ export default function CreateEventPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Only the review step may create the event. Earlier steps advance instead,
+    // so an Enter press in a text field cannot POST a half-filled event.
+    if (step < 3) {
+      goNext();
+      return;
+    }
+    if (createMutation.isPending) return;
     createMutation.mutate(buildPayload());
   }
 
@@ -432,11 +439,15 @@ export default function CreateEventPage() {
             </button>
           )}
           {step < 3 ? (
-            <button type="button" onClick={goNext} className="btn-accent flex-1 py-3 flex items-center justify-center gap-1.5">
+            // The key keeps React from reusing this node as the submit button on
+            // the step change: reusing it retypes the live element to "submit"
+            // mid-click, so the browser submits the form the user only meant to
+            // advance past.
+            <button key="next" type="button" onClick={goNext} className="btn-accent flex-1 py-3 flex items-center justify-center gap-1.5">
               Lanjut <ChevronRight className="w-4 h-4" />
             </button>
           ) : (
-            <button type="submit" disabled={createMutation.isPending} className="btn-accent flex-1 py-3 text-base">
+            <button key="submit" type="submit" disabled={createMutation.isPending} className="btn-accent flex-1 py-3 text-base">
               {createMutation.isPending ? "Mengajukan…" : "Ajukan untuk Approval"}
             </button>
           )}

@@ -32,6 +32,8 @@ export interface EventItem {
   payout_amount_rupiah?: number;
   payout_requested_at?: string;
   payout_completed_at?: string;
+  // Confirmed booking revenue. Still collectable = this minus payout_amount_rupiah.
+  confirmed_revenue_rupiah?: number;
 }
 
 export interface PayoutAccount {
@@ -88,6 +90,23 @@ export interface EventListResponse {
   total: number;
 }
 
+// Aggregate over ALL of an organizer's events, not one page. The dashboard
+// header reads these so paging the table cannot change the figures.
+export interface OrganizerSummary {
+  available_to_collect: number;
+  confirmed_total: number;
+  paid_out_total: number;
+  collectable_events: number;
+}
+
+// One page of GET /api/events/mine. next_cursor is opaque and empty on the
+// last page.
+export interface OrganizerEventListResponse {
+  events: EventItem[];
+  next_cursor: string;
+  summary: OrganizerSummary;
+}
+
 export interface ReservationResponse {
   booking_id: string;
   event_id: string;
@@ -102,6 +121,7 @@ export interface BookingItemResp {
   quantity: number;
   unit_price_rupiah: number;
   total_price: number;
+  ticket_type_name?: string;
 }
 
 export interface BookingResponse {
@@ -110,11 +130,18 @@ export interface BookingResponse {
   event_id: string;
   status: string;
   expires_at?: string;
+  /** Last moment a payment can be started: expires_at minus the gateway's
+   *  minimum session lifetime. The backend enforces the same boundary. */
+  payment_deadline?: string;
   total_rupiah: number;
   payment_id: string;
   refund_status?: string;
   items: BookingItemResp[];
   created_at: string;
+  // Event context, present on customer-facing lists only.
+  event_title?: string;
+  event_start_at?: string;
+  event_venue?: string;
 }
 
 export interface TransactionResponse {

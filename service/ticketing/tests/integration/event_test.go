@@ -62,11 +62,14 @@ func TestEvent_EO_SeesOnlyOwnEvents(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "%s", body)
 
+	// /api/events/mine is paginated: {events, next_cursor, summary}.
 	var mine struct {
-		Data []eventResp `json:"data"`
+		Data struct {
+			Events []eventResp `json:"events"`
+		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(body, &mine))
-	assert.Empty(t, mine.Data, "EO2 should not see EO1's events")
+	assert.Empty(t, mine.Data.Events, "EO2 should not see EO1's events")
 }
 
 func TestEvent_Admin_Approve(t *testing.T) {

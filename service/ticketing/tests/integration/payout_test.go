@@ -192,12 +192,14 @@ func TestPayout_Request_OrganizerEventShape(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "list mine: %s", body)
 
-	var events []struct {
-		ID           string `json:"id"`
-		PayoutStatus string `json:"payout_status"`
+	var page struct {
+		Events []struct {
+			ID           string `json:"id"`
+			PayoutStatus string `json:"payout_status"`
+		} `json:"events"`
 	}
-	require.NoError(t, decodeDataPayload(body, &events))
-	for _, e := range events {
+	require.NoError(t, decodeDataPayload(body, &page))
+	for _, e := range page.Events {
 		if e.ID == eventID {
 			assert.Equal(t, "pending", e.PayoutStatus)
 			return

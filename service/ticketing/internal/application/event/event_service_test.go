@@ -419,9 +419,9 @@ func TestListByOrganizer(t *testing.T) {
 	seatReader := mocks.NewMockSeatReader(t)
 	ctx := context.Background()
 	expected := []domain.Event{*fixtures.NewTestEvent(fixtures.WithEventOrganizerID("org-1"))}
-	repo.EXPECT().ListByOrganizer(ctx, "org-1").Return(expected, nil)
+	repo.EXPECT().ListByOrganizer(ctx, "org-1", 21, (*domain.Cursor)(nil)).Return(expected, nil)
 	svc := newEventService(t, repo, seatReader)
-	events, err := svc.ListByOrganizer(ctx, "org-1")
+	events, err := svc.ListByOrganizer(ctx, "org-1", 21, nil)
 	require.NoError(t, err)
 	assert.Len(t, events, 1)
 }
@@ -430,11 +430,40 @@ func TestListByOrganizer_Empty(t *testing.T) {
 	repo := mocks.NewMockEventRepository(t)
 	seatReader := mocks.NewMockSeatReader(t)
 	ctx := context.Background()
-	repo.EXPECT().ListByOrganizer(ctx, "new-org").Return(nil, nil)
+	repo.EXPECT().ListByOrganizer(ctx, "new-org", 20, (*domain.Cursor)(nil)).Return(nil, nil)
 	svc := newEventService(t, repo, seatReader)
-	events, err := svc.ListByOrganizer(ctx, "new-org")
+	events, err := svc.ListByOrganizer(ctx, "new-org", 20, nil)
 	require.NoError(t, err)
 	assert.Empty(t, events)
+}
+
+func TestListByOrganizer_WithCursor(t *testing.T) {
+	repo := mocks.NewMockEventRepository(t)
+	seatReader := mocks.NewMockSeatReader(t)
+	ctx := context.Background()
+	cursor := &domain.Cursor{CreatedAt: time.Now(), ID: "evt-1"}
+	repo.EXPECT().ListByOrganizer(ctx, "org-1", 20, cursor).Return(nil, nil)
+	svc := newEventService(t, repo, seatReader)
+	events, err := svc.ListByOrganizer(ctx, "org-1", 20, cursor)
+	require.NoError(t, err)
+	assert.Empty(t, events)
+}
+
+func TestOrganizerSummary(t *testing.T) {
+	repo := mocks.NewMockEventRepository(t)
+	seatReader := mocks.NewMockSeatReader(t)
+	ctx := context.Background()
+	expected := &domain.OrganizerSummary{
+		AvailableToCollect: 575000,
+		ConfirmedTotal:     4270615,
+		PaidOutTotal:       3695615,
+		CollectableEvents:  2,
+	}
+	repo.EXPECT().OrganizerSummary(ctx, "org-1").Return(expected, nil)
+	svc := newEventService(t, repo, seatReader)
+	got, err := svc.OrganizerSummary(ctx, "org-1")
+	require.NoError(t, err)
+	assert.Equal(t, expected, got)
 }
 
 func TestListPending(t *testing.T) {

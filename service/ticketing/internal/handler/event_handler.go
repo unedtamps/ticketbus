@@ -16,6 +16,13 @@ import (
 	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
+// defaultPageSize is the page size used when the client omits ?limit.
+const defaultPageSize = 10
+
+// maxPageSize caps a client-supplied ?limit. Without it any caller could ask
+// for the entire table in one request.
+const maxPageSize = 100
+
 // EventHandler handles HTTP requests for the event service.
 type EventHandler struct {
 	svc      *event.EventService
@@ -364,13 +371,51 @@ func (h *EventHandler) ListPublished(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListMyEvents handles GET /events/mine.
+//
+// Keyset-paginated on (created_at, id) descending: pass ?cursor from the
+// previous response's next_cursor. Each page carries the whole-account summary
+// so the dashboard header does not shrink to the visible page.
 func (h *EventHandler) ListMyEvents(w http.ResponseWriter, r *http.Request) {
 	userID := sharedhttp.UserIDFromContext(r.Context())
-	events, err := h.svc.ListByOrganizer(r.Context(), userID)
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		limit = defaultPageSize
+	}
+	if limit > maxPageSize {
+		limit = maxPageSize
+	}
+
+	var cursor *domain.Cursor
+	if raw := r.URL.Query().Get("cursor"); raw != "" {
+		parsed, err := domain.DecodeCursor(raw)
+		if err != nil {
+			sharedhttp.BadRequest(w, "invalid cursor")
+			return
+		}
+		cursor = parsed
+	}
+
+	// One extra row tells us whether a further page exists without a COUNT.
+	events, err := h.svc.ListByOrganizer(r.Context(), userID, limit+1, cursor)
 	if err != nil {
 		sharedhttp.InternalServerError(w, "failed to list events")
 		return
 	}
+
+	nextCursor := ""
+	if len(events) > limit {
+		events = events[:limit]
+		last := events[len(events)-1]
+		nextCursor = domain.Cursor{CreatedAt: last.CreatedAt, ID: last.ID}.Encode()
+	}
+
+	summary, err := h.svc.OrganizerSummary(r.Context(), userID)
+	if err != nil {
+		sharedhttp.InternalServerError(w, "failed to summarise events")
+		return
+	}
+
 	resp := make([]OrganizerEventResponse, 0, len(events))
 	for _, e := range events {
 		resp = append(
@@ -395,10 +440,22 @@ func (h *EventHandler) ListMyEvents(w http.ResponseWriter, r *http.Request) {
 				PayoutAmountRupiah: e.PayoutAmountRupiah,
 				PayoutRequestedAt:  e.PayoutRequestedAt,
 				PayoutCompletedAt:  e.PayoutCompletedAt,
+
+				ConfirmedRevenueRupiah: e.ConfirmedRevenueRupiah,
 			},
 		)
 	}
-	sharedhttp.OK(w, resp)
+
+	sharedhttp.OK(w, OrganizerEventListResponse{
+		Events:     resp,
+		NextCursor: nextCursor,
+		Summary: OrganizerSummaryResponse{
+			AvailableToCollect: summary.AvailableToCollect,
+			ConfirmedTotal:     summary.ConfirmedTotal,
+			PaidOutTotal:       summary.PaidOutTotal,
+			CollectableEvents:  summary.CollectableEvents,
+		},
+	})
 }
 
 // ListPending handles GET /events/pending.

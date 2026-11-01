@@ -14,7 +14,8 @@ type EventRepository interface {
 	UpdateEvent(ctx context.Context, event *Event) error
 	FindEventByID(ctx context.Context, id string) (*Event, error)
 	ListPublished(ctx context.Context, limit, offset int) ([]Event, int, error)
-	ListByOrganizer(ctx context.Context, organizerID string) ([]Event, error)
+	ListByOrganizer(ctx context.Context, organizerID string, limit int, cursor *Cursor) ([]Event, error)
+	OrganizerSummary(ctx context.Context, organizerID string) (*OrganizerSummary, error)
 	ListPending(ctx context.Context, limit, offset int) ([]Event, int, error)
 	FindAll(ctx context.Context, status string, limit, offset int) ([]Event, int, error)
 

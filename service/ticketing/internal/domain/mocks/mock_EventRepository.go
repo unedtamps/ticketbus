@@ -7,9 +7,9 @@ package mocks
 import (
 	"context"
 
-	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
-	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 	mock "github.com/stretchr/testify/mock"
+	"github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
 // NewMockEventRepository creates a new instance of MockEventRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
@@ -37,56 +37,6 @@ type MockEventRepository_Expecter struct {
 
 func (_m *MockEventRepository) EXPECT() *MockEventRepository_Expecter {
 	return &MockEventRepository_Expecter{mock: &_m.Mock}
-}
-
-// MockEventRepository_SetEventImage_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetEventImage'
-type MockEventRepository_SetEventImage_Call struct {
-	*mock.Call
-}
-
-// SetEventImage is a helper method to define mock.On call
-//   - ctx context.Context
-//   - eventID string
-//   - imageKey string
-func (_e *MockEventRepository_Expecter) SetEventImage(ctx any, eventID any, imageKey any) *MockEventRepository_SetEventImage_Call {
-	return &MockEventRepository_SetEventImage_Call{Call: _e.mock.On("SetEventImage", ctx, eventID, imageKey)}
-}
-
-// SetEventImage is a helper method to define mock.On call
-//   - ctx context.Context
-//   - eventID string
-//   - imageKey string
-func (_c *MockEventRepository_SetEventImage_Call) Run(run func(ctx context.Context, eventID string, imageKey string)) *MockEventRepository_SetEventImage_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockEventRepository_SetEventImage_Call) Return(err error) *MockEventRepository_SetEventImage_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockEventRepository_SetEventImage_Call) RunAndReturn(run func(ctx context.Context, eventID string, imageKey string) error) *MockEventRepository_SetEventImage_Call {
-	_c.Call.Return(run)
-	return _c
 }
 
 // CreateEvent provides a mock function for the type MockEventRepository
@@ -357,24 +307,24 @@ func (_c *MockEventRepository_FindEventByID_Call) RunAndReturn(run func(ctx cont
 	return _c
 }
 
-// ListByOrganizer provides a mock function for the type MockEventRepository
-func (_mock *MockEventRepository) ListByOrganizer(ctx context.Context, organizerID string) ([]domain.Event, error) {
+// FindPayoutAccount provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) FindPayoutAccount(ctx context.Context, organizerID string) (*domain.OrganizerPayoutAccount, error) {
 	ret := _mock.Called(ctx, organizerID)
 
 	if len(ret) == 0 {
-		panic("no return value specified for ListByOrganizer")
+		panic("no return value specified for FindPayoutAccount")
 	}
 
-	var r0 []domain.Event
+	var r0 *domain.OrganizerPayoutAccount
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]domain.Event, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.OrganizerPayoutAccount, error)); ok {
 		return returnFunc(ctx, organizerID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []domain.Event); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *domain.OrganizerPayoutAccount); ok {
 		r0 = returnFunc(ctx, organizerID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]domain.Event)
+			r0 = ret.Get(0).(*domain.OrganizerPayoutAccount)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
@@ -385,19 +335,19 @@ func (_mock *MockEventRepository) ListByOrganizer(ctx context.Context, organizer
 	return r0, r1
 }
 
-// MockEventRepository_ListByOrganizer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByOrganizer'
-type MockEventRepository_ListByOrganizer_Call struct {
+// MockEventRepository_FindPayoutAccount_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FindPayoutAccount'
+type MockEventRepository_FindPayoutAccount_Call struct {
 	*mock.Call
 }
 
-// ListByOrganizer is a helper method to define mock.On call
+// FindPayoutAccount is a helper method to define mock.On call
 //   - ctx context.Context
 //   - organizerID string
-func (_e *MockEventRepository_Expecter) ListByOrganizer(ctx any, organizerID any) *MockEventRepository_ListByOrganizer_Call {
-	return &MockEventRepository_ListByOrganizer_Call{Call: _e.mock.On("ListByOrganizer", ctx, organizerID)}
+func (_e *MockEventRepository_Expecter) FindPayoutAccount(ctx any, organizerID any) *MockEventRepository_FindPayoutAccount_Call {
+	return &MockEventRepository_FindPayoutAccount_Call{Call: _e.mock.On("FindPayoutAccount", ctx, organizerID)}
 }
 
-func (_c *MockEventRepository_ListByOrganizer_Call) Run(run func(ctx context.Context, organizerID string)) *MockEventRepository_ListByOrganizer_Call {
+func (_c *MockEventRepository_FindPayoutAccount_Call) Run(run func(ctx context.Context, organizerID string)) *MockEventRepository_FindPayoutAccount_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -415,12 +365,160 @@ func (_c *MockEventRepository_ListByOrganizer_Call) Run(run func(ctx context.Con
 	return _c
 }
 
+func (_c *MockEventRepository_FindPayoutAccount_Call) Return(organizerPayoutAccount *domain.OrganizerPayoutAccount, err error) *MockEventRepository_FindPayoutAccount_Call {
+	_c.Call.Return(organizerPayoutAccount, err)
+	return _c
+}
+
+func (_c *MockEventRepository_FindPayoutAccount_Call) RunAndReturn(run func(ctx context.Context, organizerID string) (*domain.OrganizerPayoutAccount, error)) *MockEventRepository_FindPayoutAccount_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListByOrganizer provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) ListByOrganizer(ctx context.Context, organizerID string, limit int, cursor *domain.Cursor) ([]domain.Event, error) {
+	ret := _mock.Called(ctx, organizerID, limit, cursor)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListByOrganizer")
+	}
+
+	var r0 []domain.Event
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, *domain.Cursor) ([]domain.Event, error)); ok {
+		return returnFunc(ctx, organizerID, limit, cursor)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, *domain.Cursor) []domain.Event); ok {
+		r0 = returnFunc(ctx, organizerID, limit, cursor)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]domain.Event)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, int, *domain.Cursor) error); ok {
+		r1 = returnFunc(ctx, organizerID, limit, cursor)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockEventRepository_ListByOrganizer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByOrganizer'
+type MockEventRepository_ListByOrganizer_Call struct {
+	*mock.Call
+}
+
+// ListByOrganizer is a helper method to define mock.On call
+//   - ctx context.Context
+//   - organizerID string
+//   - limit int
+//   - cursor *domain.Cursor
+func (_e *MockEventRepository_Expecter) ListByOrganizer(ctx any, organizerID any, limit any, cursor any) *MockEventRepository_ListByOrganizer_Call {
+	return &MockEventRepository_ListByOrganizer_Call{Call: _e.mock.On("ListByOrganizer", ctx, organizerID, limit, cursor)}
+}
+
+func (_c *MockEventRepository_ListByOrganizer_Call) Run(run func(ctx context.Context, organizerID string, limit int, cursor *domain.Cursor)) *MockEventRepository_ListByOrganizer_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 int
+		if args[2] != nil {
+			arg2 = args[2].(int)
+		}
+		var arg3 *domain.Cursor
+		if args[3] != nil {
+			arg3 = args[3].(*domain.Cursor)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
 func (_c *MockEventRepository_ListByOrganizer_Call) Return(events []domain.Event, err error) *MockEventRepository_ListByOrganizer_Call {
 	_c.Call.Return(events, err)
 	return _c
 }
 
-func (_c *MockEventRepository_ListByOrganizer_Call) RunAndReturn(run func(ctx context.Context, organizerID string) ([]domain.Event, error)) *MockEventRepository_ListByOrganizer_Call {
+func (_c *MockEventRepository_ListByOrganizer_Call) RunAndReturn(run func(ctx context.Context, organizerID string, limit int, cursor *domain.Cursor) ([]domain.Event, error)) *MockEventRepository_ListByOrganizer_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListPayoutAttempts provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) ListPayoutAttempts(ctx context.Context, eventID string) ([]domain.EventPayoutAttempt, error) {
+	ret := _mock.Called(ctx, eventID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListPayoutAttempts")
+	}
+
+	var r0 []domain.EventPayoutAttempt
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]domain.EventPayoutAttempt, error)); ok {
+		return returnFunc(ctx, eventID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []domain.EventPayoutAttempt); ok {
+		r0 = returnFunc(ctx, eventID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]domain.EventPayoutAttempt)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, eventID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockEventRepository_ListPayoutAttempts_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListPayoutAttempts'
+type MockEventRepository_ListPayoutAttempts_Call struct {
+	*mock.Call
+}
+
+// ListPayoutAttempts is a helper method to define mock.On call
+//   - ctx context.Context
+//   - eventID string
+func (_e *MockEventRepository_Expecter) ListPayoutAttempts(ctx any, eventID any) *MockEventRepository_ListPayoutAttempts_Call {
+	return &MockEventRepository_ListPayoutAttempts_Call{Call: _e.mock.On("ListPayoutAttempts", ctx, eventID)}
+}
+
+func (_c *MockEventRepository_ListPayoutAttempts_Call) Run(run func(ctx context.Context, eventID string)) *MockEventRepository_ListPayoutAttempts_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockEventRepository_ListPayoutAttempts_Call) Return(eventPayoutAttempts []domain.EventPayoutAttempt, err error) *MockEventRepository_ListPayoutAttempts_Call {
+	_c.Call.Return(eventPayoutAttempts, err)
+	return _c
+}
+
+func (_c *MockEventRepository_ListPayoutAttempts_Call) RunAndReturn(run func(ctx context.Context, eventID string) ([]domain.EventPayoutAttempt, error)) *MockEventRepository_ListPayoutAttempts_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -653,6 +751,373 @@ func (_c *MockEventRepository_ListTicketTypesByEvent_Call) RunAndReturn(run func
 	return _c
 }
 
+// OrganizerSummary provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) OrganizerSummary(ctx context.Context, organizerID string) (*domain.OrganizerSummary, error) {
+	ret := _mock.Called(ctx, organizerID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for OrganizerSummary")
+	}
+
+	var r0 *domain.OrganizerSummary
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.OrganizerSummary, error)); ok {
+		return returnFunc(ctx, organizerID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *domain.OrganizerSummary); ok {
+		r0 = returnFunc(ctx, organizerID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.OrganizerSummary)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, organizerID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockEventRepository_OrganizerSummary_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OrganizerSummary'
+type MockEventRepository_OrganizerSummary_Call struct {
+	*mock.Call
+}
+
+// OrganizerSummary is a helper method to define mock.On call
+//   - ctx context.Context
+//   - organizerID string
+func (_e *MockEventRepository_Expecter) OrganizerSummary(ctx any, organizerID any) *MockEventRepository_OrganizerSummary_Call {
+	return &MockEventRepository_OrganizerSummary_Call{Call: _e.mock.On("OrganizerSummary", ctx, organizerID)}
+}
+
+func (_c *MockEventRepository_OrganizerSummary_Call) Run(run func(ctx context.Context, organizerID string)) *MockEventRepository_OrganizerSummary_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockEventRepository_OrganizerSummary_Call) Return(organizerSummary *domain.OrganizerSummary, err error) *MockEventRepository_OrganizerSummary_Call {
+	_c.Call.Return(organizerSummary, err)
+	return _c
+}
+
+func (_c *MockEventRepository_OrganizerSummary_Call) RunAndReturn(run func(ctx context.Context, organizerID string) (*domain.OrganizerSummary, error)) *MockEventRepository_OrganizerSummary_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// PayoutSummary provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) PayoutSummary(ctx context.Context, eventID string) (*domain.EventPayoutSummary, error) {
+	ret := _mock.Called(ctx, eventID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PayoutSummary")
+	}
+
+	var r0 *domain.EventPayoutSummary
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.EventPayoutSummary, error)); ok {
+		return returnFunc(ctx, eventID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *domain.EventPayoutSummary); ok {
+		r0 = returnFunc(ctx, eventID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.EventPayoutSummary)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, eventID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockEventRepository_PayoutSummary_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PayoutSummary'
+type MockEventRepository_PayoutSummary_Call struct {
+	*mock.Call
+}
+
+// PayoutSummary is a helper method to define mock.On call
+//   - ctx context.Context
+//   - eventID string
+func (_e *MockEventRepository_Expecter) PayoutSummary(ctx any, eventID any) *MockEventRepository_PayoutSummary_Call {
+	return &MockEventRepository_PayoutSummary_Call{Call: _e.mock.On("PayoutSummary", ctx, eventID)}
+}
+
+func (_c *MockEventRepository_PayoutSummary_Call) Run(run func(ctx context.Context, eventID string)) *MockEventRepository_PayoutSummary_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockEventRepository_PayoutSummary_Call) Return(eventPayoutSummary *domain.EventPayoutSummary, err error) *MockEventRepository_PayoutSummary_Call {
+	_c.Call.Return(eventPayoutSummary, err)
+	return _c
+}
+
+func (_c *MockEventRepository_PayoutSummary_Call) RunAndReturn(run func(ctx context.Context, eventID string) (*domain.EventPayoutSummary, error)) *MockEventRepository_PayoutSummary_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RequestPayout provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) RequestPayout(ctx context.Context, attempt *domain.EventPayoutAttempt, payload func(attempt int) any) (bool, error) {
+	ret := _mock.Called(ctx, attempt, payload)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RequestPayout")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *domain.EventPayoutAttempt, func(attempt int) any) (bool, error)); ok {
+		return returnFunc(ctx, attempt, payload)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *domain.EventPayoutAttempt, func(attempt int) any) bool); ok {
+		r0 = returnFunc(ctx, attempt, payload)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *domain.EventPayoutAttempt, func(attempt int) any) error); ok {
+		r1 = returnFunc(ctx, attempt, payload)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockEventRepository_RequestPayout_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RequestPayout'
+type MockEventRepository_RequestPayout_Call struct {
+	*mock.Call
+}
+
+// RequestPayout is a helper method to define mock.On call
+//   - ctx context.Context
+//   - attempt *domain.EventPayoutAttempt
+//   - payload func(attempt int) any
+func (_e *MockEventRepository_Expecter) RequestPayout(ctx any, attempt any, payload any) *MockEventRepository_RequestPayout_Call {
+	return &MockEventRepository_RequestPayout_Call{Call: _e.mock.On("RequestPayout", ctx, attempt, payload)}
+}
+
+func (_c *MockEventRepository_RequestPayout_Call) Run(run func(ctx context.Context, attempt *domain.EventPayoutAttempt, payload func(attempt int) any)) *MockEventRepository_RequestPayout_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *domain.EventPayoutAttempt
+		if args[1] != nil {
+			arg1 = args[1].(*domain.EventPayoutAttempt)
+		}
+		var arg2 func(attempt int) any
+		if args[2] != nil {
+			arg2 = args[2].(func(attempt int) any)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockEventRepository_RequestPayout_Call) Return(b bool, err error) *MockEventRepository_RequestPayout_Call {
+	_c.Call.Return(b, err)
+	return _c
+}
+
+func (_c *MockEventRepository_RequestPayout_Call) RunAndReturn(run func(ctx context.Context, attempt *domain.EventPayoutAttempt, payload func(attempt int) any) (bool, error)) *MockEventRepository_RequestPayout_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetEventImage provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) SetEventImage(ctx context.Context, eventID string, imageKey string) error {
+	ret := _mock.Called(ctx, eventID, imageKey)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetEventImage")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, eventID, imageKey)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockEventRepository_SetEventImage_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetEventImage'
+type MockEventRepository_SetEventImage_Call struct {
+	*mock.Call
+}
+
+// SetEventImage is a helper method to define mock.On call
+//   - ctx context.Context
+//   - eventID string
+//   - imageKey string
+func (_e *MockEventRepository_Expecter) SetEventImage(ctx any, eventID any, imageKey any) *MockEventRepository_SetEventImage_Call {
+	return &MockEventRepository_SetEventImage_Call{Call: _e.mock.On("SetEventImage", ctx, eventID, imageKey)}
+}
+
+func (_c *MockEventRepository_SetEventImage_Call) Run(run func(ctx context.Context, eventID string, imageKey string)) *MockEventRepository_SetEventImage_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockEventRepository_SetEventImage_Call) Return(err error) *MockEventRepository_SetEventImage_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockEventRepository_SetEventImage_Call) RunAndReturn(run func(ctx context.Context, eventID string, imageKey string) error) *MockEventRepository_SetEventImage_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetPayoutResult provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) SetPayoutResult(ctx context.Context, eventID string, attempt int, status dto.PayoutStatus, amountRupiah int64, providerRef string, reason string) (bool, error) {
+	ret := _mock.Called(ctx, eventID, attempt, status, amountRupiah, providerRef, reason)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetPayoutResult")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, dto.PayoutStatus, int64, string, string) (bool, error)); ok {
+		return returnFunc(ctx, eventID, attempt, status, amountRupiah, providerRef, reason)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, dto.PayoutStatus, int64, string, string) bool); ok {
+		r0 = returnFunc(ctx, eventID, attempt, status, amountRupiah, providerRef, reason)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, int, dto.PayoutStatus, int64, string, string) error); ok {
+		r1 = returnFunc(ctx, eventID, attempt, status, amountRupiah, providerRef, reason)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockEventRepository_SetPayoutResult_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetPayoutResult'
+type MockEventRepository_SetPayoutResult_Call struct {
+	*mock.Call
+}
+
+// SetPayoutResult is a helper method to define mock.On call
+//   - ctx context.Context
+//   - eventID string
+//   - attempt int
+//   - status dto.PayoutStatus
+//   - amountRupiah int64
+//   - providerRef string
+//   - reason string
+func (_e *MockEventRepository_Expecter) SetPayoutResult(ctx any, eventID any, attempt any, status any, amountRupiah any, providerRef any, reason any) *MockEventRepository_SetPayoutResult_Call {
+	return &MockEventRepository_SetPayoutResult_Call{Call: _e.mock.On("SetPayoutResult", ctx, eventID, attempt, status, amountRupiah, providerRef, reason)}
+}
+
+func (_c *MockEventRepository_SetPayoutResult_Call) Run(run func(ctx context.Context, eventID string, attempt int, status dto.PayoutStatus, amountRupiah int64, providerRef string, reason string)) *MockEventRepository_SetPayoutResult_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 int
+		if args[2] != nil {
+			arg2 = args[2].(int)
+		}
+		var arg3 dto.PayoutStatus
+		if args[3] != nil {
+			arg3 = args[3].(dto.PayoutStatus)
+		}
+		var arg4 int64
+		if args[4] != nil {
+			arg4 = args[4].(int64)
+		}
+		var arg5 string
+		if args[5] != nil {
+			arg5 = args[5].(string)
+		}
+		var arg6 string
+		if args[6] != nil {
+			arg6 = args[6].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+			arg5,
+			arg6,
+		)
+	})
+	return _c
+}
+
+func (_c *MockEventRepository_SetPayoutResult_Call) Return(b bool, err error) *MockEventRepository_SetPayoutResult_Call {
+	_c.Call.Return(b, err)
+	return _c
+}
+
+func (_c *MockEventRepository_SetPayoutResult_Call) RunAndReturn(run func(ctx context.Context, eventID string, attempt int, status dto.PayoutStatus, amountRupiah int64, providerRef string, reason string) (bool, error)) *MockEventRepository_SetPayoutResult_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UpdateEvent provides a mock function for the type MockEventRepository
 func (_mock *MockEventRepository) UpdateEvent(ctx context.Context, event *domain.Event) error {
 	ret := _mock.Called(ctx, event)
@@ -710,112 +1175,59 @@ func (_c *MockEventRepository_UpdateEvent_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
-// FindPayoutAccount provides a mock function for the type MockEventRepository
-func (_mock *MockEventRepository) FindPayoutAccount(ctx context.Context, organizerID string) (*domain.OrganizerPayoutAccount, error) {
-	ret := _mock.Called(ctx, organizerID)
-	if len(ret) == 0 {
-		panic("no return value specified for FindPayoutAccount")
-	}
-	var r0 *domain.OrganizerPayoutAccount
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.OrganizerPayoutAccount, error)); ok {
-		return returnFunc(ctx, organizerID)
-	}
-	if ret.Get(0) != nil {
-		r0 = ret.Get(0).(*domain.OrganizerPayoutAccount)
-	}
-	r1 = ret.Error(1)
-	return r0, r1
-}
-
-// RequestPayout provides a mock function for the type MockEventRepository
-func (_mock *MockEventRepository) RequestPayout(ctx context.Context, attempt *domain.EventPayoutAttempt, payload func(int) any) (bool, error) {
-	ret := _mock.Called(ctx, attempt, payload)
-	if len(ret) == 0 {
-		panic("no return value specified for RequestPayout")
-	}
-	var r0 bool
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *domain.EventPayoutAttempt, func(int) any) (bool, error)); ok {
-		return returnFunc(ctx, attempt, payload)
-	}
-	r0 = ret.Bool(0)
-	r1 = ret.Error(1)
-	return r0, r1
-}
-
-// ListPayoutAttempts provides a mock function for the type MockEventRepository
-func (_mock *MockEventRepository) ListPayoutAttempts(ctx context.Context, eventID string) ([]domain.EventPayoutAttempt, error) {
-	ret := _mock.Called(ctx, eventID)
-	if len(ret) == 0 {
-		panic("no return value specified for ListPayoutAttempts")
-	}
-	var r0 []domain.EventPayoutAttempt
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]domain.EventPayoutAttempt, error)); ok {
-		return returnFunc(ctx, eventID)
-	}
-	if ret.Get(0) != nil {
-		r0 = ret.Get(0).([]domain.EventPayoutAttempt)
-	}
-	r1 = ret.Error(1)
-	return r0, r1
-}
-
-// PayoutSummary provides a mock function for the type MockEventRepository
-func (_mock *MockEventRepository) PayoutSummary(ctx context.Context, eventID string) (*domain.EventPayoutSummary, error) {
-	ret := _mock.Called(ctx, eventID)
-	if len(ret) == 0 {
-		panic("no return value specified for PayoutSummary")
-	}
-	var r0 *domain.EventPayoutSummary
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.EventPayoutSummary, error)); ok {
-		return returnFunc(ctx, eventID)
-	}
-	if ret.Get(0) != nil {
-		r0 = ret.Get(0).(*domain.EventPayoutSummary)
-	}
-	r1 = ret.Error(1)
-	return r0, r1
-}
-
-// SetPayoutResult provides a mock function for the type MockEventRepository
-func (_mock *MockEventRepository) SetPayoutResult(ctx context.Context, eventID string, attempt int, status sdomain.PayoutStatus, amountRupiah int64, providerRef string, reason string) (bool, error) {
-	ret := _mock.Called(ctx, eventID, attempt, status, amountRupiah, providerRef, reason)
-	if len(ret) == 0 {
-		panic("no return value specified for SetPayoutResult")
-	}
-	var r0 bool
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, sdomain.PayoutStatus, int64, string, string) (bool, error)); ok {
-		return returnFunc(ctx, eventID, attempt, status, amountRupiah, providerRef, reason)
-	}
-	r0 = ret.Bool(0)
-	r1 = ret.Error(1)
-	return r0, r1
-}
-
 // UpsertPayoutAccount provides a mock function for the type MockEventRepository
 func (_mock *MockEventRepository) UpsertPayoutAccount(ctx context.Context, acct *domain.OrganizerPayoutAccount) error {
 	ret := _mock.Called(ctx, acct)
+
 	if len(ret) == 0 {
 		panic("no return value specified for UpsertPayoutAccount")
 	}
+
+	var r0 error
 	if returnFunc, ok := ret.Get(0).(func(context.Context, *domain.OrganizerPayoutAccount) error); ok {
-		return returnFunc(ctx, acct)
+		r0 = returnFunc(ctx, acct)
+	} else {
+		r0 = ret.Error(0)
 	}
-	return ret.Error(0)
+	return r0
 }
 
-// SetEventImage provides a mock function for the type MockEventRepository
-func (_mock *MockEventRepository) SetEventImage(ctx context.Context, eventID string, imageKey string) error {
-	ret := _mock.Called(ctx, eventID, imageKey)
-	if len(ret) == 0 {
-		panic("no return value specified for SetEventImage")
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
-		return returnFunc(ctx, eventID, imageKey)
-	}
-	return ret.Error(0)
+// MockEventRepository_UpsertPayoutAccount_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpsertPayoutAccount'
+type MockEventRepository_UpsertPayoutAccount_Call struct {
+	*mock.Call
+}
+
+// UpsertPayoutAccount is a helper method to define mock.On call
+//   - ctx context.Context
+//   - acct *domain.OrganizerPayoutAccount
+func (_e *MockEventRepository_Expecter) UpsertPayoutAccount(ctx any, acct any) *MockEventRepository_UpsertPayoutAccount_Call {
+	return &MockEventRepository_UpsertPayoutAccount_Call{Call: _e.mock.On("UpsertPayoutAccount", ctx, acct)}
+}
+
+func (_c *MockEventRepository_UpsertPayoutAccount_Call) Run(run func(ctx context.Context, acct *domain.OrganizerPayoutAccount)) *MockEventRepository_UpsertPayoutAccount_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *domain.OrganizerPayoutAccount
+		if args[1] != nil {
+			arg1 = args[1].(*domain.OrganizerPayoutAccount)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockEventRepository_UpsertPayoutAccount_Call) Return(err error) *MockEventRepository_UpsertPayoutAccount_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockEventRepository_UpsertPayoutAccount_Call) RunAndReturn(run func(ctx context.Context, acct *domain.OrganizerPayoutAccount) error) *MockEventRepository_UpsertPayoutAccount_Call {
+	_c.Call.Return(run)
+	return _c
 }

@@ -34,6 +34,24 @@ type Event struct {
 	PayoutAmountRupiah int64            `json:"payout_amount_rupiah,omitempty"`
 	PayoutRequestedAt  *time.Time       `json:"payout_requested_at,omitempty"`
 	PayoutCompletedAt  *time.Time       `json:"payout_completed_at,omitempty"`
+
+	// ConfirmedRevenueRupiah is the sum of confirmed bookings for the event —
+	// what it has earned so far. Combined with PayoutAmountRupiah it yields
+	// what is still collectable. Organizer-scoped queries only.
+	ConfirmedRevenueRupiah int64 `json:"confirmed_revenue_rupiah,omitempty"`
+}
+
+// OrganizerSummary aggregates an organizer's events for the dashboard header.
+// It is computed over every event, not one page, so paging the list cannot
+// change the figures.
+type OrganizerSummary struct {
+	// AvailableToCollect sums max(confirmed - paidOut, 0) per event, matching
+	// the per-row "Collect" amount — a failed payout stays collectable.
+	AvailableToCollect int64 `json:"available_to_collect"`
+	ConfirmedTotal     int64 `json:"confirmed_total"`
+	PaidOutTotal       int64 `json:"paid_out_total"`
+	// CollectableEvents counts events with anything left to collect.
+	CollectableEvents int `json:"collectable_events"`
 }
 
 // TicketType represents a ticket category for an event.

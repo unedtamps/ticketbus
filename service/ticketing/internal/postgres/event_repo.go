@@ -125,20 +125,42 @@ func (r *EventRepo) ListPublished(
 	return events, total, nil
 }
 
-// ListByOrganizer returns events for an organizer, including the payout view
-// fields (status/amount/timestamps) via a LEFT JOIN.
+// ListByOrganizer returns one page of an organizer's events, newest first,
+// including the payout view fields (status/amount/timestamps) and confirmed
+// revenue. Pagination is keyset on (created_at, id): pass nil for the first
+// page, then the cursor of the last row returned.
+//
+// Callers should request limit+1 rows to learn whether another page exists
+// without an extra COUNT query.
 func (r *EventRepo) ListByOrganizer(
 	ctx context.Context,
 	organizerID string,
+	limit int,
+	cursor *domain.Cursor,
 ) ([]domain.Event, error) {
 	// The payout state is aggregated over the event's attempts: paid_out if any
 	// attempt paid out, otherwise the latest attempt's status, and the amount
 	// paid out so far.
+	//
+	// The seek predicate is a row-value comparison: descending order means the
+	// next page is strictly "less than" the cursor pair. With a cursor the four
+	// placeholders are ($1 org, $2 ts, $3 id, $4 limit); without it they are
+	// ($1 org, $2 limit).
+	seek := ""
+	if cursor != nil {
+		seek = "AND (e.created_at, e.id) < ($2, $3)"
+	}
+	limitArg := "$2"
+	if cursor != nil {
+		limitArg = "$4"
+	}
+
 	rows, err := r.pool.Query(ctx, `
 		SELECT e.id, e.organizer_id, e.title, e.description, e.image_key, e.venue_name, e.venue_address,
 		       e.venue_capacity, e.start_at, e.end_at, e.status, e.created_at, e.updated_at,
 		       COALESCE(p.status, 'none'), COALESCE(p.amount, 0),
-		       p.requested_at, p.completed_at
+		       p.requested_at, p.completed_at,
+		       COALESCE(rev.confirmed, 0)
 		FROM events e
 		LEFT JOIN LATERAL (
 			SELECT
@@ -153,8 +175,17 @@ func (r *EventRepo) ListByOrganizer(
 			FROM event_payout_attempts a
 			WHERE a.event_id = e.id
 		) p ON TRUE
-		WHERE e.organizer_id=$1
-		ORDER BY e.created_at DESC`, organizerID)
+		-- Confirmed booking revenue. Subtracting the paid-out amount gives what
+		-- is still collectable. Indexed by idx_bookings_event_status.
+		LEFT JOIN LATERAL (
+			SELECT SUM(bi.total_price_rupiah) AS confirmed
+			FROM bookings b
+			JOIN booking_items bi ON bi.booking_id = b.id
+			WHERE b.event_id = e.id AND b.status = 'confirmed'
+		) rev ON TRUE
+		WHERE e.organizer_id = $1 `+seek+`
+		ORDER BY e.created_at DESC, e.id DESC
+		LIMIT `+limitArg, r.organizerArgs(organizerID, limit, cursor)...)
 	if err != nil {
 		return nil, err
 	}
@@ -182,6 +213,7 @@ func (r *EventRepo) ListByOrganizer(
 			&e.PayoutAmountRupiah,
 			&e.PayoutRequestedAt,
 			&e.PayoutCompletedAt,
+			&e.ConfirmedRevenueRupiah,
 		); err != nil {
 			return nil, err
 		}
@@ -190,6 +222,60 @@ func (r *EventRepo) ListByOrganizer(
 		events = append(events, e)
 	}
 	return events, rows.Err()
+}
+
+// organizerArgs builds the placeholder values for ListByOrganizer. The cursor
+// shifts the limit placeholder from $2 to $4, so the two orderings are kept in
+// one place instead of scattered through the query builder.
+func (r *EventRepo) organizerArgs(organizerID string, limit int, cursor *domain.Cursor) []any {
+	if cursor == nil {
+		return []any{organizerID, limit}
+	}
+	return []any{organizerID, cursor.CreatedAt, cursor.ID, limit}
+}
+
+// OrganizerSummary aggregates every event an organizer owns: confirmed
+// revenue, amount already paid out, what is still collectable, and counts.
+//
+// This is deliberately separate from ListByOrganizer so the dashboard header
+// stays correct while the event list is paginated. GREATEST(0, confirmed -
+// paid_out) matches the per-row clamp the client applies, so the sum can never
+// disagree with the rows beneath it.
+func (r *EventRepo) OrganizerSummary(
+	ctx context.Context,
+	organizerID string,
+) (*domain.OrganizerSummary, error) {
+	var s domain.OrganizerSummary
+	err := r.pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(x.confirmed), 0),
+		       COALESCE(SUM(x.paid_out), 0),
+		       COALESCE(SUM(GREATEST(0, x.confirmed - x.paid_out)), 0),
+		       COUNT(*) FILTER (WHERE x.confirmed > x.paid_out)
+		FROM (
+			SELECT COALESCE((
+			           SELECT SUM(bi.total_price_rupiah)
+			           FROM bookings b
+			           JOIN booking_items bi ON bi.booking_id = b.id
+			           WHERE b.event_id = e.id AND b.status = 'confirmed'
+			       ), 0) AS confirmed,
+			       COALESCE((
+			           SELECT SUM(a.amount_rupiah)
+			           FROM event_payout_attempts a
+			           WHERE a.event_id = e.id AND a.status = 'paid_out'
+			       ), 0) AS paid_out
+			FROM events e
+			WHERE e.organizer_id = $1
+		) x`, organizerID,
+	).Scan(
+		&s.ConfirmedTotal,
+		&s.PaidOutTotal,
+		&s.AvailableToCollect,
+		&s.CollectableEvents,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
 }
 
 // ListPending returns pending events with pagination.

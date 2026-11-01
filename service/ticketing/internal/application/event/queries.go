@@ -30,12 +30,24 @@ func (s *EventService) ListPublished(
 	return s.repo.ListPublished(ctx, limit, offset)
 }
 
-// ListByOrganizer returns events belonging to an organizer.
+// ListByOrganizer returns a page of an organizer's events, newest first.
+// cursor is nil for the first page.
 func (s *EventService) ListByOrganizer(
 	ctx context.Context,
 	organizerID string,
+	limit int,
+	cursor *domain.Cursor,
 ) ([]domain.Event, error) {
-	return s.repo.ListByOrganizer(ctx, organizerID)
+	return s.repo.ListByOrganizer(ctx, organizerID, limit, cursor)
+}
+
+// OrganizerSummary aggregates figures across all of an organizer's events, so
+// the dashboard header stays correct while the list is paginated.
+func (s *EventService) OrganizerSummary(
+	ctx context.Context,
+	organizerID string,
+) (*domain.OrganizerSummary, error) {
+	return s.repo.OrganizerSummary(ctx, organizerID)
 }
 
 // ListPending returns pending events with pagination (admin).

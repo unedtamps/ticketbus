@@ -128,8 +128,17 @@ class ApiClient {
     return json?.data !== undefined ? (json.data as T) : (json as unknown as T);
   }
 
-  get<T>(path: string) {
-    return this.request<T>(path);
+  // params is optional so callers don't have to hand-build query strings
+  // (which risks double-encoding a cursor).
+  get<T>(path: string, params?: Record<string, string | number>) {
+    if (!params) return this.request<T>(path);
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v === "" || v === undefined || v === null) continue;
+      qs.set(k, String(v));
+    }
+    const query = qs.toString();
+    return this.request<T>(query ? `${path}?${query}` : path);
   }
   post<T>(path: string, body?: unknown) {
     return this.request<T>(path, {

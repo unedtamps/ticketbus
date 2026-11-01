@@ -90,6 +90,28 @@ type OrganizerEventResponse struct {
 	PayoutAmountRupiah int64      `json:"payout_amount_rupiah"`
 	PayoutRequestedAt  *time.Time `json:"payout_requested_at,omitempty"`
 	PayoutCompletedAt  *time.Time `json:"payout_completed_at,omitempty"`
+	// ConfirmedRevenueRupiah is the event's confirmed booking revenue. The
+	// still-collectable amount is this minus PayoutAmountRupiah; the client
+	// derives it so both figures stay visible.
+	ConfirmedRevenueRupiah int64 `json:"confirmed_revenue_rupiah"`
+}
+
+// OrganizerEventListResponse is one page of an organizer's events plus the
+// aggregate figures for the whole account. The summary is not page-scoped, so
+// the dashboard header stays correct while the list pages.
+type OrganizerEventListResponse struct {
+	Events []OrganizerEventResponse `json:"events"`
+	// NextCursor is opaque. Empty means this is the last page.
+	NextCursor string                   `json:"next_cursor"`
+	Summary    OrganizerSummaryResponse `json:"summary"`
+}
+
+// OrganizerSummaryResponse aggregates an organizer's whole event set.
+type OrganizerSummaryResponse struct {
+	AvailableToCollect int64 `json:"available_to_collect"`
+	ConfirmedTotal     int64 `json:"confirmed_total"`
+	PaidOutTotal       int64 `json:"paid_out_total"`
+	CollectableEvents  int   `json:"collectable_events"`
 }
 
 // PayoutAccountRequest is the EO payout destination.

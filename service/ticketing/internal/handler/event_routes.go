@@ -47,6 +47,8 @@ func (h *EventHandler) Routes(r chi.Router) chi.Router {
 		r.With(sharedhttp.RequireRole(sdomain.RoleAdmin)).
 			Post("/api/events/{id}/reject", h.RejectEvent)
 		r.With(sharedhttp.RequireRole(sdomain.RoleAdmin)).
+			Post("/api/admin/events/{id}/cancel", h.AdminCancelEvent)
+		r.With(sharedhttp.RequireRole(sdomain.RoleAdmin)).
 			Post("/api/admin/events/{id}/cancel-reprocess", h.ReprocessCancellation)
 	})
 

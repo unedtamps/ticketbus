@@ -325,6 +325,63 @@ func TestCancelEvent_Success(t *testing.T) {
 	assert.Equal(t, sdomain.EventStatusCancelled, cancelled.Status)
 }
 
+// TestCancelEvent_AfterEnd_RejectedAsOrganizer covers the self-dealing case:
+// an organizer who cancels a finished event would collect its payout and get
+// every purchase refunded. Past end_at, cancellation is admin-only.
+func TestCancelEvent_AfterEnd_RejectedAsOrganizer(t *testing.T) {
+	repo := mocks.NewMockEventRepository(t)
+	seatReader := mocks.NewMockSeatReader(t)
+	ctx := context.Background()
+	past := time.Now().Add(-time.Hour)
+	event := fixtures.NewTestEvent(
+		fixtures.WithEventStatus(sdomain.EventStatusPublished),
+		fixtures.WithEventOrganizerID("org-1"),
+		fixtures.WithEventStartAt(past.Add(-2*time.Hour)),
+		fixtures.WithEventEndAt(past),
+	)
+	repo.EXPECT().FindEventByID(ctx, event.ID).Return(event, nil)
+	svc := newEventService(t, repo, seatReader)
+
+	_, err := svc.CancelEvent(ctx, event.ID, "org-1")
+	assert.ErrorIs(t, err, domain.ErrCancelAfterEnd)
+}
+
+// TestCancelEventAsAdmin_AfterEnd_Succeeds covers the escape hatch: the admin
+// path carries no organizer earnings, so it may cancel a finished event.
+func TestCancelEventAsAdmin_AfterEnd_Succeeds(t *testing.T) {
+	repo := mocks.NewMockEventRepository(t)
+	seatReader := mocks.NewMockSeatReader(t)
+	ctx := context.Background()
+	past := time.Now().Add(-time.Hour)
+	event := fixtures.NewTestEvent(
+		fixtures.WithEventStatus(sdomain.EventStatusPublished),
+		fixtures.WithEventOrganizerID("org-1"),
+		fixtures.WithEventStartAt(past.Add(-2*time.Hour)),
+		fixtures.WithEventEndAt(past),
+	)
+	repo.EXPECT().FindEventByID(ctx, event.ID).Return(event, nil)
+	repo.EXPECT().UpdateEvent(ctx, mock.AnythingOfType("*domain.Event")).Return(nil)
+	svc := newEventService(t, repo, seatReader)
+
+	cancelled, err := svc.CancelEventAsAdmin(ctx, event.ID)
+	require.NoError(t, err)
+	assert.Equal(t, sdomain.EventStatusCancelled, cancelled.Status)
+}
+
+// TestCancelEventAsAdmin_NotPublished confirms the admin path still refuses an
+// event that is not live, so it cannot be used to cancel a draft.
+func TestCancelEventAsAdmin_NotPublished(t *testing.T) {
+	repo := mocks.NewMockEventRepository(t)
+	seatReader := mocks.NewMockSeatReader(t)
+	ctx := context.Background()
+	event := fixtures.NewTestEvent(fixtures.WithEventStatus(sdomain.EventStatusDraft))
+	repo.EXPECT().FindEventByID(ctx, event.ID).Return(event, nil)
+	svc := newEventService(t, repo, seatReader)
+
+	_, err := svc.CancelEventAsAdmin(ctx, event.ID)
+	assert.ErrorIs(t, err, domain.ErrEventNotCancellable)
+}
+
 func TestCancelEvent_NotFound(t *testing.T) {
 	repo := mocks.NewMockEventRepository(t)
 	seatReader := mocks.NewMockSeatReader(t)

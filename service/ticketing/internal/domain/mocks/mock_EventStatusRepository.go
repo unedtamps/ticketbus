@@ -38,6 +38,84 @@ func (_m *MockEventStatusRepository) EXPECT() *MockEventStatusRepository_Expecte
 	return &MockEventStatusRepository_Expecter{mock: &_m.Mock}
 }
 
+// EventWindow provides a mock function for the type MockEventStatusRepository
+func (_mock *MockEventStatusRepository) EventWindow(ctx context.Context, eventID string) (string, time.Time, time.Time, error) {
+	ret := _mock.Called(ctx, eventID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for EventWindow")
+	}
+
+	var r0 string
+	var r1 time.Time
+	var r2 time.Time
+	var r3 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (string, time.Time, time.Time, error)); ok {
+		return returnFunc(ctx, eventID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) string); ok {
+		r0 = returnFunc(ctx, eventID)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) time.Time); ok {
+		r1 = returnFunc(ctx, eventID)
+	} else {
+		r1 = ret.Get(1).(time.Time)
+	}
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string) time.Time); ok {
+		r2 = returnFunc(ctx, eventID)
+	} else {
+		r2 = ret.Get(2).(time.Time)
+	}
+	if returnFunc, ok := ret.Get(3).(func(context.Context, string) error); ok {
+		r3 = returnFunc(ctx, eventID)
+	} else {
+		r3 = ret.Error(3)
+	}
+	return r0, r1, r2, r3
+}
+
+// MockEventStatusRepository_EventWindow_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'EventWindow'
+type MockEventStatusRepository_EventWindow_Call struct {
+	*mock.Call
+}
+
+// EventWindow is a helper method to define mock.On call
+//   - ctx context.Context
+//   - eventID string
+func (_e *MockEventStatusRepository_Expecter) EventWindow(ctx any, eventID any) *MockEventStatusRepository_EventWindow_Call {
+	return &MockEventStatusRepository_EventWindow_Call{Call: _e.mock.On("EventWindow", ctx, eventID)}
+}
+
+func (_c *MockEventStatusRepository_EventWindow_Call) Run(run func(ctx context.Context, eventID string)) *MockEventStatusRepository_EventWindow_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockEventStatusRepository_EventWindow_Call) Return(status string, startAt time.Time, endAt time.Time, err error) *MockEventStatusRepository_EventWindow_Call {
+	_c.Call.Return(status, startAt, endAt, err)
+	return _c
+}
+
+func (_c *MockEventStatusRepository_EventWindow_Call) RunAndReturn(run func(ctx context.Context, eventID string) (string, time.Time, time.Time, error)) *MockEventStatusRepository_EventWindow_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // IsPublished provides a mock function for the type MockEventStatusRepository
 func (_mock *MockEventStatusRepository) IsPublished(ctx context.Context, eventID string) (bool, error) {
 	ret := _mock.Called(ctx, eventID)
@@ -100,66 +178,6 @@ func (_c *MockEventStatusRepository_IsPublished_Call) Return(b bool, err error) 
 }
 
 func (_c *MockEventStatusRepository_IsPublished_Call) RunAndReturn(run func(ctx context.Context, eventID string) (bool, error)) *MockEventStatusRepository_IsPublished_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// EventWindow provides a mock function for the type MockEventStatusRepository
-func (_mock *MockEventStatusRepository) EventWindow(ctx context.Context, eventID string) (string, time.Time, time.Time, error) {
-	ret := _mock.Called(ctx, eventID)
-	if len(ret) == 0 {
-		panic("no return value specified for EventWindow")
-	}
-	var r0 string
-	var r1 time.Time
-	var r2 time.Time
-	var r3 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (string, time.Time, time.Time, error)); ok {
-		return returnFunc(ctx, eventID)
-	}
-	r0 = ret.String(0)
-	r1 = ret.Get(1).(time.Time)
-	r2 = ret.Get(2).(time.Time)
-	r3 = ret.Error(3)
-	return r0, r1, r2, r3
-}
-
-// MockEventStatusRepository_EventWindow_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'EventWindow'
-type MockEventStatusRepository_EventWindow_Call struct {
-	*mock.Call
-}
-
-// EventWindow is a helper method to define mock.On call
-//   - ctx context.Context
-//   - eventID string
-func (_e *MockEventStatusRepository_Expecter) EventWindow(ctx any, eventID any) *MockEventStatusRepository_EventWindow_Call {
-	return &MockEventStatusRepository_EventWindow_Call{Call: _e.mock.On("EventWindow", ctx, eventID)}
-}
-
-func (_c *MockEventStatusRepository_EventWindow_Call) Run(run func(ctx context.Context, eventID string)) *MockEventStatusRepository_EventWindow_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockEventStatusRepository_EventWindow_Call) Return(status string, startAt time.Time, endAt time.Time, err error) *MockEventStatusRepository_EventWindow_Call {
-	_c.Call.Return(status, startAt, endAt, err)
-	return _c
-}
-
-func (_c *MockEventStatusRepository_EventWindow_Call) RunAndReturn(run func(ctx context.Context, eventID string) (string, time.Time, time.Time, error)) *MockEventStatusRepository_EventWindow_Call {
 	_c.Call.Return(run)
 	return _c
 }

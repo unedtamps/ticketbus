@@ -7,8 +7,8 @@ package mocks
 import (
 	"context"
 
-	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
 	mock "github.com/stretchr/testify/mock"
+	"github.com/unedtamps/ticketbus/pkg/dto"
 )
 
 // NewMockEventConsumer creates a new instance of MockEventConsumer. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
@@ -220,6 +220,52 @@ func (_c *MockEventConsumer_OnPaymentExpired_Call) RunAndReturn(run func(ctx con
 	return _c
 }
 
+// OnPayoutCompleted provides a mock function for the type MockEventConsumer
+func (_mock *MockEventConsumer) OnPayoutCompleted(ctx context.Context, fn func(ctx context.Context, evt dto.PayoutCompleted) error) {
+	_mock.Called(ctx, fn)
+	return
+}
+
+// MockEventConsumer_OnPayoutCompleted_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OnPayoutCompleted'
+type MockEventConsumer_OnPayoutCompleted_Call struct {
+	*mock.Call
+}
+
+// OnPayoutCompleted is a helper method to define mock.On call
+//   - ctx context.Context
+//   - fn func(ctx context.Context, evt dto.PayoutCompleted) error
+func (_e *MockEventConsumer_Expecter) OnPayoutCompleted(ctx any, fn any) *MockEventConsumer_OnPayoutCompleted_Call {
+	return &MockEventConsumer_OnPayoutCompleted_Call{Call: _e.mock.On("OnPayoutCompleted", ctx, fn)}
+}
+
+func (_c *MockEventConsumer_OnPayoutCompleted_Call) Run(run func(ctx context.Context, fn func(ctx context.Context, evt dto.PayoutCompleted) error)) *MockEventConsumer_OnPayoutCompleted_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 func(ctx context.Context, evt dto.PayoutCompleted) error
+		if args[1] != nil {
+			arg1 = args[1].(func(ctx context.Context, evt dto.PayoutCompleted) error)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockEventConsumer_OnPayoutCompleted_Call) Return() *MockEventConsumer_OnPayoutCompleted_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockEventConsumer_OnPayoutCompleted_Call) RunAndReturn(run func(ctx context.Context, fn func(ctx context.Context, evt dto.PayoutCompleted) error)) *MockEventConsumer_OnPayoutCompleted_Call {
+	_c.Run(run)
+	return _c
+}
+
 // Start provides a mock function for the type MockEventConsumer
 func (_mock *MockEventConsumer) Start(ctx context.Context) error {
 	ret := _mock.Called(ctx)
@@ -269,9 +315,4 @@ func (_c *MockEventConsumer_Start_Call) Return(err error) *MockEventConsumer_Sta
 func (_c *MockEventConsumer_Start_Call) RunAndReturn(run func(ctx context.Context) error) *MockEventConsumer_Start_Call {
 	_c.Call.Return(run)
 	return _c
-}
-
-// OnPayoutCompleted provides a mock function for the type MockEventConsumer
-func (_mock *MockEventConsumer) OnPayoutCompleted(ctx context.Context, fn func(ctx context.Context, evt sdomain.PayoutCompleted) error) {
-	_mock.Called(ctx, fn)
 }

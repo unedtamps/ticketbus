@@ -9,6 +9,11 @@ var (
 	ErrEventNotEditable    = errors.New("event is not in an editable state")
 	ErrEventNotApprovable  = errors.New("only pending events can be approved or rejected")
 	ErrEventNotCancellable = errors.New("only published events can be cancelled")
+	// ErrCancelAfterEnd separates the two cancellation paths: until the event
+	// ends the organizer may still cancel it, afterwards only an admin may.
+	// An organizer who could cancel a finished event would both collect the
+	// payout and get every ticket refunded.
+	ErrCancelAfterEnd      = errors.New("an ended event can only be cancelled by an admin")
 	ErrEventNotCancelled   = errors.New("only cancelled events can be reprocessed")
 	ErrEventNotPayoutable  = errors.New("event is not eligible for payout")
 	ErrEventNotEnded       = errors.New("event has not ended yet")

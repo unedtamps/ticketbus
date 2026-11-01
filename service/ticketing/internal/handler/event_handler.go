@@ -232,20 +232,10 @@ func (h *EventHandler) RejectEvent(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// CancelEvent handles POST /events/:id/cancel.
-func (h *EventHandler) CancelEvent(w http.ResponseWriter, r *http.Request) {
-	eventID := chi.URLParam(r, "id")
-	userID := sharedhttp.UserIDFromContext(r.Context())
-	event, err := h.svc.CancelEvent(r.Context(), eventID, userID)
-	if err != nil {
-		if errors.Is(err, domain.ErrEventNotFound) {
-			sharedhttp.NotFound(w, err.Error())
-			return
-		}
-		sharedhttp.BadRequest(w, err.Error())
-		return
-	}
-	sharedhttp.OK(w, EventResponse{
+// eventResponse maps an event onto the wire shape, including the resolved
+// image URL. Single place so the cancel paths and the CRUD paths cannot drift.
+func (h *EventHandler) eventResponse(event *domain.Event) EventResponse {
+	return EventResponse{
 		ID:            event.ID,
 		OrganizerID:   event.OrganizerID,
 		VenueName:     event.VenueName,
@@ -259,7 +249,47 @@ func (h *EventHandler) CancelEvent(w http.ResponseWriter, r *http.Request) {
 		Status:        event.Status,
 		CreatedAt:     event.CreatedAt,
 		UpdatedAt:     event.UpdatedAt,
-	})
+	}
+}
+
+// CancelEvent handles POST /events/:id/cancel (organizer).
+func (h *EventHandler) CancelEvent(w http.ResponseWriter, r *http.Request) {
+	eventID := chi.URLParam(r, "id")
+	userID := sharedhttp.UserIDFromContext(r.Context())
+	event, err := h.svc.CancelEvent(r.Context(), eventID, userID)
+	if err != nil {
+		if errors.Is(err, domain.ErrEventNotFound) {
+			sharedhttp.NotFound(w, err.Error())
+			return
+		}
+		// An ended event is not an invalid request — it is a request the
+		// organizer is not allowed to make. 403 makes that distinction clear
+		// so the dashboard can point them at support instead of showing a
+		// validation error.
+		if errors.Is(err, domain.ErrCancelAfterEnd) {
+			sharedhttp.Error(w, http.StatusForbidden, err.Error())
+			return
+		}
+		sharedhttp.BadRequest(w, err.Error())
+		return
+	}
+	sharedhttp.OK(w, h.eventResponse(event))
+}
+
+// AdminCancelEvent handles POST /api/admin/events/:id/cancel. It is the only
+// way to cancel an event that has already ended.
+func (h *EventHandler) AdminCancelEvent(w http.ResponseWriter, r *http.Request) {
+	eventID := chi.URLParam(r, "id")
+	event, err := h.svc.CancelEventAsAdmin(r.Context(), eventID)
+	if err != nil {
+		if errors.Is(err, domain.ErrEventNotFound) {
+			sharedhttp.NotFound(w, err.Error())
+			return
+		}
+		sharedhttp.BadRequest(w, err.Error())
+		return
+	}
+	sharedhttp.OK(w, h.eventResponse(event))
 }
 
 // ReprocessCancellation handles POST /events/:id/cancel-reprocess (EO or

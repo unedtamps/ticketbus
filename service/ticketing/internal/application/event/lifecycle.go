@@ -68,7 +68,14 @@ func (s *EventService) RejectEvent(
 	return event, nil
 }
 
-// CancelEvent cancels a published event.
+// CancelEvent cancels a published event as its organizer.
+//
+// Only allowed before the event's end_at. Once an event has run, the organizer
+// has collected (or can collect) its earnings, so letting them cancel it would
+// refund every buyer out of the platform's pocket while the organizer kept the
+// payout — self-dealing that is indistinguishable from fraud. An admin can
+// still cancel afterwards (CancelEventAsAdmin) for genuine cases such as a
+// cancelled post-show or a chargeback investigation.
 func (s *EventService) CancelEvent(
 	ctx context.Context,
 	eventID, userID string,
@@ -83,6 +90,32 @@ func (s *EventService) CancelEvent(
 	if event.OrganizerID != userID {
 		return nil, domain.ErrNotEventOwner
 	}
+	if !time.Now().Before(event.EndAt) {
+		return nil, domain.ErrCancelAfterEnd
+	}
+	return s.cancel(ctx, event)
+}
+
+// CancelEventAsAdmin cancels a published event regardless of whether it has
+// already ended. The admin path carries no organizer earnings to protect, so
+// it is the only way to cancel a finished event.
+func (s *EventService) CancelEventAsAdmin(
+	ctx context.Context,
+	eventID string,
+) (*domain.Event, error) {
+	event, err := s.repo.FindEventByID(ctx, eventID)
+	if err != nil {
+		return nil, domain.ErrEventNotFound
+	}
+	if event.Status != sdomain.EventStatusPublished {
+		return nil, domain.ErrEventNotCancellable
+	}
+	return s.cancel(ctx, event)
+}
+
+// cancel applies the cancellation and announces it, shared by both entry
+// points so the two paths cannot drift.
+func (s *EventService) cancel(ctx context.Context, event *domain.Event) (*domain.Event, error) {
 	event.Status = sdomain.EventStatusCancelled
 	event.UpdatedAt = time.Now()
 	if err := s.repo.UpdateEvent(ctx, event); err != nil {

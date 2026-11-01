@@ -7,8 +7,8 @@ package mocks
 import (
 	"context"
 
-	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 	mock "github.com/stretchr/testify/mock"
+	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
 // NewMockBookingRepository creates a new instance of MockBookingRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

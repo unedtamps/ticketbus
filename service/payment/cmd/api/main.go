@@ -102,7 +102,6 @@ func main() {
 		outboxStore,
 		logger,
 		cfg.Provider,
-		cfg.GatewayExpiryBufferMin,
 		cfg.EnabledMethods(),
 	)
 

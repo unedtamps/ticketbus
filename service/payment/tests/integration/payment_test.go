@@ -136,15 +136,18 @@ func TestPayment_Initiate_StaysPendingWithoutWebhook(t *testing.T) {
 	assert.Equal(t, "pending", ps.Data.Status)
 }
 
-func TestPayment_Initiate_Rejected_LessThanMinute(t *testing.T) {
+// TestPayment_Initiate_Rejected_LessThanGatewayMinimum verifies a session is
+// refused once less than the gateway's ten-minute minimum remains: the hold and
+// the session end together, so a shorter session could not be issued and a
+// longer one would outlive the seats.
+func TestPayment_Initiate_Rejected_LessThanGatewayMinimum(t *testing.T) {
 	env := getTestEnv()
 	c := newCustomer()
 	bookingID := newBookingID()
 	env.seedTxn(t, c, bookingID, newEventID(), defaultAmount, time.Hour)
 
-	// Leave less than the one-minute floor the handler enforces.
 	_, err := env.payPool.Exec(context.Background(),
-		`UPDATE transactions SET expires_at = NOW() + INTERVAL '30 seconds' WHERE booking_id = $1`, bookingID)
+		`UPDATE transactions SET expires_at = NOW() + INTERVAL '9 minutes' WHERE booking_id = $1`, bookingID)
 	require.NoError(t, err)
 
 	resp, body, err := doJSON(http.MethodPost, env.payURL+"/api/payments/booking/"+bookingID, nil, c.headers)

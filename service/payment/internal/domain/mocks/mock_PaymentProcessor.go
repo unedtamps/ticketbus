@@ -96,6 +96,74 @@ func (_c *MockPaymentProcessor_CancelSession_Call) RunAndReturn(run func(ctx con
 	return _c
 }
 
+// CreatePayout provides a mock function for the type MockPaymentProcessor
+func (_mock *MockPaymentProcessor) CreatePayout(ctx context.Context, req domain.PayoutRequest) (*domain.PayoutResult, error) {
+	ret := _mock.Called(ctx, req)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreatePayout")
+	}
+
+	var r0 *domain.PayoutResult
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.PayoutRequest) (*domain.PayoutResult, error)); ok {
+		return returnFunc(ctx, req)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.PayoutRequest) *domain.PayoutResult); ok {
+		r0 = returnFunc(ctx, req)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.PayoutResult)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, domain.PayoutRequest) error); ok {
+		r1 = returnFunc(ctx, req)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockPaymentProcessor_CreatePayout_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreatePayout'
+type MockPaymentProcessor_CreatePayout_Call struct {
+	*mock.Call
+}
+
+// CreatePayout is a helper method to define mock.On call
+//   - ctx context.Context
+//   - req domain.PayoutRequest
+func (_e *MockPaymentProcessor_Expecter) CreatePayout(ctx any, req any) *MockPaymentProcessor_CreatePayout_Call {
+	return &MockPaymentProcessor_CreatePayout_Call{Call: _e.mock.On("CreatePayout", ctx, req)}
+}
+
+func (_c *MockPaymentProcessor_CreatePayout_Call) Run(run func(ctx context.Context, req domain.PayoutRequest)) *MockPaymentProcessor_CreatePayout_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 domain.PayoutRequest
+		if args[1] != nil {
+			arg1 = args[1].(domain.PayoutRequest)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockPaymentProcessor_CreatePayout_Call) Return(payoutResult *domain.PayoutResult, err error) *MockPaymentProcessor_CreatePayout_Call {
+	_c.Call.Return(payoutResult, err)
+	return _c
+}
+
+func (_c *MockPaymentProcessor_CreatePayout_Call) RunAndReturn(run func(ctx context.Context, req domain.PayoutRequest) (*domain.PayoutResult, error)) *MockPaymentProcessor_CreatePayout_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CreateSession provides a mock function for the type MockPaymentProcessor
 func (_mock *MockPaymentProcessor) CreateSession(ctx context.Context, refID string, amountRupiah int, currency string, expiresAt time.Time, allowedChannels []string, email string) (*domain.SessionResult, error) {
 	ret := _mock.Called(ctx, refID, amountRupiah, currency, expiresAt, allowedChannels, email)
@@ -194,6 +262,74 @@ func (_c *MockPaymentProcessor_CreateSession_Call) RunAndReturn(run func(ctx con
 	return _c
 }
 
+// GetPayout provides a mock function for the type MockPaymentProcessor
+func (_mock *MockPaymentProcessor) GetPayout(ctx context.Context, payoutID string) (*domain.PayoutResult, error) {
+	ret := _mock.Called(ctx, payoutID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetPayout")
+	}
+
+	var r0 *domain.PayoutResult
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.PayoutResult, error)); ok {
+		return returnFunc(ctx, payoutID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *domain.PayoutResult); ok {
+		r0 = returnFunc(ctx, payoutID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.PayoutResult)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, payoutID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockPaymentProcessor_GetPayout_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetPayout'
+type MockPaymentProcessor_GetPayout_Call struct {
+	*mock.Call
+}
+
+// GetPayout is a helper method to define mock.On call
+//   - ctx context.Context
+//   - payoutID string
+func (_e *MockPaymentProcessor_Expecter) GetPayout(ctx any, payoutID any) *MockPaymentProcessor_GetPayout_Call {
+	return &MockPaymentProcessor_GetPayout_Call{Call: _e.mock.On("GetPayout", ctx, payoutID)}
+}
+
+func (_c *MockPaymentProcessor_GetPayout_Call) Run(run func(ctx context.Context, payoutID string)) *MockPaymentProcessor_GetPayout_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockPaymentProcessor_GetPayout_Call) Return(payoutResult *domain.PayoutResult, err error) *MockPaymentProcessor_GetPayout_Call {
+	_c.Call.Return(payoutResult, err)
+	return _c
+}
+
+func (_c *MockPaymentProcessor_GetPayout_Call) RunAndReturn(run func(ctx context.Context, payoutID string) (*domain.PayoutResult, error)) *MockPaymentProcessor_GetPayout_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetSession provides a mock function for the type MockPaymentProcessor
 func (_mock *MockPaymentProcessor) GetSession(ctx context.Context, providerRef string) (*domain.SessionResult, error) {
 	ret := _mock.Called(ctx, providerRef)
@@ -260,40 +396,4 @@ func (_c *MockPaymentProcessor_GetSession_Call) Return(sessionResult *domain.Ses
 func (_c *MockPaymentProcessor_GetSession_Call) RunAndReturn(run func(ctx context.Context, providerRef string) (*domain.SessionResult, error)) *MockPaymentProcessor_GetSession_Call {
 	_c.Call.Return(run)
 	return _c
-}
-
-// CreatePayout provides a mock function for the type MockPaymentProcessor
-func (_mock *MockPaymentProcessor) CreatePayout(ctx context.Context, req domain.PayoutRequest) (*domain.PayoutResult, error) {
-	ret := _mock.Called(ctx, req)
-	if len(ret) == 0 {
-		panic("no return value specified for CreatePayout")
-	}
-	var r0 *domain.PayoutResult
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.PayoutRequest) (*domain.PayoutResult, error)); ok {
-		return returnFunc(ctx, req)
-	}
-	if ret.Get(0) != nil {
-		r0 = ret.Get(0).(*domain.PayoutResult)
-	}
-	r1 = ret.Error(1)
-	return r0, r1
-}
-
-// GetPayout provides a mock function for the type MockPaymentProcessor
-func (_mock *MockPaymentProcessor) GetPayout(ctx context.Context, payoutID string) (*domain.PayoutResult, error) {
-	ret := _mock.Called(ctx, payoutID)
-	if len(ret) == 0 {
-		panic("no return value specified for GetPayout")
-	}
-	var r0 *domain.PayoutResult
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.PayoutResult, error)); ok {
-		return returnFunc(ctx, payoutID)
-	}
-	if ret.Get(0) != nil {
-		r0 = ret.Get(0).(*domain.PayoutResult)
-	}
-	r1 = ret.Error(1)
-	return r0, r1
 }

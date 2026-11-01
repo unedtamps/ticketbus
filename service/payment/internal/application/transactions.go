@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	sdto "github.com/unedtamps/ticketbus/pkg/dto"
 	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
@@ -82,11 +83,17 @@ func (s *PaymentService) ListMyTransactions(
 	return s.txnRepo.ListByUser(ctx, userID)
 }
 
+// minGatewaySession is the shortest session the gateway accepts. Xendit rejects
+// any expiry less than ten minutes in the future, so a transaction must have
+// more than this left before a session can be created for it.
+const minGatewaySession = sdto.GatewayMinSession
+
 // ProcessPayment creates the gateway payment session for a booking and moves
-// the transaction from initiated to pending. Allowed only while at least one
-// minute of the booking hold remains and the transaction is still initiated.
-// Amount and currency come from the stored transaction, never from the
-// request.
+// the transaction from initiated to pending. The session always expires
+// exactly when the booking hold does, and is only created while more than
+// minGatewaySession remains — so the gateway never receives a session that is
+// too short, and never one that outlives the hold. Amount and currency come
+// from the stored transaction, never from the request.
 func (s *PaymentService) ProcessPayment(
 	ctx context.Context,
 	bookingID, userID string,
@@ -98,20 +105,20 @@ func (s *PaymentService) ProcessPayment(
 	if txn.Status != domain.StatusInitiated {
 		return nil, nil, domain.ErrAlreadyProcessed
 	}
-	if txn.ExpiresAt == nil || !txn.ExpiresAt.After(time.Now()) ||
-		time.Until(*txn.ExpiresAt) < time.Minute {
+	// Less than a full gateway session left: refuse rather than hand Xendit a
+	// session it would reject, or one that runs past the hold and lets the
+	// customer pay after the seats were released. The guard uses <= so the
+	// booking always keeps a positive margin over the session.
+	if txn.ExpiresAt == nil || time.Until(*txn.ExpiresAt) <= minGatewaySession {
 		return nil, nil, domain.ErrTransactionExpired
 	}
 	if txn.UserID != userID {
 		return nil, nil, domain.ErrTransactionNotFound
 	}
 
-	gatewayExpiresAt := txn.ExpiresAt.Add(-time.Duration(s.gatewayExpiryBufferMin) * time.Minute)
-	if minGatewayExpiry := time.Now().Add(10 * time.Minute); gatewayExpiresAt.Before(minGatewayExpiry) {
-		// Xendit requires the session expiry to be at least 10 minutes in the
-		// future; a late retry of the same booking would otherwise be rejected.
-		gatewayExpiresAt = minGatewayExpiry
-	}
+	// The session expires with the hold, so the customer is never able to pay
+	// after their seats are released back to the pool.
+	gatewayExpiresAt := *txn.ExpiresAt
 	result, err := s.processor.CreateSession(
 		ctx,
 		bookingID,

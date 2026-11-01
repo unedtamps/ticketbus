@@ -261,7 +261,6 @@ services:
       XENDIT_BASE_URL: https://api.xendit.co
       WEBHOOK_CALLBACK_TOKEN: e2e-callback-token
       INTERNAL_API_KEY: e2e-internal-key
-      GATEWAY_EXPIRY_BUFFER_MIN: "5"
       EXPIRY_POLL_SEC: "1"
       PAYMENT_METHODS: ID_QRIS,ID_BCA_VA
     depends_on:

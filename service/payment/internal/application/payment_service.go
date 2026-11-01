@@ -9,16 +9,15 @@ import (
 
 // PaymentService orchestrates payment operations.
 type PaymentService struct {
-	txnRepo                domain.TransactionRepository
-	refundRepo             domain.RefundRepository
-	payoutRepo             domain.PayoutRepository
-	processor              domain.PaymentProcessor
-	consumer               domain.EventConsumer
-	outbox                 outbox.StoreInterface
-	logger                 *slog.Logger
-	provider               string
-	gatewayExpiryBufferMin int
-	allowedChannels        []string
+	txnRepo         domain.TransactionRepository
+	refundRepo      domain.RefundRepository
+	payoutRepo      domain.PayoutRepository
+	processor       domain.PaymentProcessor
+	consumer        domain.EventConsumer
+	outbox          outbox.StoreInterface
+	logger          *slog.Logger
+	provider        string
+	allowedChannels []string
 }
 
 // NewPaymentService creates a new PaymentService.
@@ -31,19 +30,17 @@ func NewPaymentService(
 	ob outbox.StoreInterface,
 	logger *slog.Logger,
 	provider string,
-	gatewayExpiryBufferMin int,
 	allowedChannels []string,
 ) *PaymentService {
 	return &PaymentService{
-		txnRepo:                txnRepo,
-		refundRepo:             refundRepo,
-		payoutRepo:             payoutRepo,
-		processor:              processor,
-		consumer:               consumer,
-		outbox:                 ob,
-		logger:                 logger,
-		provider:               provider,
-		gatewayExpiryBufferMin: gatewayExpiryBufferMin,
-		allowedChannels:        allowedChannels,
+		txnRepo:         txnRepo,
+		refundRepo:      refundRepo,
+		payoutRepo:      payoutRepo,
+		processor:       processor,
+		consumer:        consumer,
+		outbox:          ob,
+		logger:          logger,
+		provider:        provider,
+		allowedChannels: allowedChannels,
 	}
 }

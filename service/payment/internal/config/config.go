@@ -45,10 +45,10 @@ type Config struct {
 	// Internal service-to-service auth (must match the ticketing service).
 	InternalAPIKey string `env:"INTERNAL_API_KEY,required,notEmpty"`
 
-	// Expiry: the gateway payment session expires this many minutes before
-	// the booking deadline so its webhook lands before our own poll.
-	GatewayExpiryBufferMin int `env:"GATEWAY_EXPIRY_BUFFER_MIN,required,notEmpty"`
-	ExpiryPollSec          int `env:"EXPIRY_POLL_SEC,required,notEmpty"`
+	// ExpiryPollSec is how often the sweeper wakes to expire transactions the
+	// gateway will never report on (those the customer never opened a session
+	// for, plus sessions whose webhook was lost).
+	ExpiryPollSec int `env:"EXPIRY_POLL_SEC,required,notEmpty"`
 
 	// Optional payment channel list (comma-separated Xendit channel codes).
 	// Not sent to Xendit anymore — the gateway enables all channels activated
@@ -88,9 +88,6 @@ func (c *Config) Validate() error {
 		if c.XenditAPIKey == "" {
 			return fmt.Errorf("XENDIT_API_KEY is required when PROVIDER=xendit")
 		}
-	}
-	if c.GatewayExpiryBufferMin < 0 {
-		return fmt.Errorf("GATEWAY_EXPIRY_BUFFER_MIN must be >= 0, got %d", c.GatewayExpiryBufferMin)
 	}
 	if c.ExpiryPollSec <= 0 {
 		return fmt.Errorf("EXPIRY_POLL_SEC must be > 0, got %d", c.ExpiryPollSec)

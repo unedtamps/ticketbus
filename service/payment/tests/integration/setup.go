@@ -93,7 +93,7 @@ func startContainers() *TestEnv {
 
 	svc := payapp.NewPaymentService(
 		txnRepo, refundRepo, payoutRepo, mockProcessor, payConsumer, payOutbox,
-		logger, "mock", 5, []string{"ID_QRIS", "ID_BCA_VA"},
+		logger, "mock", []string{"ID_QRIS", "ID_BCA_VA"},
 	)
 
 	handler := payhandler.NewPaymentHandler(svc, internalKey, webhookToken)

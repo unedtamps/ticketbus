@@ -8,8 +8,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 	mock "github.com/stretchr/testify/mock"
+	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
 // NewMockTransactionRepository creates a new instance of MockTransactionRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
@@ -232,80 +232,6 @@ func (_c *MockTransactionRepository_FindByID_Call) RunAndReturn(run func(ctx con
 	return _c
 }
 
-// ListActiveExpired provides a mock function for the type MockTransactionRepository
-func (_mock *MockTransactionRepository) ListActiveExpired(ctx context.Context, now time.Time, limit int) ([]domain.Transaction, error) {
-	ret := _mock.Called(ctx, now, limit)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ListActiveExpired")
-	}
-
-	var r0 []domain.Transaction
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, int) ([]domain.Transaction, error)); ok {
-		return returnFunc(ctx, now, limit)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, int) []domain.Transaction); ok {
-		r0 = returnFunc(ctx, now, limit)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]domain.Transaction)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, time.Time, int) error); ok {
-		r1 = returnFunc(ctx, now, limit)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockTransactionRepository_ListActiveExpired_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListActiveExpired'
-type MockTransactionRepository_ListActiveExpired_Call struct {
-	*mock.Call
-}
-
-// ListActiveExpired is a helper method to define mock.On call
-//   - ctx context.Context
-//   - now time.Time
-//   - limit int
-func (_e *MockTransactionRepository_Expecter) ListActiveExpired(ctx any, now any, limit any) *MockTransactionRepository_ListActiveExpired_Call {
-	return &MockTransactionRepository_ListActiveExpired_Call{Call: _e.mock.On("ListActiveExpired", ctx, now, limit)}
-}
-
-func (_c *MockTransactionRepository_ListActiveExpired_Call) Run(run func(ctx context.Context, now time.Time, limit int)) *MockTransactionRepository_ListActiveExpired_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 time.Time
-		if args[1] != nil {
-			arg1 = args[1].(time.Time)
-		}
-		var arg2 int
-		if args[2] != nil {
-			arg2 = args[2].(int)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockTransactionRepository_ListActiveExpired_Call) Return(transactions []domain.Transaction, err error) *MockTransactionRepository_ListActiveExpired_Call {
-	_c.Call.Return(transactions, err)
-	return _c
-}
-
-func (_c *MockTransactionRepository_ListActiveExpired_Call) RunAndReturn(run func(ctx context.Context, now time.Time, limit int) ([]domain.Transaction, error)) *MockTransactionRepository_ListActiveExpired_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // ListByEventID provides a mock function for the type MockTransactionRepository
 func (_mock *MockTransactionRepository) ListByEventID(ctx context.Context, eventID string) ([]domain.Transaction, error) {
 	ret := _mock.Called(ctx, eventID)
@@ -438,6 +364,86 @@ func (_c *MockTransactionRepository_ListByUser_Call) Return(transactions []domai
 }
 
 func (_c *MockTransactionRepository_ListByUser_Call) RunAndReturn(run func(ctx context.Context, userID string) ([]domain.Transaction, error)) *MockTransactionRepository_ListByUser_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListSweepableExpired provides a mock function for the type MockTransactionRepository
+func (_mock *MockTransactionRepository) ListSweepableExpired(ctx context.Context, now time.Time, pendingGrace time.Duration, limit int) ([]domain.Transaction, error) {
+	ret := _mock.Called(ctx, now, pendingGrace, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListSweepableExpired")
+	}
+
+	var r0 []domain.Transaction
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, time.Duration, int) ([]domain.Transaction, error)); ok {
+		return returnFunc(ctx, now, pendingGrace, limit)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, time.Duration, int) []domain.Transaction); ok {
+		r0 = returnFunc(ctx, now, pendingGrace, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]domain.Transaction)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, time.Time, time.Duration, int) error); ok {
+		r1 = returnFunc(ctx, now, pendingGrace, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockTransactionRepository_ListSweepableExpired_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListSweepableExpired'
+type MockTransactionRepository_ListSweepableExpired_Call struct {
+	*mock.Call
+}
+
+// ListSweepableExpired is a helper method to define mock.On call
+//   - ctx context.Context
+//   - now time.Time
+//   - pendingGrace time.Duration
+//   - limit int
+func (_e *MockTransactionRepository_Expecter) ListSweepableExpired(ctx any, now any, pendingGrace any, limit any) *MockTransactionRepository_ListSweepableExpired_Call {
+	return &MockTransactionRepository_ListSweepableExpired_Call{Call: _e.mock.On("ListSweepableExpired", ctx, now, pendingGrace, limit)}
+}
+
+func (_c *MockTransactionRepository_ListSweepableExpired_Call) Run(run func(ctx context.Context, now time.Time, pendingGrace time.Duration, limit int)) *MockTransactionRepository_ListSweepableExpired_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 time.Time
+		if args[1] != nil {
+			arg1 = args[1].(time.Time)
+		}
+		var arg2 time.Duration
+		if args[2] != nil {
+			arg2 = args[2].(time.Duration)
+		}
+		var arg3 int
+		if args[3] != nil {
+			arg3 = args[3].(int)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockTransactionRepository_ListSweepableExpired_Call) Return(transactions []domain.Transaction, err error) *MockTransactionRepository_ListSweepableExpired_Call {
+	_c.Call.Return(transactions, err)
+	return _c
+}
+
+func (_c *MockTransactionRepository_ListSweepableExpired_Call) RunAndReturn(run func(ctx context.Context, now time.Time, pendingGrace time.Duration, limit int) ([]domain.Transaction, error)) *MockTransactionRepository_ListSweepableExpired_Call {
 	_c.Call.Return(run)
 	return _c
 }

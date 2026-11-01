@@ -32,7 +32,7 @@ func newPaymentService(
 	t.Helper()
 	return application.NewPaymentService(
 		txnRepo, refundRepo, mocks.NewMockPayoutRepository(t), processor, consumer,
-		outbox.NoopStore{}, payLogger, "mock", 5, []string{"ID_QRIS"},
+		outbox.NoopStore{}, payLogger, "mock", []string{"ID_QRIS"},
 	)
 }
 
@@ -109,11 +109,11 @@ func TestProcessPayment_Success(t *testing.T) {
 	result := &domain.SessionResult{
 		ProviderRef:    "ps-1",
 		PaymentLinkURL: "https://checkout.example/ps-1",
-		ExpiresAt:      expiresAt.Add(-5 * time.Minute),
+		ExpiresAt:      expiresAt,
 	}
 
 	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
-	processor.EXPECT().CreateSession(ctx, "11111111-1111-4111-8111-111111111111", 10000, "IDR", expiresAt.Add(-5*time.Minute),
+	processor.EXPECT().CreateSession(ctx, "11111111-1111-4111-8111-111111111111", 10000, "IDR", expiresAt,
 		[]string{"ID_QRIS"}, "user@example.com").Return(result, nil)
 	txnRepo.EXPECT().TransitionIfInitiated(ctx, "txn-1", domain.StatusPending, "ps-1").Return(true, nil)
 	txnRepo.EXPECT().UpdateSession(ctx, "txn-1", "ps-1", "https://checkout.example/ps-1").Return(nil)
@@ -183,7 +183,7 @@ func TestProcessPayment_TransitionRace_CancelsSession(t *testing.T) {
 	result := &domain.SessionResult{ProviderRef: "ps-1", PaymentLinkURL: "https://checkout.example/ps-1"}
 
 	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
-	processor.EXPECT().CreateSession(ctx, "11111111-1111-4111-8111-111111111111", 10000, "IDR", expiresAt.Add(-5*time.Minute),
+	processor.EXPECT().CreateSession(ctx, "11111111-1111-4111-8111-111111111111", 10000, "IDR", expiresAt,
 		[]string{"ID_QRIS"}, "").Return(result, nil)
 	txnRepo.EXPECT().TransitionIfInitiated(ctx, "txn-1", domain.StatusPending, "ps-1").Return(false, nil)
 	processor.EXPECT().CancelSession(ctx, "ps-1").Return(nil)
@@ -210,22 +210,36 @@ func TestProcessPayment_Expired(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrTransactionExpired)
 }
 
-func TestProcessPayment_LessThanOneMinuteRemaining(t *testing.T) {
-	txnRepo := mocks.NewMockTransactionRepository(t)
-	svc := newPaymentServiceDefaults(t, txnRepo, mocks.NewMockPaymentProcessor(t),
-		mocks.NewMockEventConsumer(t))
-	ctx := context.Background()
-	soon := time.Now().Add(30 * time.Second)
-	txn := fixtures.NewTestTransaction(
-		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
-		fixtures.WithTransactionUserID("user-1"),
-		fixtures.WithTransactionStatus(domain.StatusInitiated),
-		fixtures.WithTransactionExpiresAt(soon),
-	)
+// TestProcessPayment_SessionShorterThanGatewayMinimum covers the guard that
+// keeps the booking hold and the gateway session aligned: whatever is left must
+// still cover a full ten-minute gateway session, so a customer is never handed
+// a session that outlives their seats — and never one Xendit would reject.
+func TestProcessPayment_SessionShorterThanGatewayMinimum(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		remaining time.Duration
+	}{
+		{"nine minutes", 9 * time.Minute},
+		{"exactly ten minutes", 10 * time.Minute},
+		{"thirty seconds", 30 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			txnRepo := mocks.NewMockTransactionRepository(t)
+			svc := newPaymentServiceDefaults(t, txnRepo, mocks.NewMockPaymentProcessor(t),
+				mocks.NewMockEventConsumer(t))
+			ctx := context.Background()
+			txn := fixtures.NewTestTransaction(
+				fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
+				fixtures.WithTransactionUserID("user-1"),
+				fixtures.WithTransactionStatus(domain.StatusInitiated),
+				fixtures.WithTransactionExpiresAt(time.Now().Add(tc.remaining)),
+			)
 
-	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
-	_, _, err := svc.ProcessPayment(ctx, "11111111-1111-4111-8111-111111111111", "user-1")
-	assert.ErrorIs(t, err, domain.ErrTransactionExpired)
+			txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
+			_, _, err := svc.ProcessPayment(ctx, "11111111-1111-4111-8111-111111111111", "user-1")
+			assert.ErrorIs(t, err, domain.ErrTransactionExpired)
+		})
+	}
 }
 
 func TestProcessPayment_WrongOwner(t *testing.T) {
@@ -469,7 +483,10 @@ func TestHandleSessionWebhook_MissingReference(t *testing.T) {
 
 // ── ProcessExpired ───────────────────────────────────────────────────────────
 
-func TestProcessExpired_WithSessionRef(t *testing.T) {
+// TestProcessExpired_LostWebhookCancelsSession covers the safety net for a
+// pending transaction whose gateway expiry webhook never arrived: the sweeper
+// cancels the orphaned session and expires the row.
+func TestProcessExpired_LostWebhookCancelsSession(t *testing.T) {
 	txnRepo := mocks.NewMockTransactionRepository(t)
 	processor := mocks.NewMockPaymentProcessor(t)
 	svc := newPaymentServiceDefaults(t, txnRepo, processor, mocks.NewMockEventConsumer(t))
@@ -483,7 +500,8 @@ func TestProcessExpired_WithSessionRef(t *testing.T) {
 		fixtures.WithTransactionExpiresAt(past),
 	)
 
-	txnRepo.EXPECT().ListActiveExpired(ctx, mock.Anything, 100).Return([]domain.Transaction{*txn}, nil)
+	txnRepo.EXPECT().ListSweepableExpired(ctx, mock.Anything, application.PendingExpiryGrace, 100).
+		Return([]domain.Transaction{*txn}, nil)
 	processor.EXPECT().CancelSession(ctx, "ps-1").Return(nil)
 	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusExpired, "ps-1").Return(true, nil)
 
@@ -491,7 +509,10 @@ func TestProcessExpired_WithSessionRef(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestProcessExpired_WithoutSessionRef_SkipsGateway(t *testing.T) {
+// TestProcessExpired_NeverInitiated_SkipsGateway covers the abandoned-cart
+// case: no session was ever created, so there is nothing to cancel at the
+// gateway and the sweeper is the only thing that frees the seats.
+func TestProcessExpired_NeverInitiated_SkipsGateway(t *testing.T) {
 	txnRepo := mocks.NewMockTransactionRepository(t)
 	processor := mocks.NewMockPaymentProcessor(t)
 	svc := newPaymentServiceDefaults(t, txnRepo, processor, mocks.NewMockEventConsumer(t))
@@ -500,12 +521,12 @@ func TestProcessExpired_WithoutSessionRef_SkipsGateway(t *testing.T) {
 	txn := fixtures.NewTestTransaction(
 		fixtures.WithTransactionID("txn-1"),
 		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
-		fixtures.WithTransactionStatus(domain.StatusPending),
+		fixtures.WithTransactionStatus(domain.StatusInitiated),
 		fixtures.WithTransactionExpiresAt(past),
 	)
 
-	txnRepo.EXPECT().ListActiveExpired(ctx, mock.Anything, 100).Return([]domain.Transaction{*txn}, nil)
-	processor.EXPECT().CancelSession(mock.Anything, mock.Anything).Maybe().Return(nil)
+	txnRepo.EXPECT().ListSweepableExpired(ctx, mock.Anything, application.PendingExpiryGrace, 100).
+		Return([]domain.Transaction{*txn}, nil)
 	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusExpired, "").Return(true, nil)
 
 	err := svc.ProcessExpired(ctx, 100)

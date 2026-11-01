@@ -27,9 +27,10 @@ type TransactionRepository interface {
 	UpdateRefundStatus(ctx context.Context, id, refundStatus string) error
 	ListByUser(ctx context.Context, userID string) ([]Transaction, error)
 	ListByEventID(ctx context.Context, eventID string) ([]Transaction, error)
-	// ListActiveExpired returns active transactions whose deadline has passed,
-	// for the expiry fallback poller.
-	ListActiveExpired(ctx context.Context, now time.Time, limit int) ([]Transaction, error)
+	// ListSweepableExpired returns transactions past their deadline that the
+	// gateway will never report on its own: never-initiated ones immediately,
+	// and initiated ones only after pendingGrace (in case a webhook was lost).
+	ListSweepableExpired(ctx context.Context, now time.Time, pendingGrace time.Duration, limit int) ([]Transaction, error)
 }
 
 // RefundRepository defines the contract for refund request persistence.

@@ -33,9 +33,10 @@ Payout → gateway uses the same outbox-rest pattern inside payment:
 Seat availability is authoritative in PostgreSQL:
   └─ ticket_types.available_seat — atomic seat counter (conditional UPDATE ... WHERE available_seat >= qty)
 
-Reservation expiry lives in the payment service:
-  └─ gateway webhook payment_session.expired (primary)
-  └─ in-process expiry poller, EXPIRY_POLL_SEC (fallback)
+Reservation expiry lives in the payment service, split by who owns the session:
+  └─ gateway webhook payment_session.expired (transaction has a live session)
+  └─ in-process expiry sweeper, EXPIRY_POLL_SEC (no session was ever created,
+     or the webhook never arrived)
 ```
 
 ## Roles
@@ -106,7 +107,7 @@ After end_at passes, the organizer can request a payout for the event
     (see Event Payouts below)
 ```
 
-`ProcessPayment` refuses to start a session when the transaction has less than a minute of life left, and clamps the gateway expiry to at least 10 minutes in the future (gateway minimum) while never exceeding `expires_at - GATEWAY_EXPIRY_BUFFER_MIN`. A session can only be created once — the `initiated → pending` transition is guarded, so a duplicate call returns `409` and voids the orphaned gateway session.
+`ProcessPayment` creates the gateway session with the transaction's own deadline (`expires_at`), so the session and the seat hold always end together and a customer can never pay after their seats were released. It refuses to start a session unless more than 10 minutes remain — the gateway's minimum session lifetime — so Xendit never receives a session it would reject. A session can only be created once: the `initiated → pending` transition is guarded, so a duplicate call returns `409` and voids the orphaned gateway session.
 
 ### Reservation window
 
@@ -121,15 +122,19 @@ published  AND  start_at <= now()  AND  now() < end_at
 - **A reservation made while the event was live stays payable afterwards.** The
   hold is `RESERVATION_TTL` from the reservation and is *not* clamped to the
   event's end, so a customer who booked at 14:19 of a 14:20 event can still pay
-  at 14:30. The gateway session always expires before the hold (session =
-  hold − `GATEWAY_EXPIRY_BUFFER_MIN`, floored at the gateway's ten-minute
-  minimum), so a payment made inside the hold is always honoured.
-- The hold, not the event's end, is what expires a booking: the payment
-  poller expires the transaction once `expires_at` passes, emits
-  `payment.expired`, and ticketing expires the booking and releases the seats.
-  A payment that arrives after the hold died is refunded (`late_payment`).
+  at 14:30. The gateway session is created with the hold's own deadline and is
+  only issued while more than the gateway's ten-minute minimum remains, so a
+  payment made inside the hold is always honoured and never outlives the seats.
+- With `RESERVATION_TTL=1800` the hold splits into a **20-minute window for the
+  customer to start a payment** and a **10-minute gateway session** behind it.
+- The hold, not the event's end, is what expires a booking, and two paths do it:
+  the gateway's own expiry webhook for a transaction with a live session, and
+  the expiry sweeper for one the customer never started (which the gateway
+  therefore knows nothing about). Either emits `payment.expired`; ticketing then
+  expires the booking and releases the seats. A payment that arrives after the
+  hold died is refunded (`late_payment`).
 - `RESERVATION_TTL` must therefore exceed the gateway's ten-minute minimum
-  session lifetime plus `GATEWAY_EXPIRY_BUFFER_MIN`.
+  session lifetime.
 - The check runs twice: the service rejects early with a precise error, and the
   booking insert inside the transaction is conditional on the event still being
   reservable — so an event cancelled in between cannot be booked.
@@ -153,8 +158,11 @@ local time elsewhere.
 
 ```
 Gateway webhook payment_session.expired → HandleSessionWebhook → outbox: payment.expired
-Fallback: in-process expiry poller (EXPIRY_POLL_SEC) cancels the gateway session, marks the
-          transaction expired, and emits payment.expired with reason=internal_expiry_fallback
+Sweeper: in-process, every EXPIRY_POLL_SEC. It owns only what the gateway will never
+         report — transactions that never got a session (swept at expires_at) and
+         sessions whose webhook is more than PendingExpiryGrace overdue. It cancels
+         any live session, marks the transaction expired, and emits payment.expired
+         with reason=internal_expiry_fallback
   ↓
 Ticketing consumes payment.expired → booking status=expired → seats released
 
@@ -313,7 +321,7 @@ below is required at startup unless marked optional.
 |---------|-------------|
 | auth | `APP_ENV`, `PORT`, `DATABASE_URL`, `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `ADMIN_SEEDS` (optional, JSON array) |
 | ticketing | `APP_ENV`, `PORT`, `DATABASE_URL`, `KAFKA_BROKERS`, `RESERVATION_TTL`, `CONSUMER_CONCURRENCY`, `OUTBOX_CONCURRENCY`, `OUTBOX_POLL_MS`, `REST_DISPATCH_POLL_MS` (optional, default 200), `PAYMENT_SERVICE_URL`, `PAYMENT_TIMEOUT_SEC`, `INTERNAL_API_KEY` |
-| payment | `APP_ENV`, `PORT`, `DATABASE_URL`, `KAFKA_BROKERS`, `WEBHOOK_BASE_URL`, `PROVIDER`, `XENDIT_BASE_URL`, `XENDIT_PAYOUT_BASE_URL` (optional, default `https://api.xendit.co`), `XENDIT_PAYOUT_PATH` (optional, default `/v2/payouts`), `PAYOUT_DISPATCH_POLL_MS` (optional, default 200), `WEBHOOK_CALLBACK_TOKEN`, `CONSUMER_CONCURRENCY`, `OUTBOX_CONCURRENCY`, `OUTBOX_POLL_MS`, `GATEWAY_EXPIRY_BUFFER_MIN`, `EXPIRY_POLL_SEC`, `INTERNAL_API_KEY`, `XENDIT_API_KEY` (required only when `PROVIDER=xendit`; needs the **MONEY-OUT** scope for payouts), `PAYMENT_METHODS` (optional) |
+| payment | `APP_ENV`, `PORT`, `DATABASE_URL`, `KAFKA_BROKERS`, `WEBHOOK_BASE_URL`, `PROVIDER`, `XENDIT_BASE_URL`, `XENDIT_PAYOUT_BASE_URL` (optional, default `https://api.xendit.co`), `XENDIT_PAYOUT_PATH` (optional, default `/v2/payouts`), `PAYOUT_DISPATCH_POLL_MS` (optional, default 200), `WEBHOOK_CALLBACK_TOKEN`, `CONSUMER_CONCURRENCY`, `OUTBOX_CONCURRENCY`, `OUTBOX_POLL_MS`, `EXPIRY_POLL_SEC`, `INTERNAL_API_KEY`, `XENDIT_API_KEY` (required only when `PROVIDER=xendit`; needs the **MONEY-OUT** scope for payouts), `PAYMENT_METHODS` (optional) |
 
 Notable values:
 
@@ -321,9 +329,8 @@ Notable values:
 |-----|---------|---------|
 | `PROVIDER` | payment | `mock` (deterministic in-process sessions) or `xendit` (Payment Sessions API) |
 | `WEBHOOK_CALLBACK_TOKEN` | payment | Shared `x-callback-token` secret required on every webhook, both providers |
-| `RESERVATION_TTL` | ticketing | Seat-hold lifetime in seconds; must be > 0 and exceed the gateway's ten-minute session minimum plus `GATEWAY_EXPIRY_BUFFER_MIN`. Also becomes the transaction expiry |
-| `GATEWAY_EXPIRY_BUFFER_MIN` | payment | Gateway session is set to `expires_at - buffer`, floored at the provider minimum |
-| `EXPIRY_POLL_SEC` | payment | Interval of the fallback expiry poller |
+| `RESERVATION_TTL` | ticketing | Seat-hold lifetime in seconds; must be > 0 and exceed the gateway's ten-minute session minimum. Also becomes the transaction expiry |
+| `EXPIRY_POLL_SEC` | payment | Interval of the expiry sweeper (carts that never started a payment, plus sessions whose webhook was lost) |
 | `INTERNAL_API_KEY` | ticketing, payment | `X-Internal-Key` for service-to-service calls (reserve → payment) |
 | `XENDIT_PAYOUT_BASE_URL` / `XENDIT_PAYOUT_PATH` | payment | Payouts API root and path (default `/v2/payouts`); the API key needs the MONEY-OUT scope |
 

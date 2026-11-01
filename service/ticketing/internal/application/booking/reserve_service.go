@@ -28,10 +28,10 @@ func (s *BookingService) Reserve(
 	// The event must be open for reservations: published, already started and
 	// not over. The event does not have to end long after the reservation: the
 	// hold lasts RESERVATION_TTL from now, so a customer who reserved while the
-	// event was live can still pay after it ended. The gateway session always
-	// expires before the hold (session = hold - GATEWAY_EXPIRY_BUFFER_MIN,
-	// floored at the gateway's ten-minute minimum), so a payment made inside
-	// the hold is always honoured.
+	// event was live can still pay after it ended. The gateway session is
+	// created with this same deadline, and only while more than the gateway's
+	// ten-minute minimum remains, so a payment made inside the hold is always
+	// honoured and never outlives the seats.
 	now := time.Now()
 	status, startAt, endAt, err := s.eventStatus.EventWindow(ctx, eventID)
 	if err != nil {

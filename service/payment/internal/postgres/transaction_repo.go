@@ -131,11 +131,25 @@ func (r *TransactionRepo) ListByEventID(ctx context.Context, eventID string) ([]
 	return collectTxns(rows)
 }
 
-// ListActiveExpired returns active transactions whose deadline has passed.
-func (r *TransactionRepo) ListActiveExpired(ctx context.Context, now time.Time, limit int) ([]domain.Transaction, error) {
-	rows, err := r.db.Query(ctx,
-		`SELECT `+txnColumns+` FROM transactions WHERE status IN (`+statusInClause(domain.ActiveStatuses())+`) AND expires_at IS NOT NULL AND expires_at <= $1 ORDER BY expires_at ASC LIMIT $2`,
-		now, limit)
+// ListSweepableExpired returns transactions the expiry sweeper owns.
+//
+// Two disjoint sets, so the sweeper never races the gateway webhook:
+//   - initiated: the customer never opened a checkout session, so the gateway
+//     knows nothing about this transaction and will never send a webhook. These
+//     are swept as soon as the deadline passes.
+//   - pending: a session exists and the gateway should report its expiry. The
+//     grace window only catches deliveries that never arrived; by then any
+//     in-flight webhook has long been handled.
+func (r *TransactionRepo) ListSweepableExpired(ctx context.Context, now time.Time, pendingGrace time.Duration, limit int) ([]domain.Transaction, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT `+txnColumns+` FROM transactions
+		WHERE expires_at IS NOT NULL AND (
+			(status = 'initiated' AND expires_at <= $1)
+			OR (status = 'pending' AND expires_at <= $2)
+		)
+		ORDER BY expires_at ASC
+		LIMIT $3`,
+		now, now.Add(-pendingGrace), limit)
 	if err != nil {
 		return nil, err
 	}

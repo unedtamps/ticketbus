@@ -8,16 +8,27 @@ import (
 	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
-// ProcessExpired expires pending transactions whose deadline passed and whose
-// gateway expiry webhook never arrived (or was never created because the
-// customer did not initiate a payment session).
+// PendingExpiryGrace is how long a transaction with a live gateway session is
+// left alone after its deadline, giving the gateway's own expiry webhook time
+// to arrive. Only deliveries that never came are picked up after this.
+const PendingExpiryGrace = 10 * time.Minute
+
+// ProcessExpired expires transactions the gateway will never report on.
+//
+// A transaction with a gateway session (pending) expires through the gateway's
+// webhook — that is the normal path, and the sweeper stays out of it unless the
+// webhook is already long overdue. A transaction that never got a session
+// (initiated) is invisible to the gateway, so nothing else can expire it; the
+// sweeper is the only thing that stops its seats from leaking.
 func (s *PaymentService) ProcessExpired(ctx context.Context, limit int) error {
-	txns, err := s.txnRepo.ListActiveExpired(ctx, time.Now(), limit)
+	txns, err := s.txnRepo.ListSweepableExpired(ctx, time.Now(), PendingExpiryGrace, limit)
 	if err != nil {
 		return err
 	}
 	for i := range txns {
 		txn := &txns[i]
+		// Only a transaction with a session has anything to cancel. A swept
+		// pending row may still hold one whose webhook went missing.
 		if txn.ProviderRef != "" {
 			if err := s.processor.CancelSession(ctx, txn.ProviderRef); err != nil {
 				s.logger.Warn("failed to cancel session at gateway", "txn_id", txn.ID, "error", err)
@@ -44,7 +55,7 @@ func (s *PaymentService) ProcessExpired(ctx context.Context, limit int) error {
 			Reason:        "internal_expiry_fallback",
 			At:            time.Now(),
 		})
-		s.logger.Info("expired transaction (poller)", "txn_id", txn.ID)
+		s.logger.Info("expired transaction (sweeper)", "txn_id", txn.ID, "prior_status", txn.Status)
 	}
 	return nil
 }

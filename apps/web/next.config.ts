@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
   },
   allowedDevOrigins: [
     "archived-characteristics-leg-completing.trycloudflare.com",
+    "127.0.0.1",
   ],
 };
 

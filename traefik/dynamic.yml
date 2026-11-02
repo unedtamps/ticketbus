@@ -6,6 +6,9 @@ http:
       headers:
         accessControlAllowOriginList:
           - http://localhost:3000
+          # Same dev server reached by IP. Browsers treat this as a distinct
+          # origin, so it needs its own entry; credentials mode rules out "*".
+          - http://127.0.0.1:3000
         accessControlAllowMethods:
           - GET
           - POST

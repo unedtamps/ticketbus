@@ -252,7 +252,7 @@ func openPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 
 func startKafka(ctx context.Context) ([]string, testcontainers.Container, error) {
 	c, err := tckafka.Run(
-		ctx, "confluentinc/cp-kafka:7.7.0",
+		ctx, "confluentinc/cp-kafka:8.4.0",
 		testcontainers.WithEnv(map[string]string{"CLUSTER_ID": clusterID}),
 	)
 	if err != nil {

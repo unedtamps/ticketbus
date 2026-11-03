@@ -179,7 +179,7 @@ docker-migrate-run-payment:
 docker-migrate-run: docker-migrate-run-auth docker-migrate-run-ticketing docker-migrate-run-payment
 
 # End-to-end stack (docker/docker-compose.e2e.yml)
-# Brings up zookeeper, kafka, three postgres instances, runs all migrations,
+# Brings up kafka (KRaft), three postgres instances, runs all migrations,
 # starts auth/ticketing/payment, and puts Traefik in front on :8100 so tests can
 # exercise the real forward-auth gateway. Reuses docker/migrate.Dockerfile for
 # the one-shot migration steps.

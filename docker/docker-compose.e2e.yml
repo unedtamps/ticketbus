@@ -14,14 +14,18 @@
 name: ticketbus-e2e
 
 x-kafka-common: &kafka-common
-  image: confluentinc/cp-kafka:7.7.0
+  image: confluentinc/cp-kafka:8.4.0
   environment: &kafka-env
-    KAFKA_BROKER_ID: 1
-    KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-    KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+    # KRaft single node: one process is both broker and controller.
+    KAFKA_NODE_ID: 1
+    KAFKA_PROCESS_ROLES: broker,controller
+    KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29094
+    KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29094,PLAINTEXT_HOST://0.0.0.0:9092
     KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:19092
-    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+    KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
     KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+    CLUSTER_ID: 6nUKGFu3cFoTyP64LCSxMA
     # Single broker, so replication factors must be 1 or topic creation fails
     # with partitions that can never elect a leader.
     KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
@@ -44,20 +48,11 @@ x-service-build: &service-build
   dockerfile: docker/Dockerfile
 
 services:
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.7.0
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    networks: [e2e-net]
-
   kafka:
     <<: *kafka-common
     container_name: e2e-kafka
     ports:
       - "19092:9092"
-    depends_on:
-      - zookeeper
     healthcheck:
       # Must bootstrap via the in-network advertised address. localhost:9092 is
       # the container's own listener, but the broker advertises

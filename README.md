@@ -285,7 +285,7 @@ Notes:
 # 1. Allow direnv (loads per-service .env files)
 make direnv-allow
 
-# 2. Start infrastructure (PostgreSQL ×3, Kafka ×4 + Zookeeper, Traefik, Kafka UI)
+# 2. Start infrastructure (PostgreSQL ×3, Kafka ×3 (KRaft), Traefik, Kafka UI)
 make infra-up
 
 # 3. Run database migrations
@@ -345,8 +345,7 @@ Notable values:
 | Payment Service | 8083 | Webhooks + gateway sessions, `/api/payments/health` |
 | Next.js Frontend | 3000 | http://localhost:3000 |
 | Kafka UI | 8080 | http://localhost:8080 |
-| Kafka 1–4 | 9092–9095 | External (host), 29092–29095 internal (Docker) |
-| Zookeeper | 2181 | Kafka coordination |
+| Kafka 1–3 | 9092–9094 | External (host), 29092–29094 internal (Docker). KRaft, no ZooKeeper |
 | PostgreSQL auth | 5432 | `auth_db` |
 | PostgreSQL ticketing | 5433 | `ticketing_db` |
 | PostgreSQL payment | 5435 | `payment_db` |
@@ -694,7 +693,7 @@ apps/
     src/proxy.ts              Route-level auth guards
     src/types/                TypeScript interfaces
   k6/                         smoke, load, stress scripts (make k6-smoke / k6-load / k6-stress)
-docker/                       Docker Compose (Kafka ×4, Zookeeper, PostgreSQL ×3, Traefik, Kafka UI)
+docker/                       Docker Compose (Kafka ×3 KRaft, PostgreSQL ×3, Traefik, Kafka UI)
                               + Dockerfile, migrate.Dockerfile
 traefik/                      Traefik static + dynamic config (routers, middlewares, services)
 .github/workflows/            CI: unit + integration tests, then build & deploy

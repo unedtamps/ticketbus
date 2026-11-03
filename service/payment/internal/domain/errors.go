@@ -19,4 +19,8 @@ var (
 	// ErrPayoutNotDispatched means the payout attempt exists but has not been
 	// sent to the gateway yet, so it has no gateway reference to confirm.
 	ErrPayoutNotDispatched = errors.New("payout not dispatched")
+	// ErrInvalidWebhook marks a malformed webhook body (bad JSON, missing
+	// reference). Retrying it can never succeed, so the caller answers 400
+	// instead of the 500 that asks the provider to redeliver.
+	ErrInvalidWebhook = errors.New("invalid webhook payload")
 )

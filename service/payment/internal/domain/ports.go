@@ -17,6 +17,11 @@ type TransactionRepository interface {
 	// active (non-terminal) status, guarding concurrent paths (webhook vs
 	// expiry poll) atomically.
 	TransitionIfActive(ctx context.Context, id, status, providerRef string) (bool, error)
+	// CompleteIfActive transitions an active transaction to completed and
+	// writes the payment.completed outbox row in one database transaction, so
+	// a customer's payment can never settle without ticketing being told.
+	// Reports whether the transition was applied.
+	CompleteIfActive(ctx context.Context, txn *Transaction) (bool, error)
 	// TransitionIfInitiated transitions the transaction only while it is still
 	// initiated (the initiated → pending step of ProcessPayment), so a
 	// concurrent request cannot overwrite an existing session reference.

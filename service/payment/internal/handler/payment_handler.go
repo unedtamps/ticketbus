@@ -284,11 +284,18 @@ func (h *PaymentHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.HandleSessionWebhook(r.Context(), body); err != nil {
-		if errors.Is(err, domain.ErrNoRows) {
+		switch {
+		case errors.Is(err, domain.ErrNoRows):
 			sharedhttp.NotFound(w, "transaction not found")
-			return
+		case errors.Is(err, domain.ErrInvalidWebhook):
+			sharedhttp.BadRequest(w, "invalid webhook payload")
+		default:
+			// Our own failure — e.g. the transaction+outbox write did not
+			// land. 500 makes the provider redeliver; a 400 here would end
+			// the retries and a completed payment would never reach
+			// ticketing.
+			sharedhttp.InternalServerError(w, "failed to process webhook")
 		}
-		sharedhttp.BadRequest(w, "invalid webhook payload")
 		return
 	}
 

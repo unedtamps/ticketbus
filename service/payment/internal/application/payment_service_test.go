@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"testing"
@@ -299,6 +300,9 @@ func webhookPayload(event, referenceID, sessionID, status string) []byte {
 		`","payment_session_id":"` + sessionID + `","status":"` + status + `"}}`)
 }
 
+// TestHandleSessionWebhook_Completed covers the happy path: the transition
+// and its payment.completed outbox row are written by one repository call
+// (CompleteIfActive), so the two cannot drift apart.
 func TestHandleSessionWebhook_Completed(t *testing.T) {
 	txnRepo := mocks.NewMockTransactionRepository(t)
 	svc := newPaymentServiceDefaults(t, txnRepo, mocks.NewMockPaymentProcessor(t),
@@ -312,10 +316,34 @@ func TestHandleSessionWebhook_Completed(t *testing.T) {
 	)
 
 	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
-	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusCompleted, "ps-1").Return(true, nil)
+	txnRepo.EXPECT().CompleteIfActive(ctx, txn).Return(true, nil)
 
 	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.completed", "11111111-1111-4111-8111-111111111111", "ps-1", "COMPLETED"))
 	require.NoError(t, err)
+}
+
+// TestHandleSessionWebhook_Completed_PropagatesDBError pins the contract that
+// makes the atomic write useful: if the transition+outbox transaction fails,
+// the error reaches the handler, which answers 5xx so the gateway redelivers.
+// Swallowing it here would leave a paid customer without tickets forever.
+func TestHandleSessionWebhook_Completed_PropagatesDBError(t *testing.T) {
+	txnRepo := mocks.NewMockTransactionRepository(t)
+	svc := newPaymentServiceDefaults(t, txnRepo, mocks.NewMockPaymentProcessor(t),
+		mocks.NewMockEventConsumer(t))
+	ctx := context.Background()
+	txn := fixtures.NewTestTransaction(
+		fixtures.WithTransactionID("txn-1"),
+		fixtures.WithTransactionBookingID("11111111-1111-4111-8111-111111111111"),
+		fixtures.WithTransactionProviderRef("ps-1"),
+		fixtures.WithTransactionStatus(domain.StatusPending),
+	)
+
+	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
+	txnRepo.EXPECT().CompleteIfActive(ctx, txn).Return(false, errors.New("db down"))
+
+	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.completed", "11111111-1111-4111-8111-111111111111", "ps-1", "COMPLETED"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db down")
 }
 
 func TestHandleSessionWebhook_CompletedAfterExpired_Refund(t *testing.T) {
@@ -332,7 +360,7 @@ func TestHandleSessionWebhook_CompletedAfterExpired_Refund(t *testing.T) {
 	)
 
 	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
-	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusCompleted, "ps-1").Return(false, nil)
+	txnRepo.EXPECT().CompleteIfActive(ctx, txn).Return(false, nil)
 	refundRepo.EXPECT().Create(ctx, mock.MatchedBy(func(r *domain.RefundRequest) bool {
 		return r.Reason == "late_payment" && r.IdempotencyKey == "late-payment:txn-1"
 	})).Return(nil)
@@ -355,7 +383,7 @@ func TestHandleSessionWebhook_CompletedDuplicate(t *testing.T) {
 	)
 
 	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
-	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusCompleted, "ps-1").Return(false, nil)
+	txnRepo.EXPECT().CompleteIfActive(ctx, txn).Return(false, nil)
 
 	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.completed", "11111111-1111-4111-8111-111111111111", "ps-1", "COMPLETED"))
 	require.NoError(t, err)
@@ -396,7 +424,7 @@ func TestHandleSessionWebhook_RealXenditPayload(t *testing.T) {
 	)
 
 	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
-	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusCompleted, "ps-579c8d61f23fa4ca35e52da4").Return(true, nil)
+	txnRepo.EXPECT().CompleteIfActive(ctx, txn).Return(true, nil)
 
 	payload := []byte(`{
 		"event": "payment_session.completed",

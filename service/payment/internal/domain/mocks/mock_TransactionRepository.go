@@ -39,6 +39,72 @@ func (_m *MockTransactionRepository) EXPECT() *MockTransactionRepository_Expecte
 	return &MockTransactionRepository_Expecter{mock: &_m.Mock}
 }
 
+// CompleteIfActive provides a mock function for the type MockTransactionRepository
+func (_mock *MockTransactionRepository) CompleteIfActive(ctx context.Context, txn *domain.Transaction) (bool, error) {
+	ret := _mock.Called(ctx, txn)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CompleteIfActive")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *domain.Transaction) (bool, error)); ok {
+		return returnFunc(ctx, txn)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *domain.Transaction) bool); ok {
+		r0 = returnFunc(ctx, txn)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *domain.Transaction) error); ok {
+		r1 = returnFunc(ctx, txn)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockTransactionRepository_CompleteIfActive_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CompleteIfActive'
+type MockTransactionRepository_CompleteIfActive_Call struct {
+	*mock.Call
+}
+
+// CompleteIfActive is a helper method to define mock.On call
+//   - ctx context.Context
+//   - txn *domain.Transaction
+func (_e *MockTransactionRepository_Expecter) CompleteIfActive(ctx any, txn any) *MockTransactionRepository_CompleteIfActive_Call {
+	return &MockTransactionRepository_CompleteIfActive_Call{Call: _e.mock.On("CompleteIfActive", ctx, txn)}
+}
+
+func (_c *MockTransactionRepository_CompleteIfActive_Call) Run(run func(ctx context.Context, txn *domain.Transaction)) *MockTransactionRepository_CompleteIfActive_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *domain.Transaction
+		if args[1] != nil {
+			arg1 = args[1].(*domain.Transaction)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockTransactionRepository_CompleteIfActive_Call) Return(b bool, err error) *MockTransactionRepository_CompleteIfActive_Call {
+	_c.Call.Return(b, err)
+	return _c
+}
+
+func (_c *MockTransactionRepository_CompleteIfActive_Call) RunAndReturn(run func(ctx context.Context, txn *domain.Transaction) (bool, error)) *MockTransactionRepository_CompleteIfActive_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Create provides a mock function for the type MockTransactionRepository
 func (_mock *MockTransactionRepository) Create(ctx context.Context, txn *domain.Transaction) error {
 	ret := _mock.Called(ctx, txn)

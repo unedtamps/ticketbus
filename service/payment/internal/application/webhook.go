@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,10 +46,10 @@ func (s *PaymentService) HandleSessionWebhook(
 ) error {
 	var event sessionWebhookPayload
 	if err := json.Unmarshal(payload, &event); err != nil {
-		return err
+		return fmt.Errorf("%w: %v", domain.ErrInvalidWebhook, err)
 	}
 	if event.Data.ReferenceID == "" {
-		return errors.New("webhook missing reference_id")
+		return fmt.Errorf("%w: missing reference_id", domain.ErrInvalidWebhook)
 	}
 	// Gateway test payloads (and sessions created outside our flow) carry a
 	// reference_id that is not one of our booking UUIDs. Postgres answers a
@@ -82,27 +83,19 @@ func (s *PaymentService) HandleSessionWebhook(
 
 	switch event.Event {
 	case "payment_session.completed":
-		applied, err := s.txnRepo.TransitionIfActive(
-			ctx,
-			txn.ID,
-			domain.StatusCompleted,
-			txn.ProviderRef,
-		)
+		// Transition and the payment.completed outbox row commit together: if
+		// the row were lost after a standalone transition, ticketing would
+		// never learn about the money — the transition never re-fires, and a
+		// redelivered webhook is answered as a duplicate.
+		applied, err := s.txnRepo.CompleteIfActive(ctx, txn)
 		if err != nil {
 			return err
 		}
 		if applied {
-			_ = s.outbox.Insert(ctx, "payment.completed", txn.ID, sdomain.PaymentCompleted{
-				TransactionID: txn.ID,
-				BookingID:     txn.BookingID,
-				EventID:       txn.EventID,
-				UserID:        txn.UserID,
-				At:            time.Now(),
-			})
 			s.logger.Info("payment completed", "txn_id", txn.ID)
 			return nil
 		}
-		// Not pending: either a duplicate delivery or the booking was already
+		// Not active: either a duplicate delivery or the booking was already
 		// expired when the money arrived — the latter needs an auto refund.
 		if txn.Status == domain.StatusExpired {
 			s.requestLatePaymentRefund(ctx, txn)

@@ -80,7 +80,6 @@ func main() {
 	consumer := paykafka.NewPaymentConsumer(kafkaBrokers, "payment-service", cfg.ConsumerConcurrency)
 	defer consumer.Close()
 
-	outboxStore := outbox.NewStore(pool)
 	kafkaProducer := sharedkafka.NewProducer(kafkaBrokers)
 	if err := sharedkafka.EnsureTopics(kafkaBrokers, []string{
 		"event.cancelled",
@@ -99,7 +98,6 @@ func main() {
 		payoutRepo,
 		payProcessor,
 		consumer,
-		outboxStore,
 		logger,
 		cfg.Provider,
 		cfg.EnabledMethods(),

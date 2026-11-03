@@ -89,10 +89,9 @@ func startContainers() *TestEnv {
 	payoutRepo := paypostgres.NewPayoutRepo(infra.Pool, "mock")
 	mockProcessor := processor.NewMockProcessor()
 	payConsumer := paykafka.NewPaymentConsumer(infra.Brokers, consumerGroup, 1)
-	payOutbox := outbox.NewStore(infra.Pool)
 
 	svc := payapp.NewPaymentService(
-		txnRepo, refundRepo, payoutRepo, mockProcessor, payConsumer, payOutbox,
+		txnRepo, refundRepo, payoutRepo, mockProcessor, payConsumer,
 		logger, "mock", []string{"ID_QRIS", "ID_BCA_VA"},
 	)
 

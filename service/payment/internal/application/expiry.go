@@ -3,15 +3,16 @@ package application
 import (
 	"context"
 	"time"
-
-	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
-	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
 // PendingExpiryGrace is how long a transaction with a live gateway session is
 // left alone after its deadline, giving the gateway's own expiry webhook time
 // to arrive. Only deliveries that never came are picked up after this.
 const PendingExpiryGrace = 10 * time.Minute
+
+// InternalExpiryFallbackReason marks a payment.expired event emitted by the
+// sweeper rather than by the gateway's own expiry webhook.
+const InternalExpiryFallbackReason = "internal_expiry_fallback"
 
 // ProcessExpired expires transactions the gateway will never report on.
 //
@@ -34,27 +35,16 @@ func (s *PaymentService) ProcessExpired(ctx context.Context, limit int) error {
 				s.logger.Warn("failed to cancel session at gateway", "txn_id", txn.ID, "error", err)
 			}
 		}
-		applied, err := s.txnRepo.TransitionIfActive(
-			ctx,
-			txn.ID,
-			domain.StatusExpired,
-			txn.ProviderRef,
-		)
+		applied, err := s.txnRepo.ExpireIfActive(ctx, txn, InternalExpiryFallbackReason)
 		if err != nil {
+			// Logged and left for the next tick: the row is still active, so
+			// the sweeper's own cycle is the retry.
 			s.logger.Error("failed to expire transaction", "txn_id", txn.ID, "error", err)
 			continue
 		}
 		if !applied {
 			continue
 		}
-		_ = s.outbox.Insert(ctx, "payment.expired", txn.ID, sdomain.PaymentExpired{
-			TransactionID: txn.ID,
-			BookingID:     txn.BookingID,
-			EventID:       txn.EventID,
-			UserID:        txn.UserID,
-			Reason:        "internal_expiry_fallback",
-			At:            time.Now(),
-		})
 		s.logger.Info("expired transaction (sweeper)", "txn_id", txn.ID, "prior_status", txn.Status)
 	}
 	return nil

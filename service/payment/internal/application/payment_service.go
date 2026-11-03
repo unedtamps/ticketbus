@@ -3,7 +3,6 @@ package application
 import (
 	"log/slog"
 
-	"github.com/unedtamps/ticketbus/pkg/outbox"
 	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
@@ -14,7 +13,6 @@ type PaymentService struct {
 	payoutRepo      domain.PayoutRepository
 	processor       domain.PaymentProcessor
 	consumer        domain.EventConsumer
-	outbox          outbox.StoreInterface
 	logger          *slog.Logger
 	provider        string
 	allowedChannels []string
@@ -27,7 +25,6 @@ func NewPaymentService(
 	payoutRepo domain.PayoutRepository,
 	processor domain.PaymentProcessor,
 	consumer domain.EventConsumer,
-	ob outbox.StoreInterface,
 	logger *slog.Logger,
 	provider string,
 	allowedChannels []string,
@@ -38,7 +35,6 @@ func NewPaymentService(
 		payoutRepo:      payoutRepo,
 		processor:       processor,
 		consumer:        consumer,
-		outbox:          ob,
 		logger:          logger,
 		provider:        provider,
 		allowedChannels: allowedChannels,

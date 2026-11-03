@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/unedtamps/ticketbus/pkg/outbox"
 	"github.com/unedtamps/ticketbus/service/payment/internal/application"
 	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 	"github.com/unedtamps/ticketbus/service/payment/internal/domain/mocks"
@@ -33,7 +32,7 @@ func newPaymentService(
 	t.Helper()
 	return application.NewPaymentService(
 		txnRepo, refundRepo, mocks.NewMockPayoutRepository(t), processor, consumer,
-		outbox.NoopStore{}, payLogger, "mock", []string{"ID_QRIS"},
+		payLogger, "mock", []string{"ID_QRIS"},
 	)
 }
 
@@ -402,7 +401,7 @@ func TestHandleSessionWebhook_Expired(t *testing.T) {
 	)
 
 	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
-	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusExpired, "ps-1").Return(true, nil)
+	txnRepo.EXPECT().ExpireIfActive(ctx, txn, domain.GatewayExpiredReason).Return(true, nil)
 
 	err := svc.HandleSessionWebhook(ctx, webhookPayload("payment_session.expired", "11111111-1111-4111-8111-111111111111", "ps-1", "EXPIRED"))
 	require.NoError(t, err)
@@ -531,7 +530,7 @@ func TestProcessExpired_LostWebhookCancelsSession(t *testing.T) {
 	txnRepo.EXPECT().ListSweepableExpired(ctx, mock.Anything, application.PendingExpiryGrace, 100).
 		Return([]domain.Transaction{*txn}, nil)
 	processor.EXPECT().CancelSession(ctx, "ps-1").Return(nil)
-	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusExpired, "ps-1").Return(true, nil)
+	txnRepo.EXPECT().ExpireIfActive(ctx, txn, application.InternalExpiryFallbackReason).Return(true, nil)
 
 	err := svc.ProcessExpired(ctx, 100)
 	require.NoError(t, err)
@@ -555,7 +554,7 @@ func TestProcessExpired_NeverInitiated_SkipsGateway(t *testing.T) {
 
 	txnRepo.EXPECT().ListSweepableExpired(ctx, mock.Anything, application.PendingExpiryGrace, 100).
 		Return([]domain.Transaction{*txn}, nil)
-	txnRepo.EXPECT().TransitionIfActive(ctx, "txn-1", domain.StatusExpired, "").Return(true, nil)
+	txnRepo.EXPECT().ExpireIfActive(ctx, txn, application.InternalExpiryFallbackReason).Return(true, nil)
 
 	err := svc.ProcessExpired(ctx, 100)
 	require.NoError(t, err)

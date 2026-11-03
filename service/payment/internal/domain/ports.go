@@ -22,6 +22,11 @@ type TransactionRepository interface {
 	// a customer's payment can never settle without ticketing being told.
 	// Reports whether the transition was applied.
 	CompleteIfActive(ctx context.Context, txn *Transaction) (bool, error)
+	// ExpireIfActive transitions an active transaction to expired and writes
+	// the payment.expired outbox row in one database transaction — a lost row
+	// after a standalone transition would leave the booking pending and its
+	// seats held forever. Reports whether the transition was applied.
+	ExpireIfActive(ctx context.Context, txn *Transaction, reason string) (bool, error)
 	// TransitionIfInitiated transitions the transaction only while it is still
 	// initiated (the initiated → pending step of ProcessPayment), so a
 	// concurrent request cannot overwrite an existing session reference.

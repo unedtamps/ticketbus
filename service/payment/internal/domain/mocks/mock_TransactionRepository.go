@@ -162,6 +162,78 @@ func (_c *MockTransactionRepository_Create_Call) RunAndReturn(run func(ctx conte
 	return _c
 }
 
+// ExpireIfActive provides a mock function for the type MockTransactionRepository
+func (_mock *MockTransactionRepository) ExpireIfActive(ctx context.Context, txn *domain.Transaction, reason string) (bool, error) {
+	ret := _mock.Called(ctx, txn, reason)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ExpireIfActive")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *domain.Transaction, string) (bool, error)); ok {
+		return returnFunc(ctx, txn, reason)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *domain.Transaction, string) bool); ok {
+		r0 = returnFunc(ctx, txn, reason)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *domain.Transaction, string) error); ok {
+		r1 = returnFunc(ctx, txn, reason)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockTransactionRepository_ExpireIfActive_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ExpireIfActive'
+type MockTransactionRepository_ExpireIfActive_Call struct {
+	*mock.Call
+}
+
+// ExpireIfActive is a helper method to define mock.On call
+//   - ctx context.Context
+//   - txn *domain.Transaction
+//   - reason string
+func (_e *MockTransactionRepository_Expecter) ExpireIfActive(ctx any, txn any, reason any) *MockTransactionRepository_ExpireIfActive_Call {
+	return &MockTransactionRepository_ExpireIfActive_Call{Call: _e.mock.On("ExpireIfActive", ctx, txn, reason)}
+}
+
+func (_c *MockTransactionRepository_ExpireIfActive_Call) Run(run func(ctx context.Context, txn *domain.Transaction, reason string)) *MockTransactionRepository_ExpireIfActive_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *domain.Transaction
+		if args[1] != nil {
+			arg1 = args[1].(*domain.Transaction)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockTransactionRepository_ExpireIfActive_Call) Return(b bool, err error) *MockTransactionRepository_ExpireIfActive_Call {
+	_c.Call.Return(b, err)
+	return _c
+}
+
+func (_c *MockTransactionRepository_ExpireIfActive_Call) RunAndReturn(run func(ctx context.Context, txn *domain.Transaction, reason string) (bool, error)) *MockTransactionRepository_ExpireIfActive_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // FindByBookingID provides a mock function for the type MockTransactionRepository
 func (_mock *MockTransactionRepository) FindByBookingID(ctx context.Context, bookingID string) (*domain.Transaction, error) {
 	ret := _mock.Called(ctx, bookingID)

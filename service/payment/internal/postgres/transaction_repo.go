@@ -125,6 +125,51 @@ func (r *TransactionRepo) CompleteIfActive(ctx context.Context, txn *domain.Tran
 	return true, nil
 }
 
+// ExpireIfActive transitions an active transaction to expired and writes the
+// payment.expired outbox row in one database transaction — same reasoning as
+// CompleteIfActive: a lost row after a standalone transition leaves the
+// booking pending forever and its seats held, and neither the gateway (the
+// session is already expired) nor the sweeper (the transaction is terminal)
+// ever revisits it. reason distinguishes the gateway's own expiry from the
+// sweeper's fallback.
+//
+// It reports whether the transition was applied; false means the transaction
+// was not in an active state (duplicate delivery or already settled).
+func (r *TransactionRepo) ExpireIfActive(ctx context.Context, txn *domain.Transaction, reason string) (bool, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	tag, err := tx.Exec(ctx,
+		`UPDATE transactions SET status=$1, provider_ref=$2, updated_at=NOW()
+		 WHERE id=$3 AND status IN (`+statusInClause(domain.ActiveStatuses())+`)`,
+		domain.StatusExpired, txn.ProviderRef, txn.ID)
+	if err != nil {
+		return false, err
+	}
+	if tag.RowsAffected() == 0 {
+		return false, nil
+	}
+
+	if err := outbox.NewStore(tx).Insert(ctx, "payment.expired", txn.ID, dto.PaymentExpired{
+		TransactionID: txn.ID,
+		BookingID:     txn.BookingID,
+		EventID:       txn.EventID,
+		UserID:        txn.UserID,
+		Reason:        reason,
+		At:            time.Now(),
+	}); err != nil {
+		return false, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // TransitionIfInitiated transitions the transaction only while it is still
 // initiated. Used for the initiated → pending step so a concurrent
 // ProcessPayment cannot clobber an existing session reference.

@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 
-	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
 	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
@@ -102,24 +100,13 @@ func (s *PaymentService) HandleSessionWebhook(
 		}
 
 	case "payment_session.expired":
-		applied, err := s.txnRepo.TransitionIfActive(
-			ctx,
-			txn.ID,
-			domain.StatusExpired,
-			txn.ProviderRef,
-		)
+		// Same atomic pair as the completed path: the transition and its
+		// payment.expired outbox row commit together.
+		applied, err := s.txnRepo.ExpireIfActive(ctx, txn, domain.GatewayExpiredReason)
 		if err != nil {
 			return err
 		}
 		if applied {
-			_ = s.outbox.Insert(ctx, "payment.expired", txn.ID, sdomain.PaymentExpired{
-				TransactionID: txn.ID,
-				BookingID:     txn.BookingID,
-				EventID:       txn.EventID,
-				UserID:        txn.UserID,
-				Reason:        domain.GatewayExpiredReason,
-				At:            time.Now(),
-			})
 			s.logger.Info("payment expired (gateway)", "txn_id", txn.ID)
 		}
 

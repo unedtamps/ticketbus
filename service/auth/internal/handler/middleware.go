@@ -10,15 +10,13 @@ import (
 
 // BearerAuth middleware verifies the Authorization Bearer token
 // and injects user info into the request context.
-// Skips verification if Kong already injected user headers (X-Authenticated-User-ID present).
+//
+// There is no header-based skip: the auth service sits behind a router that
+// has no forward-auth (it issues the tokens), so client-supplied
+// X-Authenticated-* headers reach this handler verbatim. Trusting them would
+// let anyone impersonate any user on /api/auth/me without a token.
 func (h *AuthHandler) BearerAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// If Kong already set user context, skip Bearer verification.
-		if sharedhttp.UserIDFromContext(r.Context()) != "" {
-			next.ServeHTTP(w, r)
-			return
-		}
-
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 			sharedhttp.Unauthorized(w, "missing or invalid authorization header")

@@ -132,15 +132,14 @@ func (h *PaymentHandler) ProcessPayment(w http.ResponseWriter, r *http.Request) 
 }
 
 // GetPaymentStatus handles GET /api/payments/booking/{booking_id}.
+// Only the booking's owner may read it — the response carries the live
+// checkout link, which must not be handed to another customer.
 func (h *PaymentHandler) GetPaymentStatus(w http.ResponseWriter, r *http.Request) {
 	bookingID := chi.URLParam(r, "booking_id")
+	userID := sharedhttp.UserIDFromContext(r.Context())
 	txn, err := h.svc.GetPaymentStatus(r.Context(), bookingID)
-	if err != nil {
-		if errors.Is(err, domain.ErrTransactionNotFound) {
-			sharedhttp.NotFound(w, "transaction not found")
-			return
-		}
-		sharedhttp.InternalServerError(w, "failed to load payment status")
+	if err != nil || txn.UserID != userID {
+		sharedhttp.NotFound(w, "transaction not found")
 		return
 	}
 	sharedhttp.OK(w, PaymentStatusResponse{
@@ -228,10 +227,13 @@ func (h *PaymentHandler) MockPayoutWebhook(w http.ResponseWriter, r *http.Reques
 }
 
 // GetStatus handles GET /payments/:id/status.
+// Owner-scoped like GetTransaction: amounts and refund state are not for
+// other customers to read.
 func (h *PaymentHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	txnID := chi.URLParam(r, "id")
+	userID := sharedhttp.UserIDFromContext(r.Context())
 	txn, err := h.svc.GetTransaction(r.Context(), txnID)
-	if err != nil {
+	if err != nil || txn.UserID != userID {
 		sharedhttp.NotFound(w, "transaction not found")
 		return
 	}

@@ -114,17 +114,28 @@ func (s *EventService) CancelEventAsAdmin(
 }
 
 // cancel applies the cancellation and announces it, shared by both entry
-// points so the two paths cannot drift.
+// points so the two paths cannot drift. The status change and the
+// event.cancelled row commit together — the row drives the whole cascade
+// (bookings cancelled, seats released, refunds started), so losing it after
+// a standalone update would strand the event half-cancelled.
 func (s *EventService) cancel(ctx context.Context, event *domain.Event) (*domain.Event, error) {
 	event.Status = sdomain.EventStatusCancelled
 	event.UpdatedAt = time.Now()
-	if err := s.repo.UpdateEvent(ctx, event); err != nil {
+	applied, err := s.repo.CancelAndPublish(ctx, event.ID, domain.OutboxEvent{
+		Topic:   "event.cancelled",
+		Key:     event.ID,
+		Payload: sdomain.EventCancelled{
+			EventID: event.ID,
+			At:      time.Now(),
+		},
+	})
+	if err != nil {
 		return nil, err
 	}
-	_ = s.outbox.Insert(ctx, "event.cancelled", event.ID, sdomain.EventCancelled{
-		EventID: event.ID,
-		At:      time.Now(),
-	})
+	if !applied {
+		return nil, domain.ErrEventNotCancellable
+	}
+	event.Status = sdomain.EventStatusCancelled
 	return event, nil
 }
 
@@ -162,9 +173,14 @@ func (s *EventService) reprocessCancellation(
 	if checkOwner && event.OrganizerID != userID {
 		return nil, domain.ErrNotEventOwner
 	}
-	_ = s.outbox.Insert(ctx, "event.cancelled", event.ID, sdomain.EventCancelled{
+	// Surface the insert error: a silent failure here answered the organizer's
+	// reprocess with 200 while nothing was queued, and the stranded
+	// bookings/refunds would wait for someone to press the button again.
+	if err := s.outbox.Insert(ctx, "event.cancelled", event.ID, sdomain.EventCancelled{
 		EventID: event.ID,
 		At:      time.Now(),
-	})
+	}); err != nil {
+		return nil, err
+	}
 	return event, nil
 }

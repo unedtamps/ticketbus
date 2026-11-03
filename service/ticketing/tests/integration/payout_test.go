@@ -156,8 +156,10 @@ func TestPayout_Guards(t *testing.T) {
 		eventID, _, eo := setupApprovedEvent(t, env)
 		env.endEvent(t, eventID)
 		env.setPayoutAccount(t, eo)
+		// An ended event is admin-cancel only now; the organizer's payout is
+		// still what is under test.
 		resp, body, err := doJSON(http.MethodPost,
-			env.apiURL+"/api/events/"+eventID+"/cancel", nil, eo.headers)
+			env.apiURL+"/api/admin/events/"+eventID+"/cancel", nil, adminActor().headers)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode, "cancel: %s", body)
 

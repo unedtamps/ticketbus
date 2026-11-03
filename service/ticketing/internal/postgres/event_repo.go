@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	sdomain "github.com/unedtamps/ticketbus/pkg/dto"
+	"github.com/unedtamps/ticketbus/pkg/outbox"
 	"github.com/unedtamps/ticketbus/service/ticketing/internal/domain"
 )
 
@@ -58,6 +59,44 @@ func (r *EventRepo) UpdateEvent(ctx context.Context, event *domain.Event) error 
 		event.ID,
 	)
 	return err
+}
+
+// CancelAndPublish marks a published event cancelled and writes the
+// event.cancelled outbox row in one database transaction.
+//
+// The cancellation cascade that follows (bookings cancelled, seats released,
+// refunds started) is driven entirely by that outbox row, so a lost insert
+// after a standalone status update would leave the event "cancelled" in name
+// only: consumers never hear about it, and the organizer already saw a 200.
+// The status change and its announcement commit together or not at all.
+//
+// It reports whether the update was applied; false means the event was no
+// longer published (a concurrent cancel or status change won the race).
+func (r *EventRepo) CancelAndPublish(ctx context.Context, eventID string, ev domain.OutboxEvent) (bool, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	tag, err := tx.Exec(ctx,
+		`UPDATE events SET status=$1, updated_at=NOW() WHERE id=$2 AND status=$3`,
+		string(sdomain.EventStatusCancelled), eventID, string(sdomain.EventStatusPublished))
+	if err != nil {
+		return false, err
+	}
+	if tag.RowsAffected() == 0 {
+		return false, nil
+	}
+
+	if err := outbox.NewStore(tx).Insert(ctx, ev.Topic, ev.Key, ev.Payload); err != nil {
+		return false, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // FindEventByID retrieves an event by ID.

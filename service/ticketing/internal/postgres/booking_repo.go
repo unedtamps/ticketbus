@@ -246,6 +246,44 @@ func (r *BookingRepo) UpdateStatusIfPending(ctx context.Context, bookingID, stat
 	return tag.RowsAffected() == 1, nil
 }
 
+// ConfirmWithTickets transitions a pending booking to confirmed and writes one
+// ticket.issued outbox row per item in one database transaction.
+//
+// Running the transition and the inserts separately meant a failed insert (or
+// a crash mid-loop) left a confirmed booking with no — or only some of its —
+// tickets: UpdateStatusIfPending never matches again, so nothing re-fires and
+// there is no retry. The confirm and its tickets land together or not at all.
+//
+// It reports whether the transition was applied; false means the booking was
+// no longer pending (duplicate delivery or already settled).
+func (r *BookingRepo) ConfirmWithTickets(ctx context.Context, bookingID string, events []domain.OutboxEvent) (bool, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	tag, err := tx.Exec(ctx, `UPDATE bookings SET status='confirmed' WHERE id=$1 AND status='pending'`, bookingID)
+	if err != nil {
+		return false, err
+	}
+	if tag.RowsAffected() == 0 {
+		return false, nil
+	}
+
+	store := outbox.NewStore(tx)
+	for _, ev := range events {
+		if err := store.Insert(ctx, ev.Topic, ev.Key, ev.Payload); err != nil {
+			return false, err
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // TransitionAndReleaseSeats atomically transitions a booking guarded by its
 // current status and releases its seats, all in one transaction. A crash
 // between the status update and the seat release is therefore impossible.

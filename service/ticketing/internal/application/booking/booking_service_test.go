@@ -179,7 +179,7 @@ func TestConfirm_Success(t *testing.T) {
 	)
 	bookingFixture.Status = "pending"
 	bookingRepo.EXPECT().FindByID(ctx, "book-1").Return(bookingFixture, nil)
-	bookingRepo.EXPECT().UpdateStatusIfPending(ctx, "book-1", "confirmed").Return(true, nil)
+	bookingRepo.EXPECT().ConfirmWithTickets(ctx, "book-1", mock.Anything).Return(true, nil)
 	svc, es := newBookingServiceDefaults(t, bookingRepo, seatCounter, consumer)
 	es.EXPECT().IsPublished(ctx, "event-1").Return(true, nil)
 	err := svc.Confirm(ctx, "book-1", "txn-1")
@@ -201,7 +201,7 @@ func TestConfirm_WithItems(t *testing.T) {
 		{ID: "item-2", TicketTypeID: "reg", Quantity: 2},
 	}
 	bookingRepo.EXPECT().FindByID(ctx, "book-1").Return(bookingFixture, nil)
-	bookingRepo.EXPECT().UpdateStatusIfPending(ctx, "book-1", "confirmed").Return(true, nil)
+	bookingRepo.EXPECT().ConfirmWithTickets(ctx, "book-1", mock.Anything).Return(true, nil)
 	svc, es := newBookingServiceDefaults(t, bookingRepo, seatCounter, consumer)
 	es.EXPECT().IsPublished(ctx, "event-1").Return(true, nil)
 	err := svc.Confirm(ctx, "book-1", "txn-1")
@@ -230,7 +230,7 @@ func TestConfirm_UpdateFails(t *testing.T) {
 	)
 	bookingFixture.Status = "pending"
 	bookingRepo.EXPECT().FindByID(ctx, "book-1").Return(bookingFixture, nil)
-	bookingRepo.EXPECT().UpdateStatusIfPending(ctx, "book-1", "confirmed").Return(false, errors.New("db error"))
+	bookingRepo.EXPECT().ConfirmWithTickets(ctx, "book-1", mock.Anything).Return(false, errors.New("db error"))
 	svc, es := newBookingServiceDefaults(t, bookingRepo, seatCounter, consumer)
 	es.EXPECT().IsPublished(ctx, "event-1").Return(true, nil)
 	err := svc.Confirm(ctx, "book-1", "txn-1")

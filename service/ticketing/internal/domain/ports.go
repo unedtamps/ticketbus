@@ -12,6 +12,11 @@ import (
 type EventRepository interface {
 	CreateEvent(ctx context.Context, event *Event) error
 	UpdateEvent(ctx context.Context, event *Event) error
+	// CancelAndPublish marks a published event cancelled and writes the
+	// event.cancelled outbox row in one database transaction — the row drives
+	// the whole cancellation cascade, so it must not be separable from the
+	// status change. Reports whether the update was applied.
+	CancelAndPublish(ctx context.Context, eventID string, ev OutboxEvent) (bool, error)
 	FindEventByID(ctx context.Context, id string) (*Event, error)
 	ListPublished(ctx context.Context, limit, offset int) ([]Event, int, error)
 	ListByOrganizer(ctx context.Context, organizerID string, limit int, cursor *Cursor) ([]Event, error)
@@ -86,6 +91,11 @@ type BookingRepository interface {
 	ListByUser(ctx context.Context, userID string) ([]Booking, error)
 	ListByEventID(ctx context.Context, eventID string) ([]Booking, error)
 	UpdateStatusIfPending(ctx context.Context, bookingID, status string) (bool, error)
+	// ConfirmWithTickets transitions a pending booking to confirmed and writes
+	// one ticket.issued outbox row per item in one database transaction, so a
+	// confirmed booking can never lack its tickets. Reports whether the
+	// transition was applied.
+	ConfirmWithTickets(ctx context.Context, bookingID string, events []OutboxEvent) (bool, error)
 	// TransitionAndReleaseSeats atomically transitions a booking (guarded by its
 	// current status) and releases its seats in a single transaction.
 	TransitionAndReleaseSeats(ctx context.Context, booking *Booking, toStatus string) (bool, error)

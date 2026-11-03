@@ -37,23 +37,30 @@ func (s *BookingService) Confirm(ctx context.Context, bookingID, paymentID strin
 		return nil
 	}
 
-	applied, err := s.bookingRepo.UpdateStatusIfPending(ctx, bookingID, "confirmed")
+	events := make([]domain.OutboxEvent, 0, len(booking.Items))
+	for _, item := range booking.Items {
+		events = append(events, domain.OutboxEvent{
+			Topic: "ticket.issued",
+			Key:   bookingID + "-" + item.ID,
+			Payload: sdomain.TicketIssued{
+				TicketID:     item.ID,
+				BookingID:    bookingID,
+				UserID:       booking.UserID,
+				EventID:      booking.EventID,
+				TicketTypeID: item.TicketTypeID,
+			},
+		})
+	}
+
+	// Confirm and its tickets commit together: writing the rows separately
+	// left room for a confirmed booking with no (or partial) tickets, and
+	// nothing re-fires once the status has moved on.
+	applied, err := s.bookingRepo.ConfirmWithTickets(ctx, bookingID, events)
 	if err != nil {
 		return err
 	}
 	if !applied {
 		s.logger.Info("confirm skipped, booking already transitioned", "booking_id", bookingID)
-		return nil
-	}
-
-	for _, item := range booking.Items {
-		_ = s.outbox.Insert(ctx, "ticket.issued", bookingID+"-"+item.ID, sdomain.TicketIssued{
-			TicketID:     item.ID,
-			BookingID:    bookingID,
-			UserID:       booking.UserID,
-			EventID:      booking.EventID,
-			TicketTypeID: item.TicketTypeID,
-		})
 	}
 	return nil
 }

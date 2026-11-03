@@ -39,6 +39,78 @@ func (_m *MockEventRepository) EXPECT() *MockEventRepository_Expecter {
 	return &MockEventRepository_Expecter{mock: &_m.Mock}
 }
 
+// CancelAndPublish provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) CancelAndPublish(ctx context.Context, eventID string, ev domain.OutboxEvent) (bool, error) {
+	ret := _mock.Called(ctx, eventID, ev)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CancelAndPublish")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.OutboxEvent) (bool, error)); ok {
+		return returnFunc(ctx, eventID, ev)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.OutboxEvent) bool); ok {
+		r0 = returnFunc(ctx, eventID, ev)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, domain.OutboxEvent) error); ok {
+		r1 = returnFunc(ctx, eventID, ev)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockEventRepository_CancelAndPublish_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CancelAndPublish'
+type MockEventRepository_CancelAndPublish_Call struct {
+	*mock.Call
+}
+
+// CancelAndPublish is a helper method to define mock.On call
+//   - ctx context.Context
+//   - eventID string
+//   - ev domain.OutboxEvent
+func (_e *MockEventRepository_Expecter) CancelAndPublish(ctx any, eventID any, ev any) *MockEventRepository_CancelAndPublish_Call {
+	return &MockEventRepository_CancelAndPublish_Call{Call: _e.mock.On("CancelAndPublish", ctx, eventID, ev)}
+}
+
+func (_c *MockEventRepository_CancelAndPublish_Call) Run(run func(ctx context.Context, eventID string, ev domain.OutboxEvent)) *MockEventRepository_CancelAndPublish_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 domain.OutboxEvent
+		if args[2] != nil {
+			arg2 = args[2].(domain.OutboxEvent)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockEventRepository_CancelAndPublish_Call) Return(b bool, err error) *MockEventRepository_CancelAndPublish_Call {
+	_c.Call.Return(b, err)
+	return _c
+}
+
+func (_c *MockEventRepository_CancelAndPublish_Call) RunAndReturn(run func(ctx context.Context, eventID string, ev domain.OutboxEvent) (bool, error)) *MockEventRepository_CancelAndPublish_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CreateEvent provides a mock function for the type MockEventRepository
 func (_mock *MockEventRepository) CreateEvent(ctx context.Context, event *domain.Event) error {
 	ret := _mock.Called(ctx, event)

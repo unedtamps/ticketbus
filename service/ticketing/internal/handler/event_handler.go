@@ -270,7 +270,13 @@ func (h *EventHandler) CancelEvent(w http.ResponseWriter, r *http.Request) {
 			sharedhttp.Error(w, http.StatusForbidden, err.Error())
 			return
 		}
-		sharedhttp.BadRequest(w, err.Error())
+		if errors.Is(err, domain.ErrEventNotCancellable) {
+			sharedhttp.BadRequest(w, err.Error())
+			return
+		}
+		// A database failure here means the cancellation did not land: 500
+		// tells the client to retry instead of pretending it worked.
+		sharedhttp.InternalServerError(w, "failed to cancel event")
 		return
 	}
 	sharedhttp.OK(w, h.eventResponse(event))
@@ -286,7 +292,11 @@ func (h *EventHandler) AdminCancelEvent(w http.ResponseWriter, r *http.Request) 
 			sharedhttp.NotFound(w, err.Error())
 			return
 		}
-		sharedhttp.BadRequest(w, err.Error())
+		if errors.Is(err, domain.ErrEventNotCancellable) {
+			sharedhttp.BadRequest(w, err.Error())
+			return
+		}
+		sharedhttp.InternalServerError(w, "failed to cancel event")
 		return
 	}
 	sharedhttp.OK(w, h.eventResponse(event))
@@ -312,7 +322,13 @@ func (h *EventHandler) ReprocessCancellation(w http.ResponseWriter, r *http.Requ
 			sharedhttp.NotFound(w, err.Error())
 			return
 		}
-		sharedhttp.BadRequest(w, err.Error())
+		if errors.Is(err, domain.ErrEventNotCancelled) {
+			sharedhttp.BadRequest(w, err.Error())
+			return
+		}
+		// The reprocess row did not land — 500 asks the caller to retry rather
+		// than reporting a reconcile that never happened.
+		sharedhttp.InternalServerError(w, "failed to reprocess cancellation")
 		return
 	}
 	sharedhttp.OK(w, map[string]interface{}{

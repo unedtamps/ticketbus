@@ -413,11 +413,16 @@ func (r *EventRepo) SetEventImage(ctx context.Context, eventID, imageKey string)
 }
 
 // CreateTicketTypes inserts multiple ticket types.
+//
+// available_seat starts at full quantity, not at the column default of 0.
+// Approval re-sets it (SeatCounter.Init), but a pending event is readable
+// before that: with 0 available it rendered as "100% sold / sold out" even
+// though nothing had been sold yet.
 func (r *EventRepo) CreateTicketTypes(ctx context.Context, types []domain.TicketType) error {
 	for _, tt := range types {
 		_, err := r.pool.Exec(
 			ctx,
-			`INSERT INTO ticket_types (id, event_id, name, price_rupiah, quantity, max_per_order) VALUES ($1,$2,$3,$4,$5,$6)`,
+			`INSERT INTO ticket_types (id, event_id, name, price_rupiah, quantity, available_seat, max_per_order) VALUES ($1,$2,$3,$4,$5,$5,$6)`,
 			tt.ID,
 			tt.EventID,
 			tt.Name,

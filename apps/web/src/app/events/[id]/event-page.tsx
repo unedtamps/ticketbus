@@ -112,6 +112,7 @@ export default function EventPage() {
   const hasSelection = Object.values(selectedTickets).some((q) => q > 0);
   // The server enforces the reservation window; this only drives the UI.
   const reservationsOpen = event?.event.reservations_open !== false;
+  const onSaleNow = event?.event.status === "published";
 
   function getOrderItems() {
     return Object.entries(selectedTickets)
@@ -189,7 +190,11 @@ export default function EventPage() {
               .join("")}
           </span>
         )}
-        <span className="badge badge-green absolute top-3.5 right-3.5">
+        <span
+          className={`badge absolute top-3.5 right-3.5 ${
+            event.event.status === "published" ? "badge-green" : "badge-ink"
+          }`}
+        >
           {event.event.status}
         </span>
         <span className="glass-chip absolute bottom-3.5 left-3.5">
@@ -284,21 +289,32 @@ export default function EventPage() {
             <h2 className="font-[family-name:var(--font-display)] text-[22px] text-[#16224A]">
               {phase === "selection" ? "Tiket" : "Order Summary"}
             </h2>
-            <span className="badge badge-blue">On sale</span>
+            <span
+              className={`badge ${
+                onSaleNow ? "badge-blue" : "badge-ink"
+              }`}
+            >
+              {onSaleNow ? "On sale" : "Not on sale"}
+            </span>
           </div>
 
           {phase === "selection" && (
             <>
               <div className="flex flex-col">
                 {event.ticket_types.map((tt, idx) => {
-                  const soldCount = tt.quantity - tt.available;
+                  // Seats only become sellable once the event is published, and
+                  // the counter is only meaningful then. Showing the raw 0 for a
+                  // pending event read as "100% sold / sold out".
+                  const onSale = event.event.status === "published";
+                  const available = onSale ? tt.available : tt.quantity;
+                  const soldCount = tt.quantity - available;
                   const soldPercent =
                     tt.quantity > 0
                       ? Math.round((soldCount / tt.quantity) * 100)
                       : 0;
-                  const isLowStock = tt.available > 0 && tt.available < 5;
-                  const isSoldOut = tt.available === 0;
-                  const max = Math.min(tt.max_per_order, tt.available);
+                  const isLowStock = available > 0 && available < 5;
+                  const isSoldOut = onSale && available === 0;
+                  const max = Math.min(tt.max_per_order, available);
 
                   return (
                     <div
@@ -314,8 +330,10 @@ export default function EventPage() {
                             {fmtIDR(tt.price_rupiah)}
                           </p>
                         </div>
-                        {isSoldOut ? (
-                          <span className="badge badge-ink">Sold out</span>
+                        {isSoldOut || !onSale ? (
+                          <span className="badge badge-ink">
+                            {isSoldOut ? "Sold out" : "Unavailable"}
+                          </span>
                         ) : (
                           <Stepper
                             value={selectedTickets[tt.id] || 0}
@@ -330,11 +348,11 @@ export default function EventPage() {
                         <div className="flex justify-between text-[11px] text-[#6E7B96]">
                           <span>
                             {isLowStock
-                              ? `Only ${tt.available} left!`
+                              ? `Only ${available} left!`
                               : `${soldPercent}% sold`}
                           </span>
                           <span>
-                            {tt.available} of {tt.quantity} available
+                            {available} of {tt.quantity} available
                           </span>
                         </div>
                         <div className="w-full h-1.5 rounded-full bg-[#EDF1F7] overflow-hidden">
@@ -378,7 +396,7 @@ export default function EventPage() {
               </button>
               <p className="flex items-center gap-1.5 text-xs font-bold text-[#2450D9]">
                 <Timer className="w-3.5 h-3.5" />
-                Kursi ditahan 10 menit setelah reserve
+                Kursi ditahan 30 menit setelah reserve
               </p>
               <p className="flex items-center gap-1.5 text-xs text-[#6E7B96] -mt-2">
                 <ShieldCheck className="w-3.5 h-3.5" />

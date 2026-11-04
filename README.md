@@ -15,7 +15,7 @@ Traefik (:8000) — CORS, rate-limit, forward-auth (→ auth:8081/api/auth/verif
   ├─ /api/admin/events/*          ┘→ ticketing-service :8082  (events, approvals, reservations, bookings)
   └─ /api/payments/*              → payment-service   :8083  (transactions, gateway sessions, webhooks)
 
-Services communicate asynchronously via Kafka (4 brokers, RF=3, 4 partitions per topic):
+Services communicate asynchronously via Kafka (3 KRaft brokers, RF=3, 4 partitions per topic):
   ├─ event.cancelled    ticketing → ticketing (event status cache) + payment (refund requests)
   ├─ payment.completed  payment   → ticketing (confirm booking, issue tickets)
   ├─ payment.expired    payment   → ticketing (expire booking, release seats)
@@ -38,6 +38,15 @@ Reservation expiry lives in the payment service, split by who owns the session:
   └─ in-process expiry sweeper, EXPIRY_POLL_SEC (no session was ever created,
      or the webhook never arrived)
 ```
+
+### Kafka cluster internals
+
+The `KAFKA_BROKERS` list is only a bootstrap "phone book" — after the one-time
+metadata handshake, producers and consumers talk directly to each partition's
+leader broker. Topic partition/leader layout below matches a live
+`kafka-topics --describe` output.
+
+![Kafka infrastructure architecture](docs/kafka-kraft-architecture.png)
 
 ## Roles
 

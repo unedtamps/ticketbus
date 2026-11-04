@@ -34,7 +34,7 @@ import {
   MapPin,
   Users,
 } from "lucide-react";
-import { fmtIDR } from "@/lib/format";
+import { fmtIDR, initialsOf } from "@/lib/format";
 import { LocalTime } from "@/components/ui/local-time";
 import type { EventDetail, EventItem, EventPayout, OrganizerEventListResponse, OrganizerSummary, PayoutAccount, TransactionResponse } from "@/types";
 
@@ -325,6 +325,9 @@ export default function DashboardPage() {
   const queryClient = useQueryClient();
 
   const [adminFilter, setAdminFilter] = useState<AdminFilter>("pending");
+  // Event ids whose poster URL failed to load, so the row falls back to the
+  // initials tile instead of leaving a broken-image icon in the table.
+  const [imgFailed, setImgFailed] = useState<Set<string>>(new Set());
   const [rejecting, setRejecting] = useState<EventItem | null>(null);
   const [cancelling, setCancelling] = useState<EventItem | null>(null);
   const [reprocessing, setReprocessing] = useState<EventItem | null>(null);
@@ -432,24 +435,35 @@ export default function DashboardPage() {
     enabled: !!user && isAdmin,
   });
 
-  // Hooks must run unconditionally, so the pending-queue list is derived
-  // before the early returns below.
-  const adminEventsRaw = adminEventsQuery.data?.events || [];
-  const moderationQueue = isAdmin && adminFilter === "pending";
+  // Headline counts are fetched per status so each tile stays true whichever
+  // filter is on screen. limit=1 keeps the payload tiny; only `total` is used.
+  const adminCount = (status: string) => ({
+    queryKey: ["adminEvents", "count", status],
+    queryFn: () => adminApi.listAll(status, 1),
+    enabled: !!user && isAdmin,
+  });
+  const adminAllCountQuery = useQuery(adminCount(""));
+  const adminPendingCountQuery = useQuery(adminCount("pending"));
+  const adminPublishedCountQuery = useQuery(adminCount("published"));
 
-  // The moderation queue shows per-event ticket totals and gross potential;
-  // those live in the event detail, not the admin list response.
+  // Hooks must run unconditionally, so the derived list is built before the
+  // early returns below.
+  const adminEventsRaw = adminEventsQuery.data?.events || [];
+
+  // The ticket totals and gross potential live in the event detail, not the
+  // admin list response, so each pending row loads its own detail.
+  const pendingAdminEvents = adminEventsRaw.filter((e) => e.status === "pending");
   const pendingDetailQueries = useQueries({
-    queries: adminEventsRaw.map((e) => ({
+    queries: pendingAdminEvents.map((e) => ({
       queryKey: ["event", e.id],
       queryFn: () => api.get<EventDetail>(`/api/events/${e.id}`),
-      enabled: moderationQueue,
+      enabled: !!user && isAdmin,
       staleTime: 60 * 1000,
     })),
   });
   const pendingDetails = new Map<string, EventDetail | undefined>();
   pendingDetailQueries.forEach((q, i) => {
-    const e = adminEventsRaw[i];
+    const e = pendingAdminEvents[i];
     if (e) pendingDetails.set(e.id, q.data);
   });
 
@@ -468,7 +482,10 @@ export default function DashboardPage() {
   // regardless of which page is showing.
   const myEventsSummary: OrganizerSummary | undefined = myEventPages[0]?.summary;
   const adminEvents = adminEventsRaw;
-  const adminTotal = adminEventsQuery.data?.total || 0;
+  // Quota and gross potential are read from each pending event's detail, so the
+  // column only means something on the Pending filter — elsewhere it would be a
+  // column of dashes.
+  const showQuotaCol = adminFilter === "pending";
 
   // Paging state is derived from the page payloads, not from React Query's
   // hasNextPage/hasPreviousPage: those describe the position in the fetched
@@ -544,37 +561,43 @@ export default function DashboardPage() {
         {/* ── ADMIN ── */}
         {isAdmin && (
           <>
-            {/* Stats */}
-            <div className="grid gap-4 sm:grid-cols-3 mb-8 fade-up">
+            {/* Headline counts. Each tile is fetched per status, so the numbers
+                stay true whichever filter is showing. */}
+            <div className="grid gap-4 sm:grid-cols-3 mb-7 fade-up">
               <div className="card flex items-center gap-4 p-4">
                 <span className="icon-tile"><Shield className="w-5 h-5" /></span>
                 <div>
-                  <p className="text-2xl font-extrabold text-[#16224A]">{adminTotal}</p>
-                  <p className="text-xs font-semibold text-[#6E7B96]">Total Events</p>
+                  <p className="text-2xl font-extrabold text-[#16224A] tabular-nums">
+                    {adminAllCountQuery.data?.total ?? "—"}
+                  </p>
+                  <p className="text-xs font-semibold text-[#6E7B96]">Total events</p>
                 </div>
               </div>
-              <Link href="/dashboard" onClick={() => setAdminFilter("pending")} className="card flex items-center gap-4 p-4 group cursor-pointer">
-                <span className="icon-tile bg-[#FFF4CC] text-[#8A6400]"><Calendar className="w-5 h-5" /></span>
+              <button
+                onClick={() => setAdminFilter("pending")}
+                className="card flex items-center gap-4 p-4 text-left transition-colors hover:bg-[#FCFDFF]"
+              >
+                <span className="icon-tile bg-[#FFF4CC] text-[#8A6400]"><Clock className="w-5 h-5" /></span>
                 <div>
-                  <p className="text-2xl font-extrabold text-[#16224A]">
-                    {adminFilter === "pending" ? adminTotal : "..."}
+                  <p className="text-2xl font-extrabold text-[#16224A] tabular-nums">
+                    {adminPendingCountQuery.data?.total ?? "—"}
                   </p>
-                  <p className="text-xs font-semibold text-[#6E7B96]">Pending Review</p>
+                  <p className="text-xs font-semibold text-[#6E7B96]">Menunggu review</p>
                 </div>
-              </Link>
+              </button>
               <div className="card flex items-center gap-4 p-4">
-                <span className="icon-tile"><Check className="w-5 h-5" /></span>
+                <span className="icon-tile bg-[#E7EEFF] text-[#2450D9]"><Check className="w-5 h-5" /></span>
                 <div>
-                  <p className="text-lg font-extrabold text-[#16224A] capitalize">
-                    {adminFilter ? adminFilter : "all"}
+                  <p className="text-2xl font-extrabold text-[#16224A] tabular-nums">
+                    {adminPublishedCountQuery.data?.total ?? "—"}
                   </p>
-                  <p className="text-xs font-semibold text-[#6E7B96]">Current Filter</p>
+                  <p className="text-xs font-semibold text-[#6E7B96]">Tayang</p>
                 </div>
               </div>
             </div>
 
             {/* Filter chips */}
-            <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+            <div className="flex gap-2 mb-5 overflow-x-auto pb-2">
               {FILTER_LABELS.map(f => (
                 <button
                   key={f.key}
@@ -594,7 +617,7 @@ export default function DashboardPage() {
             {adminLoading && (
               <div className="card text-center py-10">
                 <Loader2 className="w-5 h-5 text-[#C9D4E8] animate-spin mx-auto mb-2" />
-                <p className="text-[#6E7B96] text-sm">Loading events...</p>
+                <p className="text-[#6E7B96] text-sm">Memuat event...</p>
               </div>
             )}
 
@@ -602,116 +625,109 @@ export default function DashboardPage() {
             {!adminLoading && adminEvents.length === 0 && (
               <div className="card text-center py-12">
                 <Ticket className="w-8 h-8 text-[#C9D4E8] mx-auto mb-3" />
-                <p className="text-[#6E7B96] text-sm">No events found for this filter</p>
+                <p className="text-[#6E7B96] text-sm">
+                  {adminFilter === "pending"
+                    ? "Tidak ada event yang menunggu persetujuan."
+                    : "Tidak ada event pada filter ini."}
+                </p>
               </div>
             )}
 
-            {/* Moderation queue (pending filter) — per design screen 09 */}
-            {!adminLoading && moderationQueue && adminEvents.length > 0 && (
-              <div id="dash-admin-events" className="card p-0 overflow-hidden scroll-mt-24">
-                <div className="px-5 pt-5 pb-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-[family-name:var(--font-display)] text-xl text-[#16224A]">
-                      Menunggu persetujuan
-                    </p>
-                    <span className="badge chip-citrine">{adminTotal} EVENT</span>
-                  </div>
-                  <p className="text-[13px] text-[#6E7B96] mt-1">
-                    Event baru tayang setelah kamu setujui. Cek poster &amp; data sebelum memutuskan.
-                  </p>
+            {/* One table for every filter, so a pending event looks identical
+                whether it is reached from All, Pending, or a direct link. */}
+            {!adminLoading && adminEvents.length > 0 && (
+              <div id="dash-admin-events" className="rounded-xl border border-[#E4EAF4] overflow-hidden bg-white scroll-mt-24">
+                <div className={`grid ${showQuotaCol ? "grid-cols-[1fr_92px_190px_228px]" : "grid-cols-[1fr_92px_228px]"} gap-3 items-center px-4 py-2.5 bg-[#F6F9FC] border-b border-[#E4EAF4]`}>
+                  <span className="text-[9.5px] font-extrabold uppercase tracking-[0.11em] text-[#9AA6BC]">Event</span>
+                  <span className="text-[9.5px] font-extrabold uppercase tracking-[0.11em] text-[#9AA6BC]">Status</span>
+                  {showQuotaCol && (
+                    <span className="text-[9.5px] font-extrabold uppercase tracking-[0.11em] text-[#9AA6BC] text-right">Kuota &middot; potensi</span>
+                  )}
+                  <span className="text-[9.5px] font-extrabold uppercase tracking-[0.11em] text-[#9AA6BC] text-right">Aksi</span>
                 </div>
-                <div className="divide-y divide-[#E4EAF4] border-t border-[#E4EAF4]">
-                  {adminEvents.map(event => {
-                    const detail = pendingDetails.get(event.id);
-                    const types = detail?.ticket_types || [];
-                    const quota = types.reduce((sum, tt) => sum + tt.quantity, 0);
-                    const gross = types.reduce((sum, tt) => sum + tt.price_rupiah * tt.quantity, 0);
-                    const initials = event.title
-                      .split(/\s+/)
-                      .slice(0, 2)
-                      .map(w => w[0]!.toUpperCase())
-                      .join("");
-                    return (
-                      <div key={event.id} className="flex items-center gap-3.5 px-5 py-3.5">
-                        {event.image_url ? (
+
+                {adminEvents.map(event => {
+                  const detail = pendingDetails.get(event.id);
+                  const types = detail?.ticket_types || [];
+                  const quota = types.reduce((sum, tt) => sum + tt.quantity, 0);
+                  const gross = types.reduce((sum, tt) => sum + tt.price_rupiah * tt.quantity, 0);
+                  const isPending = event.status === "pending";
+                  // A blank title yields no words; the shared helper returns ""
+                  // rather than throwing on a missing character.
+                  const initials = initialsOf(event.title);
+
+                  return (
+                    <div
+                      key={event.id}
+                      className={`grid ${showQuotaCol ? "grid-cols-[1fr_92px_190px_228px]" : "grid-cols-[1fr_92px_228px]"} gap-3 items-center px-4 py-3.5 border-b border-[#E4EAF4] last:border-b-0 border-l-[3px] transition-colors hover:bg-[#FCFDFF] ${
+                        event.status === "published" ? "border-l-[#2E9E5B]" :
+                        isPending ? "border-l-[#FFD43B]" :
+                        event.status === "cancelled" || event.status === "rejected" ? "border-l-[#E05B4A]" : "border-l-[#EDF1F7]"
+                      }`}
+                    >
+                      {/* Event identity */}
+                      <div className="flex items-center gap-3 min-w-0">
+                        {event.image_url && !imgFailed.has(event.id) ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={event.image_url} alt="" className="w-[52px] h-[52px] rounded-xl object-cover flex-shrink-0" />
+                          <img
+                            src={event.image_url}
+                            alt=""
+                            onError={() => setImgFailed(p => new Set(p).add(event.id))}
+                            className="w-10 h-10 rounded-lg object-cover flex-shrink-0 bg-[#F0F5FF]"
+                          />
                         ) : (
-                          <div className="w-[52px] h-[52px] rounded-xl bg-[#F0F5FF] text-[#2450D9] flex items-center justify-center font-[family-name:var(--font-display)] text-lg flex-shrink-0">
+                          <div className="w-10 h-10 rounded-lg bg-[#F0F5FF] text-[#2450D9] flex items-center justify-center font-[family-name:var(--font-display)] text-sm flex-shrink-0">
                             {initials}
                           </div>
                         )}
-                        <div className="flex-1 min-w-0">
+                        <div className="min-w-0">
                           <Link
                             href={`/events/${event.id}`}
-                            className="block text-[13.5px] font-bold text-[#16224A] hover:text-[#2450D9] transition-colors truncate"
+                            className="block text-sm font-extrabold text-[#16224A] hover:text-[#2450D9] transition-colors truncate"
                           >
                             {event.title}
                           </Link>
                           <p className="text-[11.5px] font-semibold text-[#6E7B96] mt-0.5 truncate">
-                            <LocalTime iso={event.start_at} format="short" /> &middot; {event.venue_name || event.venue_address}
+                            <LocalTime iso={event.start_at} format="short" /> &middot; {event.venue_name || event.venue_address || "—"}
                           </p>
                         </div>
-                        <div className="hidden md:block text-right flex-shrink-0">
-                          <p className="text-[10px] font-extrabold uppercase tracking-[1.2px] text-[#6E7B96]">
-                            {detail ? `${quota} tiket · ${types.length} tipe` : "…"}
+                      </div>
+
+                      <span className={badgeClass(event.status)}>{event.status}</span>
+
+                      {/* Moderation figures: how many tickets are on offer and
+                          what they are worth if they all sell. */}
+                      {showQuotaCol && (
+                        <div className="text-right whitespace-nowrap">
+                          <p className="text-[12px] font-extrabold text-[#16224A] tabular-nums">
+                            {detail ? `${quota} tiket` : "…"}
                           </p>
-                          <p className="text-[10px] font-extrabold uppercase tracking-[1.2px] text-[#6E7B96] mt-0.5">
-                            Potensi gross
-                          </p>
-                          <p className="text-[13px] font-extrabold text-[#16224A]">
+                          <p className="text-[10px] font-bold text-[#9AA6BC] mt-0.5 tabular-nums">
                             {detail ? fmtIDR(gross) : "…"}
                           </p>
                         </div>
-                        <div className="flex gap-2 flex-shrink-0">
-                          <button onClick={() => setRejecting(event)} className="btn-outline text-xs font-bold px-3.5! py-2!">
-                            <X className="w-3.5 h-3.5" /> Tolak
-                          </button>
-                          <button onClick={() => setApproving(event)} className="btn-approve text-xs px-3.5! py-2!">
-                            <Check className="w-3.5 h-3.5" /> Setujui
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+                      )}
 
-            {/* Event cards (other filters) */}
-            {!adminLoading && !moderationQueue && adminEvents.length > 0 && (
-              <div id="dash-admin-events" className="space-y-4 scroll-mt-24">
-                {adminEvents.map(event => (
-                  <div key={event.id} className="card space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-[family-name:var(--font-display)] text-lg text-[#16224A]">{event.title}</h3>
-                        <p className="text-sm text-[#6E7B96] mt-1 line-clamp-1">{event.description || "No description"}</p>
+                      {/* Actions — moderation for pending, view for the rest. */}
+                      <div className="flex gap-2 justify-end">
+                        {isPending ? (
+                          <>
+                            <button onClick={() => setRejecting(event)} className="btn-outline text-xs font-bold px-3 py-1.5">
+                              <X className="w-3.5 h-3.5" /> Tolak
+                            </button>
+                            <button onClick={() => setApproving(event)} className="btn-approve text-xs px-3 py-1.5">
+                              <Check className="w-3.5 h-3.5" /> Setujui
+                            </button>
+                          </>
+                        ) : (
+                          <Link href={`/events/${event.id}`} className="btn-outline text-xs font-bold px-3 py-1.5">
+                            Lihat
+                          </Link>
+                        )}
                       </div>
-                      <span className={badgeClass(event.status)}>{event.status}</span>
                     </div>
-                    <div className="flex flex-wrap gap-4 text-xs font-semibold text-[#6E7B96]">
-                      {event.venue_name ? (
-                        <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-[#9AA6BC]" />{event.venue_name}</span>
-                      ) : null}
-                      {event.venue_capacity > 0 && (
-                        <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-[#9AA6BC]" />{event.venue_capacity}</span>
-                      )}
-                      <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-[#9AA6BC]" /><LocalTime iso={event.start_at} format="short" /></span>
-                    </div>
-                    <div className="flex gap-2 pt-3 border-t border-[#E4EAF4]">
-                      <Link href={`/events/${event.id}`} className="btn-outline text-sm">View</Link>
-                      {event.status === "pending" && (
-                        <>
-                          <button onClick={() => setApproving(event)} className="btn-approve text-sm">
-                            <Check className="w-4 h-4" />Approve
-                          </button>
-                          <button onClick={() => setRejecting(event)} className="btn-outline text-sm font-bold text-[#16224A]"><X className="w-4 h-4" />Reject</button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>
@@ -1304,16 +1320,16 @@ export default function DashboardPage() {
       {/* Approve event dialog */}
       <ConfirmDialog
         open={!!approving}
-        title="Approve Event"
-        message={`Approve "${approving?.title}" and make it public?`}
-        confirmLabel="Yes, Approve"
+        title="Setujui Event"
+        message={`Setujui "${approving?.title}" dan tayangkan ke publik?`}
+        confirmLabel="Ya, Setujui"
         variant="success"
         loading={false}
         onConfirm={() => {
           if (!approving) return;
           adminApi.approveEvent(approving.id)
             .then(() => {
-              toast.success("Event approved");
+              toast.success("Event disetujui");
               queryClient.invalidateQueries({ queryKey: ["adminEvents"] });
             })
             .catch((err: Error) => toast.error(err.message))
@@ -1325,16 +1341,16 @@ export default function DashboardPage() {
       {/* Reject event dialog */}
       <ConfirmDialog
         open={!!rejecting}
-        title="Reject Event"
-        message={`Reject "${rejecting?.title}" and notify the organizer?`}
-        confirmLabel="Reject"
+        title="Tolak Event"
+        message={`Tolak "${rejecting?.title}" dan beri tahu organizer?`}
+        confirmLabel="Tolak"
         variant="danger"
         requireReason
         onConfirm={(reason) => {
           if (!rejecting) return;
           adminApi.rejectEvent(rejecting.id, reason || "")
             .then(() => {
-              toast.success("Event rejected");
+              toast.success("Event ditolak");
               queryClient.invalidateQueries({ queryKey: ["adminEvents"] });
             })
             .catch((err: Error) => toast.error(err.message))

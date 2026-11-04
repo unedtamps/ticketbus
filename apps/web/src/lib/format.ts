@@ -85,3 +85,17 @@ export function fmtZone(iso?: string): string {
 export function fmtIDR(rupiah: number): string {
   return "Rp " + rupiah.toLocaleString("id-ID");
 }
+
+/**
+ * First two initials of a title, for the placeholder shown when an event has no
+ * poster. Returns "" for a blank title rather than throwing: titles are
+ * organizer-supplied, so an empty one must not break the whole list.
+ */
+export function initialsOf(title: string): string {
+  return title
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+}

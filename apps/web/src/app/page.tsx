@@ -1,18 +1,10 @@
 import Link from "next/link";
 import { MapPin } from "lucide-react";
 import { LocalTime } from "@/components/ui/local-time";
+import { initialsOf } from "@/lib/format";
 import type { EventListResponse, EventItem } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-function monogram(title: string): string {
-  return title
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]!.toUpperCase())
-    .join("");
-}
 
 function EventCard({ event, index }: { event: EventItem; index: number }) {
   return (
@@ -32,7 +24,7 @@ function EventCard({ event, index }: { event: EventItem; index: number }) {
           />
         ) : (
           <span className="absolute inset-0 flex items-center justify-center font-[family-name:var(--font-display)] text-3xl text-[#C9D4E8]">
-            {monogram(event.title)}
+            {initialsOf(event.title)}
           </span>
         )}
         <span

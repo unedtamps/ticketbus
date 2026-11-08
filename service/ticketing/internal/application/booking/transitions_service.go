@@ -39,15 +39,24 @@ func (s *BookingService) Confirm(ctx context.Context, bookingID, paymentID strin
 
 	events := make([]domain.OutboxEvent, 0, len(booking.Items))
 	for _, item := range booking.Items {
+		// Everything the mail service needs is snapshotted here: the booking
+		// arrived enriched with the event context and ticket names, so the
+		// consumer can render and deliver the e-ticket without a lookup.
 		events = append(events, domain.OutboxEvent{
-			Topic: "ticket.issued",
+			Topic: sdomain.TopicTicketIssued,
 			Key:   bookingID + "-" + item.ID,
 			Payload: sdomain.TicketIssued{
-				TicketID:     item.ID,
-				BookingID:    bookingID,
-				UserID:       booking.UserID,
-				EventID:      booking.EventID,
-				TicketTypeID: item.TicketTypeID,
+				TicketID:       item.ID,
+				BookingID:      bookingID,
+				UserID:         booking.UserID,
+				Email:          booking.CustomerEmail,
+				EventID:        booking.EventID,
+				EventTitle:     booking.EventTitle,
+				EventVenue:     booking.EventVenue,
+				EventStartAt:   booking.EventStartAt,
+				TicketTypeID:   item.TicketTypeID,
+				TicketTypeName: item.TicketTypeName,
+				Quantity:       item.Quantity,
 			},
 		})
 	}

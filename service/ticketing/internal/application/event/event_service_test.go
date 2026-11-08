@@ -318,6 +318,7 @@ func TestCancelEvent_Success(t *testing.T) {
 	ctx := context.Background()
 	event := fixtures.NewTestEvent(fixtures.WithEventStatus(sdomain.EventStatusPublished), fixtures.WithEventOrganizerID("org-1"))
 	repo.EXPECT().FindEventByID(ctx, event.ID).Return(event, nil)
+	repo.EXPECT().ListBookerEmails(ctx, event.ID, []string{"confirmed", "pending"}).Return(nil, nil)
 	repo.EXPECT().CancelAndPublish(ctx, event.ID, mock.Anything).Return(true, nil)
 	svc := newEventService(t, repo, seatReader)
 	cancelled, err := svc.CancelEvent(ctx, event.ID, "org-1")
@@ -360,6 +361,7 @@ func TestCancelEventAsAdmin_AfterEnd_Succeeds(t *testing.T) {
 		fixtures.WithEventEndAt(past),
 	)
 	repo.EXPECT().FindEventByID(ctx, event.ID).Return(event, nil)
+	repo.EXPECT().ListBookerEmails(ctx, event.ID, []string{"confirmed", "pending"}).Return(nil, nil)
 	repo.EXPECT().CancelAndPublish(ctx, event.ID, mock.Anything).Return(true, nil)
 	svc := newEventService(t, repo, seatReader)
 
@@ -420,6 +422,7 @@ func TestCancelEvent_UpdateFails(t *testing.T) {
 	ctx := context.Background()
 	event := fixtures.NewTestEvent(fixtures.WithEventStatus(sdomain.EventStatusPublished), fixtures.WithEventOrganizerID("org-1"))
 	repo.EXPECT().FindEventByID(ctx, event.ID).Return(event, nil)
+	repo.EXPECT().ListBookerEmails(ctx, event.ID, []string{"confirmed", "pending"}).Return(nil, nil)
 	repo.EXPECT().CancelAndPublish(ctx, event.ID, mock.Anything).Return(false, errors.New("db error"))
 	svc := newEventService(t, repo, seatReader)
 	_, err := svc.CancelEvent(ctx, event.ID, "org-1")

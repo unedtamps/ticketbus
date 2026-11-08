@@ -9,6 +9,10 @@ type Booking struct {
 	EventID   string     `json:"event_id"`
 	Status    string     `json:"status"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	// CustomerEmail is snapshotted at reserve time from the authenticated
+	// user, so ticket.issued can carry the delivery address to the mail
+	// service without a lookup against the auth service.
+	CustomerEmail string `json:"customer_email,omitempty"`
 	// Deprecated compatibility fields. The target schema derives totals from items
 	// and keeps payment state in the payment service.
 	TotalRupiah  int           `json:"total_rupiah"`

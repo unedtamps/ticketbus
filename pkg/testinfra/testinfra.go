@@ -19,6 +19,7 @@ import (
 	tckafka "github.com/testcontainers/testcontainers-go/modules/kafka"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
+	sdto "github.com/unedtamps/ticketbus/pkg/dto"
 	"github.com/unedtamps/ticketbus/pkg/kafka"
 )
 
@@ -26,7 +27,7 @@ import (
 // consume from. Created up front so consumers do not race topic creation.
 var Topics = []string{
 	"event.cancelled",
-	"ticket.issued",
+	sdto.TopicTicketIssued,
 	"payment.completed",
 	"payment.expired",
 	"payout.requested",

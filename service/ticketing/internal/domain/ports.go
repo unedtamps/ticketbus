@@ -17,6 +17,10 @@ type EventRepository interface {
 	// the whole cancellation cascade, so it must not be separable from the
 	// status change. Reports whether the update was applied.
 	CancelAndPublish(ctx context.Context, eventID string, ev OutboxEvent) (bool, error)
+	// ListBookerEmails returns one entry per booking of the event whose status
+	// is in statuses and whose email was snapshotted — the recipient list for
+	// the cancellation notification.
+	ListBookerEmails(ctx context.Context, eventID string, statuses []string) ([]dto.EventCancelledBooker, error)
 	FindEventByID(ctx context.Context, id string) (*Event, error)
 	ListPublished(ctx context.Context, limit, offset int) ([]Event, int, error)
 	ListByOrganizer(ctx context.Context, organizerID string, limit int, cursor *Cursor) ([]Event, error)

@@ -58,13 +58,13 @@ func (r *BookingRepo) CreateReservation(ctx context.Context, b *domain.Booking, 
 // caller rolls the transaction back — the seat decrement is undone with it.
 func insertBooking(ctx context.Context, tx pgx.Tx, b *domain.Booking) error {
 	tag, err := tx.Exec(ctx, `
-		INSERT INTO bookings (id, user_id, event_id, status, expires_at)
-		SELECT $1,$2,$3,$4,$5
+		INSERT INTO bookings (id, user_id, event_id, status, expires_at, customer_email)
+		SELECT $1,$2,$3,$4,$5,$6
 		WHERE EXISTS (
 			SELECT 1 FROM events
 			WHERE id = $3 AND status = 'published' AND start_at <= NOW() AND NOW() < end_at
 		)`,
-		b.ID, b.UserID, b.EventID, b.Status, b.ExpiresAt)
+		b.ID, b.UserID, b.EventID, b.Status, b.ExpiresAt, b.CustomerEmail)
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func insertBooking(ctx context.Context, tx pgx.Tx, b *domain.Booking) error {
 // from the same join, so a booking costs one query rather than one per item.
 func (r *BookingRepo) FindByID(ctx context.Context, id string) (*domain.Booking, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT b.id, b.user_id, b.event_id, b.status, b.expires_at, b.created_at,
+		SELECT b.id, b.user_id, b.event_id, b.status, b.expires_at, b.created_at, b.customer_email,
 		       COALESCE(e.title, ''), COALESCE(e.start_at, 'epoch'::timestamptz),
 		       COALESCE(e.venue_name, ''),
 		       bi.id, bi.ticket_type_id, bi.quantity, bi.total_price_rupiah,
@@ -121,7 +121,7 @@ func (r *BookingRepo) FindByID(ctx context.Context, id string) (*domain.Booking,
 			name     string
 		)
 		if err := rows.Scan(
-			&row.ID, &row.UserID, &row.EventID, &row.Status, &row.ExpiresAt, &row.CreatedAt,
+			&row.ID, &row.UserID, &row.EventID, &row.Status, &row.ExpiresAt, &row.CreatedAt, &row.CustomerEmail,
 			&row.EventTitle, &rowStart, &row.EventVenue,
 			&itemID, &ticketID, &quantity, &price, &name,
 		); err != nil {
@@ -356,6 +356,7 @@ func (r *BookingRepo) ListByEventID(ctx context.Context, eventID string) ([]doma
 		}
 		bookings = append(bookings, b)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}

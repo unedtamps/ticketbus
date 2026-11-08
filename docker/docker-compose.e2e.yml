@@ -271,6 +271,46 @@ services:
       start_period: 5s
     networks: [e2e-net]
 
+  maildev:
+    # Fake SMTP for e2e: the mail service delivers e-tickets here. Inbox UI on
+    # the host at http://localhost:11080.
+    image: maildev/maildev:2.2.1
+    container_name: e2e-maildev
+    ports:
+      - "11080:1080"
+    networks: [e2e-net]
+
+  mail:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: mail
+    image: ticketbus/e2e-mail
+    container_name: e2e-mail
+    ports:
+      - "18084:8084"
+    environment:
+      APP_ENV: e2e
+      PORT: "8084"
+      KAFKA_BROKERS: kafka:29092
+      CONSUMER_CONCURRENCY: "1"
+      SMTP_HOST: maildev
+      SMTP_PORT: "1025"
+      SMTP_FROM: TicketBus <no-reply@ticketbus.local>
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4318
+    depends_on:
+      kafka:
+        condition: service_healthy
+      maildev:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8084/api/mail/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+    networks: [e2e-net]
+
   traefik:
     image: traefik:v3.3
     container_name: e2e-traefik

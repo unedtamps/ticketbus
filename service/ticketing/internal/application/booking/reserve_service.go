@@ -84,12 +84,13 @@ func (s *BookingService) Reserve(
 	}
 
 	booking := &domain.Booking{
-		ID:        res.BookingID,
-		UserID:    res.UserID,
-		EventID:   res.EventID,
-		Status:    "pending",
-		ExpiresAt: &res.ExpiresAt,
-		Items:     res.Items,
+		ID:            res.BookingID,
+		UserID:        res.UserID,
+		EventID:       res.EventID,
+		Status:        "pending",
+		ExpiresAt:     &res.ExpiresAt,
+		CustomerEmail: userEmail,
+		Items:         res.Items,
 	}
 
 	if err := s.bookingRepo.CreateReservation(ctx, booking, domain.OutboxEvent{

@@ -159,6 +159,17 @@ services:
     networks:
       - ticketbus-network
 
+  # Fake SMTP for dev: the mail service delivers e-tickets here. Inbox UI on
+  # http://localhost:1080, SMTP on 1025 (accepts any sender, no credentials).
+  maildev:
+    image: maildev/maildev:2.2.1
+    container_name: ticketbus-maildev
+    ports:
+      - "1080:1080"
+      - "1025:1025"
+    networks:
+      - ticketbus-network
+
 volumes:
   kafka1_kraft_data:
   kafka2_kraft_data:

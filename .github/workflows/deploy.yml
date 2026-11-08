@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [auth, ticketing, payment]
+        service: [auth, ticketing, payment, mail]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,7 +50,7 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile
-          build-args: SERVICE=${{ matrix.service }}-service
+          build-args: SERVICE=${{ matrix.service }}
           push: true
           tags: ${{ steps.tags.outputs.TAGS }}
 

@@ -1,5 +1,5 @@
 .PHONY: help infra-up infra-down infra-logs infra-clean \
-        dev dev-auth dev-ticketing dev-payment dev-web \
+        dev dev-auth dev-ticketing dev-payment dev-mail dev-web \
         web web-build web-start \
         build build-auth build-ticketing build-payment clean \
         migrate migrate-auth-up migrate-ticketing-up migrate-payment-up \
@@ -36,6 +36,7 @@ help:
 	@echo "  make dev-auth              Run auth service"
 	@echo "  make dev-ticketing         Run ticketing service"
 	@echo "  make dev-payment           Run payment service"
+	@echo "  make dev-mail              Run mail service"
 	@echo "  make dev-web               Run Next.js frontend"
 	@echo "  make web                   Build frontend and run with next start (production)"
 	@echo ""
@@ -89,6 +90,7 @@ dev:
 	@$(MAKE) dev-auth & \
 	$(MAKE) dev-ticketing & \
 	$(MAKE) dev-payment & \
+	$(MAKE) dev-mail & \
 	$(MAKE) dev-web & \
 	wait
 
@@ -112,6 +114,10 @@ dev-payment:
 	@mkdir -p $(LOGS_DIR)
 	@bash -o pipefail -c 'direnv exec service/payment/cmd/api go run ./service/payment/cmd/api 2>&1 | tee $(LOGS_DIR)/payment.log'
 
+dev-mail:
+	@mkdir -p $(LOGS_DIR)
+	@bash -o pipefail -c 'direnv exec service/mail/cmd/api go run ./service/mail/cmd/api 2>&1 | tee $(LOGS_DIR)/mail.log'
+
 dev-web:
 	pnpm run dev
 
@@ -132,7 +138,7 @@ direnv-allow:
 	direnv allow service/payment/cmd/api
 
 # Builds
-build: build-auth build-ticketing build-payment
+build: build-auth build-ticketing build-payment build-mail
 
 build-auth:
 	@mkdir -p bin
@@ -145,6 +151,10 @@ build-ticketing:
 build-payment:
 	@mkdir -p bin
 	go build -o bin/payment-service ./service/payment/cmd/api
+
+build-mail:
+	@mkdir -p bin
+	go build -o bin/mail-service ./service/mail/cmd/api
 
 clean:
 	rm -rf bin

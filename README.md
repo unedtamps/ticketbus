@@ -16,10 +16,10 @@ Traefik (:8000) — CORS, rate-limit, forward-auth (→ auth:8081/api/auth/verif
   └─ /api/payments/*              → payment-service   :8083  (transactions, gateway sessions, webhooks)
 
 Services communicate asynchronously via Kafka (3 KRaft brokers, RF=3, 4 partitions per topic):
-  ├─ event.cancelled    ticketing → ticketing (event status cache) + payment (refund requests)
+  ├─ event.cancelled    ticketing → ticketing (cancel cascade) + payment (refund requests) + mail (booker notification)
   ├─ payment.completed  payment   → ticketing (confirm booking, issue tickets)
   ├─ payment.expired    payment   → ticketing (expire booking, release seats)
-  ├─ ticket.issued      ticketing → (emitted per booking item on confirmation)
+  ├─ ticket.issued      ticketing → mail (e-ticket email per booking item)
   ├─ payout.requested   ticketing → payment (prepare an event payout)
   └─ payout.completed   payment   → ticketing (settle event payout status)
 
@@ -85,6 +85,7 @@ This guarantees **at-least-once delivery** and eliminates the dual-write problem
 | `auth-service` | Go | 8081 | `auth_db` (5432) | Customer/organizer registration, login, JWT (access 15m, refresh 7d), Traefik ForwardAuth `verify`, organizer profiles, admin seed from `ADMIN_SEEDS` |
 | `ticketing-service` | Go | 8082 | `ticketing_db` (5433) | Event CRUD, admin approval workflow, live seat counters, reservation holds (`RESERVATION_TTL`), booking transitions, cancel cascade, organizer payout accounts + per-event payouts, outbox: `event.cancelled`, `ticket.issued`, `payout.requested` (Kafka) + `payment.initiate` (REST dispatcher → payment) |
 | `payment-service` | Go | 8083 | `payment_db` (5435) | Transaction lifecycle (`initiated → pending → completed \| expired`), gateway session creation via pluggable `mock`/`xendit` processor, webhook ingestion, expiry poller, refund requests, event payout aggregation + Xendit Payouts API, outbox: `payment.*`, `payout.completed` |
+| `mail-service` | Go | 8084 | — (stateless) | Consumes `ticket.issued` and emails each buyer their e-ticket over SMTP (MailDev in dev); no database |
 | `web` | Next.js 16 | 3000 | — | TanStack Query data fetching, `proxy.ts` route guards, ticket-stub UI, toasts, ConfirmDialog, Tooltip, SSR homepage |
 
 All amounts are stored and sent to the gateway as whole rupiah integers (`amount_rupiah`, `price_rupiah`, currency `IDR`) — no minor-unit conversion anywhere in the payment path.
@@ -352,6 +353,8 @@ Notable values:
 | Auth Service | 8081 | JWT, ForwardAuth verify, `/api/auth/health` |
 | Ticketing Service | 8082 | Events + bookings, `/api/events/health`, `/api/bookings/health` |
 | Payment Service | 8083 | Webhooks + gateway sessions, `/api/payments/health` |
+| Mail Service | 8084 | E-ticket emails, `/api/mail/health` |
+| MailDev UI | 1080 | http://localhost:1080 — dev inbox (SMTP :1025) |
 | Next.js Frontend | 3000 | http://localhost:3000 |
 | Kafka UI | 8080 | http://localhost:8080 |
 | Kafka 1–3 | 9092–9094 | External (host), 29092–29094 internal (Docker). KRaft, no ZooKeeper |

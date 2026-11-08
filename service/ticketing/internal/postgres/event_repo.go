@@ -468,3 +468,31 @@ func (r *EventRepo) ListTicketTypesByEvent(
 	}
 	return types, nil
 }
+
+// ListBookerEmails returns one entry per booking of the event whose status is
+// in statuses and whose email was snapshotted, for the cancellation
+// notification recipient list.
+func (r *EventRepo) ListBookerEmails(
+	ctx context.Context,
+	eventID string,
+	statuses []string,
+) ([]sdomain.EventCancelledBooker, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, customer_email FROM bookings
+		WHERE event_id=$1 AND status = ANY($2) AND customer_email <> ''`,
+		eventID, statuses)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var bookers []sdomain.EventCancelledBooker
+	for rows.Next() {
+		var b sdomain.EventCancelledBooker
+		if err := rows.Scan(&b.BookingID, &b.Email); err != nil {
+			return nil, err
+		}
+		bookers = append(bookers, b)
+	}
+	return bookers, rows.Err()
+}

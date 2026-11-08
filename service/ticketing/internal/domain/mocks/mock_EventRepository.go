@@ -447,6 +447,80 @@ func (_c *MockEventRepository_FindPayoutAccount_Call) RunAndReturn(run func(ctx 
 	return _c
 }
 
+// ListBookerEmails provides a mock function for the type MockEventRepository
+func (_mock *MockEventRepository) ListBookerEmails(ctx context.Context, eventID string, statuses []string) ([]dto.EventCancelledBooker, error) {
+	ret := _mock.Called(ctx, eventID, statuses)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListBookerEmails")
+	}
+
+	var r0 []dto.EventCancelledBooker
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []string) ([]dto.EventCancelledBooker, error)); ok {
+		return returnFunc(ctx, eventID, statuses)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []string) []dto.EventCancelledBooker); ok {
+		r0 = returnFunc(ctx, eventID, statuses)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]dto.EventCancelledBooker)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []string) error); ok {
+		r1 = returnFunc(ctx, eventID, statuses)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockEventRepository_ListBookerEmails_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListBookerEmails'
+type MockEventRepository_ListBookerEmails_Call struct {
+	*mock.Call
+}
+
+// ListBookerEmails is a helper method to define mock.On call
+//   - ctx context.Context
+//   - eventID string
+//   - statuses []string
+func (_e *MockEventRepository_Expecter) ListBookerEmails(ctx any, eventID any, statuses any) *MockEventRepository_ListBookerEmails_Call {
+	return &MockEventRepository_ListBookerEmails_Call{Call: _e.mock.On("ListBookerEmails", ctx, eventID, statuses)}
+}
+
+func (_c *MockEventRepository_ListBookerEmails_Call) Run(run func(ctx context.Context, eventID string, statuses []string)) *MockEventRepository_ListBookerEmails_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []string
+		if args[2] != nil {
+			arg2 = args[2].([]string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockEventRepository_ListBookerEmails_Call) Return(eventCancelledBookers []dto.EventCancelledBooker, err error) *MockEventRepository_ListBookerEmails_Call {
+	_c.Call.Return(eventCancelledBookers, err)
+	return _c
+}
+
+func (_c *MockEventRepository_ListBookerEmails_Call) RunAndReturn(run func(ctx context.Context, eventID string, statuses []string) ([]dto.EventCancelledBooker, error)) *MockEventRepository_ListBookerEmails_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ListByOrganizer provides a mock function for the type MockEventRepository
 func (_mock *MockEventRepository) ListByOrganizer(ctx context.Context, organizerID string, limit int, cursor *domain.Cursor) ([]domain.Event, error) {
 	ret := _mock.Called(ctx, organizerID, limit, cursor)

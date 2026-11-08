@@ -100,7 +100,7 @@ func main() {
 	kafkaProducer := sharedkafka.NewProducer(kafkaBrokers)
 	if err := sharedkafka.EnsureTopics(kafkaBrokers, []string{
 		"event.cancelled",
-		"ticket.issued",
+		sdomain.TopicTicketIssued,
 		"payment.completed", "payment.expired",
 		sdomain.TopicPayoutRequested, sdomain.TopicPayoutCompleted,
 	}, 4, 3); err != nil {
@@ -115,7 +115,7 @@ func main() {
 		logger,
 		cfg.OutboxConcurrency,
 		cfg.OutboxPollMs,
-		[]string{"event.cancelled", "ticket.issued", sdomain.TopicPayoutRequested},
+		[]string{"event.cancelled", sdomain.TopicTicketIssued, sdomain.TopicPayoutRequested},
 	)
 
 	bookingSvc := bookingpkg.NewBookingService(

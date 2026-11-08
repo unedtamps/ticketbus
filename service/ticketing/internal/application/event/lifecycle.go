@@ -118,15 +118,27 @@ func (s *EventService) CancelEventAsAdmin(
 // event.cancelled row commit together — the row drives the whole cascade
 // (bookings cancelled, seats released, refunds started), so losing it after
 // a standalone update would strand the event half-cancelled.
+//
+// Affected bookers are snapshotted into the payload (still confirmed/pending
+// at this point — the cascade runs later in the consumer) so the mail service
+// can notify them without a lookup.
 func (s *EventService) cancel(ctx context.Context, event *domain.Event) (*domain.Event, error) {
+	bookers, err := s.repo.ListBookerEmails(ctx, event.ID, []string{"confirmed", "pending"})
+	if err != nil {
+		return nil, err
+	}
 	event.Status = sdomain.EventStatusCancelled
 	event.UpdatedAt = time.Now()
 	applied, err := s.repo.CancelAndPublish(ctx, event.ID, domain.OutboxEvent{
-		Topic:   "event.cancelled",
-		Key:     event.ID,
+		Topic: sdomain.TopicEventCancelled,
+		Key:   event.ID,
 		Payload: sdomain.EventCancelled{
-			EventID: event.ID,
-			At:      time.Now(),
+			EventID:      event.ID,
+			At:           time.Now(),
+			EventTitle:   event.Title,
+			EventVenue:   event.VenueName,
+			EventStartAt: event.StartAt,
+			Bookers:      bookers,
 		},
 	})
 	if err != nil {
@@ -176,9 +188,19 @@ func (s *EventService) reprocessCancellation(
 	// Surface the insert error: a silent failure here answered the organizer's
 	// reprocess with 200 while nothing was queued, and the stranded
 	// bookings/refunds would wait for someone to press the button again.
-	if err := s.outbox.Insert(ctx, "event.cancelled", event.ID, sdomain.EventCancelled{
-		EventID: event.ID,
-		At:      time.Now(),
+	// Bookers are re-listed including the already-cancelled ones — by now the
+	// cascade has run, and re-notifying everyone is the point of the reprocess.
+	bookers, err := s.repo.ListBookerEmails(ctx, event.ID, []string{"confirmed", "pending", "cancelled"})
+	if err != nil {
+		return nil, err
+	}
+	if err := s.outbox.Insert(ctx, sdomain.TopicEventCancelled, event.ID, sdomain.EventCancelled{
+		EventID:      event.ID,
+		At:           time.Now(),
+		EventTitle:   event.Title,
+		EventVenue:   event.VenueName,
+		EventStartAt: event.StartAt,
+		Bookers:      bookers,
 	}); err != nil {
 		return nil, err
 	}

@@ -36,6 +36,21 @@ type EventUpdated struct {
 type EventCancelled struct {
 	EventID string    `json:"event_id"`
 	At      time.Time `json:"at"`
+
+	// Snapshotted by ticketing at cancel time so the mail service can notify
+	// every booker without looking anything up. Bookers lists one entry per
+	// affected booking (confirmed and pending at cancel time; reprocess
+	// includes the already-cancelled ones for re-notification).
+	EventTitle   string                 `json:"event_title,omitempty"`
+	EventVenue   string                 `json:"event_venue,omitempty"`
+	EventStartAt time.Time              `json:"event_start_at,omitempty"`
+	Bookers      []EventCancelledBooker `json:"bookers,omitempty"`
+}
+
+// EventCancelledBooker is one booking affected by a cancellation.
+type EventCancelledBooker struct {
+	BookingID string `json:"booking_id"`
+	Email     string `json:"email"`
 }
 
 type BookingItem struct {
@@ -76,7 +91,26 @@ type TicketIssued struct {
 	UserID       string `json:"user_id"`
 	EventID      string `json:"event_id"`
 	TicketTypeID string `json:"ticket_type_id"`
+
+	// Snapshotted by ticketing at confirm time so the mail service can render
+	// and deliver the e-ticket without looking anything up.
+	Email          string    `json:"email,omitempty"`
+	EventTitle     string    `json:"event_title,omitempty"`
+	EventVenue     string    `json:"event_venue,omitempty"`
+	EventStartAt   time.Time `json:"event_start_at,omitempty"`
+	TicketTypeName string    `json:"ticket_type_name,omitempty"`
+	Quantity       int       `json:"quantity,omitempty"`
 }
+
+// TopicTicketIssued is the Kafka topic ticketing publishes once per booking
+// item when a payment confirms; the mail service consumes it to email the
+// buyer their e-ticket.
+const TopicTicketIssued = "ticket.issued"
+
+// TopicEventCancelled is the Kafka topic published when an event is cancelled
+// (by its organizer or an admin). Consumers: ticketing (cancel cascade),
+// payment (refund requests), mail (booker notification).
+const TopicEventCancelled = "event.cancelled"
 
 // TopicPaymentInitiate is the outbox topic for reservation → payment
 // transaction creation. It is delivered by the ticketing service's REST

@@ -45,6 +45,7 @@ pnpm-debug.log*
 .next/
 out/
 dist/
+*.tsbuildinfo
 build/
 
 # Coverage

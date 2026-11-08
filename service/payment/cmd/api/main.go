@@ -26,6 +26,7 @@ import (
 	payoutpkg "github.com/unedtamps/ticketbus/service/payment/internal/payout"
 	"github.com/unedtamps/ticketbus/service/payment/internal/postgres"
 	"github.com/unedtamps/ticketbus/service/payment/internal/processor"
+	refundpkg "github.com/unedtamps/ticketbus/service/payment/internal/refund"
 )
 
 func main() {
@@ -62,6 +63,7 @@ func main() {
 
 	txnRepo := postgres.NewTransactionRepo(pool)
 	refundRepo := postgres.NewRefundRepo(pool)
+	refundDestRepo := postgres.NewRefundDestinationRepo(pool)
 	payoutRepo := postgres.NewPayoutRepo(pool, cfg.Provider)
 
 	var payProcessor domain.PaymentProcessor
@@ -85,16 +87,21 @@ func main() {
 		"event.cancelled",
 		"payment.completed", "payment.expired",
 		sdomain.TopicPayoutRequested, sdomain.TopicPayoutCompleted,
+		sdomain.TopicRefundCompleted,
 	}, 4, 3); err != nil {
 		logger.Error("failed to ensure kafka topics", "error", err)
 		os.Exit(1)
 	}
 	outboxWorker := outbox.NewWorker(pool, kafkaProducer, logger, cfg.OutboxConcurrency, cfg.OutboxPollMs,
-		[]string{"payment.completed", "payment.expired", sdomain.TopicPayoutCompleted})
+		[]string{
+			"payment.completed", "payment.expired",
+			sdomain.TopicPayoutCompleted, sdomain.TopicRefundCompleted,
+		})
 
 	svc := application.NewPaymentService(
 		txnRepo,
 		refundRepo,
+		refundDestRepo,
 		payoutRepo,
 		payProcessor,
 		consumer,
@@ -107,10 +114,15 @@ func main() {
 		pool, payoutRepo, payProcessor, logger, cfg.PayoutDispatchPollMs, cfg.PayoutReconcileSec,
 	)
 
+	refundDispatcher := refundpkg.NewDispatcher(
+		pool, refundRepo, payProcessor, logger, cfg.RefundSweepSec, cfg.PayoutReconcileSec,
+	)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go outboxWorker.Run(ctx)
 	go payoutDispatcher.Run(ctx)
+	go refundDispatcher.Run(ctx)
 	_ = svc.StartConsumer(ctx)
 	svc.StartExpiryPoller(ctx, cfg.ExpiryPollSec)
 

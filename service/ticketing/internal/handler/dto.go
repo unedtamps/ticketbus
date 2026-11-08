@@ -157,3 +157,23 @@ type PayoutAttemptResponse struct {
 	RequestedAt           time.Time  `json:"requested_at"`
 	CompletedAt           *time.Time `json:"completed_at,omitempty"`
 }
+
+// AdminPayoutResponse is one row of the admin payout queue.
+type AdminPayoutResponse struct {
+	EventID               string `json:"event_id"`
+	EventTitle            string `json:"event_title"`
+	Attempt               int    `json:"attempt"`
+	OrganizerID           string `json:"organizer_id"`
+	BankCode              string `json:"bank_code"`
+	BankAccountNumber     string `json:"bank_account_number"`
+	BankAccountHolderName string `json:"bank_account_holder_name"`
+	Status                string `json:"status"`
+	AmountRupiah          int64  `json:"amount_rupiah"`
+	// What a retry would actually send. Zero means there is nothing left to
+	// pay, so the admin UI disables Retry.
+	CollectableRupiah     int64  `json:"collectable_rupiah"`
+	ProviderRef           string `json:"provider_ref,omitempty"`
+	FailureReason         string `json:"failure_reason,omitempty"`
+	RequestedAt           string `json:"requested_at"`
+	CompletedAt           string `json:"completed_at,omitempty"`
+}

@@ -51,38 +51,49 @@ type PayoutResult struct {
 	FailureCode string
 }
 
-// Gateway payout statuses (Xendit Payouts API v2). Statuses outside this set
-// are treated as non-terminal: an unrecognized status never finalizes a
-// payout, it just keeps waiting.
-// Gateway payout statuses (Xendit Payouts API v2). Statuses outside this set
-// are treated as non-terminal: an unrecognized status never finalizes a
-// payout, it just keeps waiting.
+// Gateway payout statuses (Xendit Payouts API v2). Only the statuses below
+// settle an attempt; everything else is still in flight.
 const (
 	GatewayPayoutPending   = "PENDING"
 	GatewayPayoutSucceeded = "SUCCEEDED"
 	GatewayPayoutFailed    = "FAILED"
 	GatewayPayoutReversed  = "REVERSED"
+	GatewayPayoutRejected  = "REJECTED"
+	GatewayPayoutCancelled = "CANCELLED"
+	GatewayPayoutExpired   = "EXPIRED"
 	// COMPLETED is not a documented v2 payout status; it is accepted
 	// defensively (and by the mock) in case a rail reports it.
 	GatewayPayoutCompleted = "COMPLETED"
 )
 
-// PayoutConfirmation maps a gateway payout status to the ledger outcome to
-// record. A payout is final only on a terminal gateway status; PENDING and
-// unknown statuses keep waiting for the gateway webhook or the dispatcher's
-// reconciliation poll. REVERSED (funds bounced back after a success) records
-// paid_out with a reason so the attempt terminates; the common case —
-// REVERSED arriving after the ledger already went paid_out — is logged by the
-// webhook handler instead.
-func PayoutConfirmation(gatewayStatus, failureCode string) (status, reason string, terminal bool) {
+// PayoutOutcome maps a gateway payout status to the ledger outcome to record.
+// status is PayoutStatusPaidOut or PayoutStatusFailed when terminal is true,
+// and empty otherwise; reason is organizer-facing Indonesian text, never a raw
+// gateway code.
+//
+// Every terminal gateway status must be mapped. Missing one strands the
+// attempt: the payout stays pending, ListPendingDispatched keeps returning it,
+// GetPayout keeps reporting the same terminal status, and the attempt can
+// never be retried (ResetForRetry only accepts failed/processing).
+func PayoutOutcome(gatewayStatus, failureCode string) (status, reason string, terminal bool) {
 	switch strings.ToUpper(strings.TrimSpace(gatewayStatus)) {
 	case GatewayPayoutSucceeded, GatewayPayoutCompleted:
 		return PayoutStatusPaidOut, "", true
-	case GatewayPayoutReversed:
-		return PayoutStatusPaidOut, "reversed_by_gateway", true
 	case GatewayPayoutFailed:
-		return PayoutStatusFailed, failureCode, true
+		return PayoutStatusFailed, FailureMessage(failureCode), true
+	case GatewayPayoutReversed:
+		// Funds bounced back after landing: the organizer never kept them, so
+		// the attempt cannot be recorded as paid out.
+		return PayoutStatusFailed, "Dana payout ditarik kembali oleh bank tujuan. Tim kami sedang menindaklanjuti.", true
+	case GatewayPayoutRejected:
+		return PayoutStatusFailed, "Payout ditolak oleh penyedia pembayaran.", true
+	case GatewayPayoutCancelled:
+		return PayoutStatusFailed, "Payout dibatalkan sebelum sempat diproses.", true
+	case GatewayPayoutExpired:
+		return PayoutStatusFailed, "Payout kedaluwarsa sebelum sempat diproses.", true
 	default:
+		// PENDING, ACCEPTED, ROUTING, REQUESTED, READY, LOCKED,
+		// PENDING_COMPLIANCE_ASSESSMENT, or an unroutable status: still moving.
 		return "", "", false
 	}
 }

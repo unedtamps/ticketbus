@@ -50,6 +50,13 @@ func (h *EventHandler) Routes(r chi.Router) chi.Router {
 			Post("/api/admin/events/{id}/cancel", h.AdminCancelEvent)
 		r.With(sharedhttp.RequireRole(sdomain.RoleAdmin)).
 			Post("/api/admin/events/{id}/cancel-reprocess", h.ReprocessCancellation)
+		// Payout queue: every event with a payout attempt, plus a retry that
+		// creates a new attempt. Retry reuses the organizer's saved account —
+		// the admin resolves a stuck payout, not the destination.
+		r.With(sharedhttp.RequireRole(sdomain.RoleAdmin)).
+			Get("/api/admin/payouts", h.ListAdminPayouts)
+		r.With(sharedhttp.RequireRole(sdomain.RoleAdmin)).
+			Post("/api/admin/events/{id}/payout/retry", h.AdminRetryPayout)
 	})
 
 	return r

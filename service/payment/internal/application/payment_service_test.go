@@ -31,8 +31,9 @@ func newPaymentService(
 ) *application.PaymentService {
 	t.Helper()
 	return application.NewPaymentService(
-		txnRepo, refundRepo, mocks.NewMockPayoutRepository(t), processor, consumer,
-		payLogger, "mock", []string{"ID_QRIS"},
+		txnRepo, refundRepo, mocks.NewMockRefundDestinationRepository(t),
+		mocks.NewMockPayoutRepository(t), processor, consumer,
+		payLogger, "mock", []string{"QRIS", "GOPAY"},
 	)
 }
 
@@ -114,7 +115,7 @@ func TestProcessPayment_Success(t *testing.T) {
 
 	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
 	processor.EXPECT().CreateSession(ctx, "11111111-1111-4111-8111-111111111111", 10000, "IDR", expiresAt,
-		[]string{"ID_QRIS"}, "user@example.com").Return(result, nil)
+		[]string{"QRIS", "GOPAY"}, "user@example.com").Return(result, nil)
 	txnRepo.EXPECT().TransitionIfInitiated(ctx, "txn-1", domain.StatusPending, "ps-1").Return(true, nil)
 	txnRepo.EXPECT().UpdateSession(ctx, "txn-1", "ps-1", "https://checkout.example/ps-1").Return(nil)
 
@@ -184,7 +185,7 @@ func TestProcessPayment_TransitionRace_CancelsSession(t *testing.T) {
 
 	txnRepo.EXPECT().FindByBookingID(ctx, "11111111-1111-4111-8111-111111111111").Return(txn, nil)
 	processor.EXPECT().CreateSession(ctx, "11111111-1111-4111-8111-111111111111", 10000, "IDR", expiresAt,
-		[]string{"ID_QRIS"}, "").Return(result, nil)
+		[]string{"QRIS", "GOPAY"}, "").Return(result, nil)
 	txnRepo.EXPECT().TransitionIfInitiated(ctx, "txn-1", domain.StatusPending, "ps-1").Return(false, nil)
 	processor.EXPECT().CancelSession(ctx, "ps-1").Return(nil)
 

@@ -99,6 +99,66 @@ func (r *EventRepo) RequestPayout(
 	return true, nil
 }
 
+// ListPayoutAttemptsForAdmin returns the latest payout attempt of every event
+// that has one, newest first, with the event title so the admin queue is
+// readable. One row per event: the newest attempt carries the current state.
+//
+// CollectableRupiah is what a retry would actually send: confirmed revenue that
+// was never paid out. A failed attempt with 0 collectable is the `no_earnings`
+// case — retrying it would fail identically, so the UI disables the button and
+// the service rejects the request.
+func (r *EventRepo) ListPayoutAttemptsForAdmin(
+	ctx context.Context,
+	limit int,
+) ([]domain.AdminPayoutRow, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT a.id, a.event_id, COALESCE(e.title, ''), a.attempt, a.organizer_id,
+		       a.bank_code, a.bank_account_number, a.bank_account_holder_name,
+		       a.status, COALESCE(a.amount_rupiah, 0), a.provider,
+		       COALESCE(a.provider_ref, ''), COALESCE(a.failure_reason, ''),
+		       a.requested_at, a.completed_at,
+		       -- What a retry would pay: confirmed revenue not yet paid out.
+		       GREATEST(0,
+		           COALESCE((SELECT SUM(bi.total_price_rupiah)
+		                     FROM bookings b
+		                     JOIN booking_items bi ON bi.booking_id = b.id
+		                     WHERE b.event_id = a.event_id AND b.status = 'confirmed'), 0)
+		         - COALESCE((SELECT SUM(paid.amount_rupiah)
+		                     FROM event_payout_attempts paid
+		                     WHERE paid.event_id = a.event_id AND paid.status = 'paid_out'), 0)
+		       ) AS collectable_rupiah
+		FROM event_payout_attempts a
+		LEFT JOIN events e ON e.id = a.event_id
+		WHERE a.attempt = (
+			SELECT MAX(inner_a.attempt) FROM event_payout_attempts inner_a
+			WHERE inner_a.event_id = a.event_id
+		)
+		ORDER BY a.updated_at DESC
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.AdminPayoutRow
+	for rows.Next() {
+		var row domain.AdminPayoutRow
+		var status string
+		if err := rows.Scan(
+			&row.ID, &row.EventID, &row.EventTitle, &row.Attempt, &row.OrganizerID,
+			&row.BankCode, &row.BankAccountNumber, &row.BankAccountHolderName,
+			&status, &row.AmountRupiah, &row.Provider, &row.ProviderRef,
+			&row.FailureReason, &row.RequestedAt, &row.CompletedAt,
+			&row.CollectableRupiah,
+		); err != nil {
+			return nil, err
+		}
+		row.Status = sdomain.PayoutStatus(status)
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 // ListPayoutAttempts returns every payout attempt of an event, oldest first.
 func (r *EventRepo) ListPayoutAttempts(ctx context.Context, eventID string) ([]domain.EventPayoutAttempt, error) {
 	rows, err := r.pool.Query(ctx, `
@@ -200,4 +260,22 @@ func (r *EventRepo) PayoutSummary(ctx context.Context, eventID string) (*domain.
 		}
 	}
 	return summary, nil
+}
+
+// CollectableRupiah returns what a new payout attempt would actually send:
+// confirmed booking revenue minus every amount already paid out. Zero means a
+// retry has nothing to pay (the no_earnings case).
+func (r *EventRepo) CollectableRupiah(ctx context.Context, eventID string) int64 {
+	var collectable int64
+	_ = r.pool.QueryRow(ctx, `
+		SELECT GREATEST(0,
+		    COALESCE((SELECT SUM(bi.total_price_rupiah)
+		              FROM bookings b
+		              JOIN booking_items bi ON bi.booking_id = b.id
+		              WHERE b.event_id = $1 AND b.status = 'confirmed'), 0)
+		  - COALESCE((SELECT SUM(paid.amount_rupiah)
+		              FROM event_payout_attempts paid
+		              WHERE paid.event_id = $1 AND paid.status = 'paid_out'), 0)
+		)`, eventID).Scan(&collectable)
+	return collectable
 }

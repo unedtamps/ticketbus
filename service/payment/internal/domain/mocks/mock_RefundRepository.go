@@ -6,8 +6,10 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	mock "github.com/stretchr/testify/mock"
+	"github.com/unedtamps/ticketbus/pkg/dto"
 	"github.com/unedtamps/ticketbus/service/payment/internal/domain"
 )
 
@@ -36,6 +38,216 @@ type MockRefundRepository_Expecter struct {
 
 func (_m *MockRefundRepository) EXPECT() *MockRefundRepository_Expecter {
 	return &MockRefundRepository_Expecter{mock: &_m.Mock}
+}
+
+// AttachProviderRef provides a mock function for the type MockRefundRepository
+func (_mock *MockRefundRepository) AttachProviderRef(ctx context.Context, refundID string, providerRef string) error {
+	ret := _mock.Called(ctx, refundID, providerRef)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AttachProviderRef")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, refundID, providerRef)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockRefundRepository_AttachProviderRef_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AttachProviderRef'
+type MockRefundRepository_AttachProviderRef_Call struct {
+	*mock.Call
+}
+
+// AttachProviderRef is a helper method to define mock.On call
+//   - ctx context.Context
+//   - refundID string
+//   - providerRef string
+func (_e *MockRefundRepository_Expecter) AttachProviderRef(ctx any, refundID any, providerRef any) *MockRefundRepository_AttachProviderRef_Call {
+	return &MockRefundRepository_AttachProviderRef_Call{Call: _e.mock.On("AttachProviderRef", ctx, refundID, providerRef)}
+}
+
+func (_c *MockRefundRepository_AttachProviderRef_Call) Run(run func(ctx context.Context, refundID string, providerRef string)) *MockRefundRepository_AttachProviderRef_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRefundRepository_AttachProviderRef_Call) Return(err error) *MockRefundRepository_AttachProviderRef_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockRefundRepository_AttachProviderRef_Call) RunAndReturn(run func(ctx context.Context, refundID string, providerRef string) error) *MockRefundRepository_AttachProviderRef_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ClaimForDisbursement provides a mock function for the type MockRefundRepository
+func (_mock *MockRefundRepository) ClaimForDisbursement(ctx context.Context, refundID string, job dto.RefundDisbursementRequested) (bool, error) {
+	ret := _mock.Called(ctx, refundID, job)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ClaimForDisbursement")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, dto.RefundDisbursementRequested) (bool, error)); ok {
+		return returnFunc(ctx, refundID, job)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, dto.RefundDisbursementRequested) bool); ok {
+		r0 = returnFunc(ctx, refundID, job)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, dto.RefundDisbursementRequested) error); ok {
+		r1 = returnFunc(ctx, refundID, job)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRefundRepository_ClaimForDisbursement_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ClaimForDisbursement'
+type MockRefundRepository_ClaimForDisbursement_Call struct {
+	*mock.Call
+}
+
+// ClaimForDisbursement is a helper method to define mock.On call
+//   - ctx context.Context
+//   - refundID string
+//   - job dto.RefundDisbursementRequested
+func (_e *MockRefundRepository_Expecter) ClaimForDisbursement(ctx any, refundID any, job any) *MockRefundRepository_ClaimForDisbursement_Call {
+	return &MockRefundRepository_ClaimForDisbursement_Call{Call: _e.mock.On("ClaimForDisbursement", ctx, refundID, job)}
+}
+
+func (_c *MockRefundRepository_ClaimForDisbursement_Call) Run(run func(ctx context.Context, refundID string, job dto.RefundDisbursementRequested)) *MockRefundRepository_ClaimForDisbursement_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 dto.RefundDisbursementRequested
+		if args[2] != nil {
+			arg2 = args[2].(dto.RefundDisbursementRequested)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRefundRepository_ClaimForDisbursement_Call) Return(b bool, err error) *MockRefundRepository_ClaimForDisbursement_Call {
+	_c.Call.Return(b, err)
+	return _c
+}
+
+func (_c *MockRefundRepository_ClaimForDisbursement_Call) RunAndReturn(run func(ctx context.Context, refundID string, job dto.RefundDisbursementRequested) (bool, error)) *MockRefundRepository_ClaimForDisbursement_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Complete provides a mock function for the type MockRefundRepository
+func (_mock *MockRefundRepository) Complete(ctx context.Context, refundID string, status string, providerRef string, failureReason string) error {
+	ret := _mock.Called(ctx, refundID, status, providerRef, failureReason)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Complete")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, string) error); ok {
+		r0 = returnFunc(ctx, refundID, status, providerRef, failureReason)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockRefundRepository_Complete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Complete'
+type MockRefundRepository_Complete_Call struct {
+	*mock.Call
+}
+
+// Complete is a helper method to define mock.On call
+//   - ctx context.Context
+//   - refundID string
+//   - status string
+//   - providerRef string
+//   - failureReason string
+func (_e *MockRefundRepository_Expecter) Complete(ctx any, refundID any, status any, providerRef any, failureReason any) *MockRefundRepository_Complete_Call {
+	return &MockRefundRepository_Complete_Call{Call: _e.mock.On("Complete", ctx, refundID, status, providerRef, failureReason)}
+}
+
+func (_c *MockRefundRepository_Complete_Call) Run(run func(ctx context.Context, refundID string, status string, providerRef string, failureReason string)) *MockRefundRepository_Complete_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		var arg4 string
+		if args[4] != nil {
+			arg4 = args[4].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRefundRepository_Complete_Call) Return(err error) *MockRefundRepository_Complete_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockRefundRepository_Complete_Call) RunAndReturn(run func(ctx context.Context, refundID string, status string, providerRef string, failureReason string) error) *MockRefundRepository_Complete_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // Create provides a mock function for the type MockRefundRepository
@@ -91,6 +303,442 @@ func (_c *MockRefundRepository_Create_Call) Return(err error) *MockRefundReposit
 }
 
 func (_c *MockRefundRepository_Create_Call) RunAndReturn(run func(ctx context.Context, refund *domain.RefundRequest) error) *MockRefundRepository_Create_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// FindByProviderRef provides a mock function for the type MockRefundRepository
+func (_mock *MockRefundRepository) FindByProviderRef(ctx context.Context, providerRef string) (*domain.RefundRequest, error) {
+	ret := _mock.Called(ctx, providerRef)
+
+	if len(ret) == 0 {
+		panic("no return value specified for FindByProviderRef")
+	}
+
+	var r0 *domain.RefundRequest
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.RefundRequest, error)); ok {
+		return returnFunc(ctx, providerRef)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *domain.RefundRequest); ok {
+		r0 = returnFunc(ctx, providerRef)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.RefundRequest)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, providerRef)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRefundRepository_FindByProviderRef_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FindByProviderRef'
+type MockRefundRepository_FindByProviderRef_Call struct {
+	*mock.Call
+}
+
+// FindByProviderRef is a helper method to define mock.On call
+//   - ctx context.Context
+//   - providerRef string
+func (_e *MockRefundRepository_Expecter) FindByProviderRef(ctx any, providerRef any) *MockRefundRepository_FindByProviderRef_Call {
+	return &MockRefundRepository_FindByProviderRef_Call{Call: _e.mock.On("FindByProviderRef", ctx, providerRef)}
+}
+
+func (_c *MockRefundRepository_FindByProviderRef_Call) Run(run func(ctx context.Context, providerRef string)) *MockRefundRepository_FindByProviderRef_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRefundRepository_FindByProviderRef_Call) Return(refundRequest *domain.RefundRequest, err error) *MockRefundRepository_FindByProviderRef_Call {
+	_c.Call.Return(refundRequest, err)
+	return _c
+}
+
+func (_c *MockRefundRepository_FindByProviderRef_Call) RunAndReturn(run func(ctx context.Context, providerRef string) (*domain.RefundRequest, error)) *MockRefundRepository_FindByProviderRef_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListAll provides a mock function for the type MockRefundRepository
+func (_mock *MockRefundRepository) ListAll(ctx context.Context, status string, limit int, offset int) ([]*domain.RefundRequest, error) {
+	ret := _mock.Called(ctx, status, limit, offset)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListAll")
+	}
+
+	var r0 []*domain.RefundRequest
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, int) ([]*domain.RefundRequest, error)); ok {
+		return returnFunc(ctx, status, limit, offset)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, int) []*domain.RefundRequest); ok {
+		r0 = returnFunc(ctx, status, limit, offset)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*domain.RefundRequest)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, int, int) error); ok {
+		r1 = returnFunc(ctx, status, limit, offset)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRefundRepository_ListAll_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListAll'
+type MockRefundRepository_ListAll_Call struct {
+	*mock.Call
+}
+
+// ListAll is a helper method to define mock.On call
+//   - ctx context.Context
+//   - status string
+//   - limit int
+//   - offset int
+func (_e *MockRefundRepository_Expecter) ListAll(ctx any, status any, limit any, offset any) *MockRefundRepository_ListAll_Call {
+	return &MockRefundRepository_ListAll_Call{Call: _e.mock.On("ListAll", ctx, status, limit, offset)}
+}
+
+func (_c *MockRefundRepository_ListAll_Call) Run(run func(ctx context.Context, status string, limit int, offset int)) *MockRefundRepository_ListAll_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 int
+		if args[2] != nil {
+			arg2 = args[2].(int)
+		}
+		var arg3 int
+		if args[3] != nil {
+			arg3 = args[3].(int)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRefundRepository_ListAll_Call) Return(refundRequests []*domain.RefundRequest, err error) *MockRefundRepository_ListAll_Call {
+	_c.Call.Return(refundRequests, err)
+	return _c
+}
+
+func (_c *MockRefundRepository_ListAll_Call) RunAndReturn(run func(ctx context.Context, status string, limit int, offset int) ([]*domain.RefundRequest, error)) *MockRefundRepository_ListAll_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListByCustomer provides a mock function for the type MockRefundRepository
+func (_mock *MockRefundRepository) ListByCustomer(ctx context.Context, userID string, limit int, offset int) ([]*domain.CustomerRefund, error) {
+	ret := _mock.Called(ctx, userID, limit, offset)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListByCustomer")
+	}
+
+	var r0 []*domain.CustomerRefund
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, int) ([]*domain.CustomerRefund, error)); ok {
+		return returnFunc(ctx, userID, limit, offset)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, int) []*domain.CustomerRefund); ok {
+		r0 = returnFunc(ctx, userID, limit, offset)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*domain.CustomerRefund)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, int, int) error); ok {
+		r1 = returnFunc(ctx, userID, limit, offset)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRefundRepository_ListByCustomer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByCustomer'
+type MockRefundRepository_ListByCustomer_Call struct {
+	*mock.Call
+}
+
+// ListByCustomer is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userID string
+//   - limit int
+//   - offset int
+func (_e *MockRefundRepository_Expecter) ListByCustomer(ctx any, userID any, limit any, offset any) *MockRefundRepository_ListByCustomer_Call {
+	return &MockRefundRepository_ListByCustomer_Call{Call: _e.mock.On("ListByCustomer", ctx, userID, limit, offset)}
+}
+
+func (_c *MockRefundRepository_ListByCustomer_Call) Run(run func(ctx context.Context, userID string, limit int, offset int)) *MockRefundRepository_ListByCustomer_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 int
+		if args[2] != nil {
+			arg2 = args[2].(int)
+		}
+		var arg3 int
+		if args[3] != nil {
+			arg3 = args[3].(int)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRefundRepository_ListByCustomer_Call) Return(customerRefunds []*domain.CustomerRefund, err error) *MockRefundRepository_ListByCustomer_Call {
+	_c.Call.Return(customerRefunds, err)
+	return _c
+}
+
+func (_c *MockRefundRepository_ListByCustomer_Call) RunAndReturn(run func(ctx context.Context, userID string, limit int, offset int) ([]*domain.CustomerRefund, error)) *MockRefundRepository_ListByCustomer_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListDispatchedStale provides a mock function for the type MockRefundRepository
+func (_mock *MockRefundRepository) ListDispatchedStale(ctx context.Context, olderThan time.Time, limit int) ([]*domain.RefundRequest, error) {
+	ret := _mock.Called(ctx, olderThan, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListDispatchedStale")
+	}
+
+	var r0 []*domain.RefundRequest
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, int) ([]*domain.RefundRequest, error)); ok {
+		return returnFunc(ctx, olderThan, limit)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, int) []*domain.RefundRequest); ok {
+		r0 = returnFunc(ctx, olderThan, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*domain.RefundRequest)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, time.Time, int) error); ok {
+		r1 = returnFunc(ctx, olderThan, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRefundRepository_ListDispatchedStale_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListDispatchedStale'
+type MockRefundRepository_ListDispatchedStale_Call struct {
+	*mock.Call
+}
+
+// ListDispatchedStale is a helper method to define mock.On call
+//   - ctx context.Context
+//   - olderThan time.Time
+//   - limit int
+func (_e *MockRefundRepository_Expecter) ListDispatchedStale(ctx any, olderThan any, limit any) *MockRefundRepository_ListDispatchedStale_Call {
+	return &MockRefundRepository_ListDispatchedStale_Call{Call: _e.mock.On("ListDispatchedStale", ctx, olderThan, limit)}
+}
+
+func (_c *MockRefundRepository_ListDispatchedStale_Call) Run(run func(ctx context.Context, olderThan time.Time, limit int)) *MockRefundRepository_ListDispatchedStale_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 time.Time
+		if args[1] != nil {
+			arg1 = args[1].(time.Time)
+		}
+		var arg2 int
+		if args[2] != nil {
+			arg2 = args[2].(int)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRefundRepository_ListDispatchedStale_Call) Return(refundRequests []*domain.RefundRequest, err error) *MockRefundRepository_ListDispatchedStale_Call {
+	_c.Call.Return(refundRequests, err)
+	return _c
+}
+
+func (_c *MockRefundRepository_ListDispatchedStale_Call) RunAndReturn(run func(ctx context.Context, olderThan time.Time, limit int) ([]*domain.RefundRequest, error)) *MockRefundRepository_ListDispatchedStale_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListPendingWithDestination provides a mock function for the type MockRefundRepository
+func (_mock *MockRefundRepository) ListPendingWithDestination(ctx context.Context, limit int) ([]domain.RefundSweep, error) {
+	ret := _mock.Called(ctx, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListPendingWithDestination")
+	}
+
+	var r0 []domain.RefundSweep
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int) ([]domain.RefundSweep, error)); ok {
+		return returnFunc(ctx, limit)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int) []domain.RefundSweep); ok {
+		r0 = returnFunc(ctx, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]domain.RefundSweep)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, int) error); ok {
+		r1 = returnFunc(ctx, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRefundRepository_ListPendingWithDestination_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListPendingWithDestination'
+type MockRefundRepository_ListPendingWithDestination_Call struct {
+	*mock.Call
+}
+
+// ListPendingWithDestination is a helper method to define mock.On call
+//   - ctx context.Context
+//   - limit int
+func (_e *MockRefundRepository_Expecter) ListPendingWithDestination(ctx any, limit any) *MockRefundRepository_ListPendingWithDestination_Call {
+	return &MockRefundRepository_ListPendingWithDestination_Call{Call: _e.mock.On("ListPendingWithDestination", ctx, limit)}
+}
+
+func (_c *MockRefundRepository_ListPendingWithDestination_Call) Run(run func(ctx context.Context, limit int)) *MockRefundRepository_ListPendingWithDestination_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int
+		if args[1] != nil {
+			arg1 = args[1].(int)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRefundRepository_ListPendingWithDestination_Call) Return(refundSweeps []domain.RefundSweep, err error) *MockRefundRepository_ListPendingWithDestination_Call {
+	_c.Call.Return(refundSweeps, err)
+	return _c
+}
+
+func (_c *MockRefundRepository_ListPendingWithDestination_Call) RunAndReturn(run func(ctx context.Context, limit int) ([]domain.RefundSweep, error)) *MockRefundRepository_ListPendingWithDestination_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ResetForRetry provides a mock function for the type MockRefundRepository
+func (_mock *MockRefundRepository) ResetForRetry(ctx context.Context, refundID string) (bool, error) {
+	ret := _mock.Called(ctx, refundID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ResetForRetry")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (bool, error)); ok {
+		return returnFunc(ctx, refundID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) bool); ok {
+		r0 = returnFunc(ctx, refundID)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, refundID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRefundRepository_ResetForRetry_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ResetForRetry'
+type MockRefundRepository_ResetForRetry_Call struct {
+	*mock.Call
+}
+
+// ResetForRetry is a helper method to define mock.On call
+//   - ctx context.Context
+//   - refundID string
+func (_e *MockRefundRepository_Expecter) ResetForRetry(ctx any, refundID any) *MockRefundRepository_ResetForRetry_Call {
+	return &MockRefundRepository_ResetForRetry_Call{Call: _e.mock.On("ResetForRetry", ctx, refundID)}
+}
+
+func (_c *MockRefundRepository_ResetForRetry_Call) Run(run func(ctx context.Context, refundID string)) *MockRefundRepository_ResetForRetry_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRefundRepository_ResetForRetry_Call) Return(b bool, err error) *MockRefundRepository_ResetForRetry_Call {
+	_c.Call.Return(b, err)
+	return _c
+}
+
+func (_c *MockRefundRepository_ResetForRetry_Call) RunAndReturn(run func(ctx context.Context, refundID string) (bool, error)) *MockRefundRepository_ResetForRetry_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -46,6 +46,62 @@ type TransactionRepository interface {
 // RefundRepository defines the contract for refund request persistence.
 type RefundRepository interface {
 	Create(ctx context.Context, refund *RefundRequest) error
+	// ListPendingWithDestination returns pending refunds whose customer has a
+	// registered refund destination, joined with the destination details — the
+	// executor's claim queue.
+	ListPendingWithDestination(ctx context.Context, limit int) ([]RefundSweep, error)
+	// ClaimForDisbursement atomically moves one refund from pending to
+	// processing and writes the refund.disbursement outbox row in the same
+	// transaction, so a claimed refund is always followed by a payout job.
+	// Reports whether the transition was applied.
+	ClaimForDisbursement(ctx context.Context, refundID string, job dto.RefundDisbursementRequested) (bool, error)
+	// AttachProviderRef stores the gateway payout id on a processing refund
+	// after the gateway accepted the disbursement.
+	AttachProviderRef(ctx context.Context, refundID, providerRef string) error
+	// Complete settles a processing refund (succeeded/failed) and writes the
+	// refund.completed outbox row in the same transaction, so the refund can
+	// never settle without the rest of the system hearing about it. Also
+	// mirrors the outcome onto transactions.refund_status. Idempotent via a
+	// processing-only guard.
+	Complete(ctx context.Context, refundID, status, providerRef, failureReason string) error
+	// FindByProviderRef locates the refund that owns a gateway payout id —
+	// payout webhooks address refunds by their gateway payout id.
+	FindByProviderRef(ctx context.Context, providerRef string) (*RefundRequest, error)
+	// ListDispatchedStale returns processing refunds already sent to the
+	// gateway (provider_ref set) and untouched since olderThan — the
+	// reconciliation poll's work queue.
+	ListDispatchedStale(ctx context.Context, olderThan time.Time, limit int) ([]*RefundRequest, error)
+	// ListAll returns refunds for the admin refund table, newest first.
+	ListAll(ctx context.Context, status string, limit, offset int) ([]*RefundRequest, error)
+	// ListByCustomer returns the caller's own refunds, newest first, with the
+	// destination the payout went to. This is the customer's single source of
+	// truth for refund state — no mirror in ticketing.
+	ListByCustomer(ctx context.Context, userID string, limit, offset int) ([]*CustomerRefund, error)
+	// ResetForRetry returns a failed or stuck processing refund to the pending
+	// queue and bumps its attempt counter, so the Payouts idempotency key
+	// produces a fresh gateway payout instead of replaying the failed one.
+	ResetForRetry(ctx context.Context, refundID string) (bool, error)
+}
+
+// RefundDestinationRepository defines persistence for customer refund
+// destinations.
+type RefundDestinationRepository interface {
+	Upsert(ctx context.Context, dest *RefundDestination) error
+	FindByUserID(ctx context.Context, userID string) (*RefundDestination, error)
+}
+
+// RefundSweep is one pending refund joined with its customer's registered
+// destination — the executor's claim candidate.
+type RefundSweep struct {
+	RefundID          string
+	AmountRupiah      int64
+	Currency          string
+	ChannelCode       string
+	AccountNumber     string
+	AccountHolderName string
+	// Attempt is the retry counter: the Payouts idempotency key includes it so
+	// an admin retry submits a fresh payout instead of replaying the failed one.
+	Attempt int
 }
 
 // SessionResult is the normalized outcome of creating or fetching a gateway

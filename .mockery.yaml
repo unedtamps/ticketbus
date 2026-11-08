@@ -32,5 +32,7 @@ packages:
     interfaces:
       TransactionRepository:
       RefundRepository:
+      RefundDestinationRepository:
+      PayoutRepository:
       PaymentProcessor:
       EventConsumer:

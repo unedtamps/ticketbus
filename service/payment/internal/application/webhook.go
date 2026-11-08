@@ -130,7 +130,9 @@ func (s *PaymentService) requestLatePaymentRefund(ctx context.Context, txn *doma
 		Status:         domain.RefundPending,
 		Reason:         "late_payment",
 		IdempotencyKey: "late-payment:" + txn.ID,
-		ProviderRef:    txn.ProviderRef,
+		// ProviderRef stays empty until the executor submits the payout: the
+		// payment-session id here made the reconciliation poll treat a
+		// never-sent refund as dispatched.
 	}
 	if err := s.refundRepo.Create(ctx, refund); err != nil {
 		s.logger.Error("failed to create late payment refund", "txn_id", txn.ID, "error", err)
@@ -140,36 +142,43 @@ func (s *PaymentService) requestLatePaymentRefund(ctx context.Context, txn *doma
 	s.logger.Warn("late payment refunded", "txn_id", txn.ID)
 }
 
-// payoutWebhookPayload parses a gateway payout callback. The legacy v2
-// callback carries the payout object at the top level; other providers wrap it
-// in {event, data}. Both shapes are parsed, and the decision is made from the
-// payout's status field — not from the event name.
+// payoutWebhookPayload parses a gateway payout callback. Xendit wraps the
+// payout object in {event, data}; older rails post it at the top level. The
+// identifier is named "id" in some versions and "payout_id" in v3, so both are
+// accepted. The decision is made from the payout's status field — not from the
+// event name.
 type payoutWebhookPayload struct {
 	Event string `json:"event"`
 	Data  struct {
 		ID          string `json:"id"`
+		PayoutID    string `json:"payout_id"`
 		Status      string `json:"status"`
 		ReferenceID string `json:"reference_id"`
 		FailureCode string `json:"failure_code"`
 	} `json:"data"`
 	ID          string `json:"id"`
+	PayoutID    string `json:"payout_id"`
 	Status      string `json:"status"`
 	FailureCode string `json:"failure_code"`
 }
 
 // fields resolves the payout identity and outcome across both payload shapes.
 func (p *payoutWebhookPayload) fields() (id, status, failureCode string) {
-	id, status, failureCode = p.Data.ID, p.Data.Status, p.Data.FailureCode
-	if id == "" {
-		id = p.ID
-	}
-	if status == "" {
-		status = p.Status
-	}
-	if failureCode == "" {
-		failureCode = p.FailureCode
-	}
+	id = firstNonEmpty(p.Data.PayoutID, p.Data.ID, p.PayoutID, p.ID)
+	status = firstNonEmpty(p.Data.Status, p.Status)
+	failureCode = firstNonEmpty(p.Data.FailureCode, p.FailureCode)
 	return id, status, failureCode
+}
+
+// firstNonEmpty returns the first non-empty string, for payload fields that
+// moved between gateway API versions.
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // HandlePayoutWebhook applies a verified gateway payout callback to the payout
@@ -196,10 +205,9 @@ func (s *PaymentService) HandlePayoutWebhook(
 	payout, err := s.payoutRepo.FindByProviderRef(ctx, payoutID)
 	if err != nil {
 		if errors.Is(err, domain.ErrNoRows) {
-			// Not a payout we know. Retrying cannot fix that, so acknowledge.
-			s.logger.Warn("payout webhook for unknown provider ref",
-				"provider_ref", payoutID, "event", event.Event)
-			return nil
+			// Not an EO payout — it may be a customer refund payout. Retrying
+			// cannot fix an unknown reference, so resolve or acknowledge.
+			return s.settleRefundWebhook(ctx, payoutID, gatewayStatus, failureCode, event.Event)
 		}
 		return err
 	}
@@ -217,7 +225,7 @@ func (s *PaymentService) HandlePayoutWebhook(
 		return nil
 	}
 
-	ledgerStatus, reason, terminal := domain.PayoutConfirmation(gatewayStatus, failureCode)
+	ledgerStatus, reason, terminal := domain.PayoutOutcome(gatewayStatus, failureCode)
 	if !terminal {
 		s.logger.Info("payout webhook non-terminal, ignoring",
 			"payout_id", payout.ID,
@@ -236,6 +244,50 @@ func (s *PaymentService) HandlePayoutWebhook(
 		"payout_id", payout.ID,
 		"gateway_status", gatewayStatus,
 		"status", ledgerStatus,
+	)
+	return nil
+}
+
+// settleRefundWebhook applies a gateway payout callback to a customer refund.
+// Reached when the payout ledger lookup misses: refund payouts are addressed
+// by their gateway payout id the same way EO payouts are. The processing-only
+// guard in the repo's Complete makes duplicate deliveries idempotent.
+func (s *PaymentService) settleRefundWebhook(
+	ctx context.Context,
+	payoutID, gatewayStatus, failureCode, event string,
+) error {
+	refund, err := s.refundRepo.FindByProviderRef(ctx, payoutID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNoRows) {
+			s.logger.Warn("payout webhook for unknown provider ref",
+				"provider_ref", payoutID, "event", event)
+			return nil
+		}
+		return err
+	}
+	if refund.Status != domain.RefundProcessing {
+		s.logger.Warn("refund webhook ignored, already final",
+			"refund_id", refund.ID,
+			"status", refund.Status,
+			"gateway_status", gatewayStatus,
+			"event", event,
+		)
+		return nil
+	}
+	refundStatus, reason, terminal := domain.RefundOutcome(gatewayStatus, failureCode)
+	if !terminal {
+		s.logger.Info("refund webhook non-terminal, ignoring",
+			"refund_id", refund.ID, "gateway_status", gatewayStatus)
+		return nil
+	}
+	if err := s.refundRepo.Complete(ctx, refund.ID, refundStatus, refund.ProviderRef, reason); err != nil {
+		return err
+	}
+	s.logger.Info("refund confirmed via webhook",
+		"refund_id", refund.ID,
+		"gateway_status", gatewayStatus,
+		"status", refundStatus,
+		"failure_code", failureCode,
 	)
 	return nil
 }

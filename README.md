@@ -21,7 +21,8 @@ Services communicate asynchronously via Kafka (3 KRaft brokers, RF=3, 4 partitio
   ├─ payment.expired    payment   → ticketing (expire booking, release seats)
   ├─ ticket.issued      ticketing → mail (e-ticket email per booking item)
   ├─ payout.requested   ticketing → payment (prepare an event payout)
-  └─ payout.completed   payment   → ticketing (settle event payout status)
+  ├─ payout.completed   payment   → ticketing (settle event payout status)
+  └─ refund.completed   payment   → mail (refund settled or failed notice)
 
 Reserve → payment handoff is asynchronous too, but over REST (never Kafka):
   └─ payment.initiate   ticketing → payment (outbox row → background REST dispatcher
@@ -84,8 +85,8 @@ This guarantees **at-least-once delivery** and eliminates the dual-write problem
 |---------|----------|------|----------|-----------------|
 | `auth-service` | Go | 8081 | `auth_db` (5432) | Customer/organizer registration, login, JWT (access 15m, refresh 7d), Traefik ForwardAuth `verify`, organizer profiles, admin seed from `ADMIN_SEEDS` |
 | `ticketing-service` | Go | 8082 | `ticketing_db` (5433) | Event CRUD, admin approval workflow, live seat counters, reservation holds (`RESERVATION_TTL`), booking transitions, cancel cascade, organizer payout accounts + per-event payouts, outbox: `event.cancelled`, `ticket.issued`, `payout.requested` (Kafka) + `payment.initiate` (REST dispatcher → payment) |
-| `payment-service` | Go | 8083 | `payment_db` (5435) | Transaction lifecycle (`initiated → pending → completed \| expired`), gateway session creation via pluggable `mock`/`xendit` processor, webhook ingestion, expiry poller, refund requests, event payout aggregation + Xendit Payouts API, outbox: `payment.*`, `payout.completed` |
-| `mail-service` | Go | 8084 | — (stateless) | Consumes `ticket.issued` and emails each buyer their e-ticket over SMTP (MailDev in dev); no database |
+| `payment-service` | Go | 8083 | `payment_db` (5435) | Transaction lifecycle (`initiated → pending → completed \| expired`), gateway session creation via pluggable `mock`/`xendit` processor, webhook ingestion, expiry poller, refund requests + executor (Payouts API to the customer's registered refund destination), event payout aggregation + Xendit Payouts API, outbox: `payment.*`, `payout.completed`, `refund.completed` |
+| `mail-service` | Go | 8084 | — (stateless) | Consumes `ticket.issued` (e-ticket per item), `event.cancelled` (booker notice + refund-account CTA) and `refund.completed` (payout sent / needs a corrected destination); sends over SMTP (MailDev in dev); no database |
 | `web` | Next.js 16 | 3000 | — | TanStack Query data fetching, `proxy.ts` route guards, ticket-stub UI, toasts, ConfirmDialog, Tooltip, SSR homepage |
 
 All amounts are stored and sent to the gateway as whole rupiah integers (`amount_rupiah`, `price_rupiah`, currency `IDR`) — no minor-unit conversion anywhere in the payment path.
@@ -193,7 +194,7 @@ Ticketing consumes event.cancelled → cache event status → cancel bookings + 
   ↓
 Payment consumes event.cancelled → for every completed transaction of that event:
     INSERT refund_requests (status=pending, reason=event_cancelled,
-                           idempotency_key='event-cancelled:'||txn_id, provider_ref)
+                           idempotency_key='event-cancelled:'||txn_id)
     UPDATE transactions SET refund_status='pending'
     Transactions still initiated or pending are left alone — the customer may still pay, and the
     session expires on its own.
@@ -206,19 +207,46 @@ late-payment refund (reason=late_payment) instead
 ```
 
 Refunds are tracked entirely in the payment service — the bookings table carries no refund column,
-and totals are derived from `booking_items.total_price_rupiah`.
+and totals are derived from `booking_items.total_price_rupiah`. Customers read their own refunds
+from `GET /api/refunds`; nothing is mirrored into ticketing.
 
 | `transactions.refund_status` | Meaning |
 |-----------------------------|---------|
 | `none` | No refund needed |
 | `pending` | Refund owed (event cancelled after payment completed, or late payment) |
+| `processing` | The executor claimed it and submitted the payout |
+| `succeeded` | Payout confirmed by the provider |
+| `failed` | The gateway settled it as failed (`FAILED`, `REVERSED`, `REJECTED`, `CANCELLED`, `EXPIRED`) — retryable from the admin table |
 
 | `refund_requests.status` | Meaning |
 |--------------------------|---------|
 | `pending` | Refund recorded, not yet sent to the provider |
-| `processing` | Provider call in flight |
-| `succeeded` | Provider confirmed the refund |
-| `failed` | Provider rejected the refund |
+| `processing` | Payout in flight |
+| `succeeded` | Payout confirmed by the provider |
+| `failed` | Gateway settled the payout as failed — visible in the admin refund table for retry |
+
+Refund status is owned by the gateway. An admin can only **retry** a failed
+refund; there is no manual "reject", because closing a refund by hand would
+tell the customer to fix an account their bank never actually rejected. Every
+terminal payout status is mapped in `domain.RefundOutcome`, and the raw
+gateway `failure_code` is translated into an Indonesian sentence by
+`domain.RefundFailureMessage` before it reaches the customer or their email —
+the raw enum never leaks. Codes that are the platform's fault
+(`INSUFFICIENT_BALANCE`, `SLS_SENDER`, transient transfer errors) are worded so
+the buyer is not told to fix their own account.
+
+The executor pays refunds through the **Payouts API** to the customer's
+registered refund destination (`customer_refund_destinations`, set once from
+the dashboard under **Rekening Refund**). Every channel routes through this
+one rail — Xendit's Refund API cannot cover VA and retail-outlet payments,
+which refund-to-source does not apply to. Refunds without a registered
+destination wait until the customer registers one (the cancellation email
+carries the link); refunds older than 25 days stay pending for admin
+handling, since channels have refund windows (QRIS: 30 days).
+
+When a refund settles, `refund.completed` reaches the mail service, which
+emails the customer either "dana sudah dikirim" or "belum bisa dikirim" with a
+link to correct the destination. Ticketing does not consume this event.
 
 ## Event Payouts
 
@@ -256,8 +284,14 @@ payment consumes payout.requested
             a) gateway payout webhook → POST /api/payments/webhook/payout
                (x-callback-token verified, idempotent), or
             b) the dispatcher's reconciliation poll (PAYOUT_RECONCILE_SEC):
-               GET /v2/payouts/{id} → COMPLETED → paid_out, FAILED (+failure_code)
-               → failed. REVERSED is logged (ledger keeps paid_out).
+               GET /v2/payouts/{id} → terminal status → settled
+  Every terminal gateway status is mapped by domain.PayoutOutcome: SUCCEEDED/
+  COMPLETED → paid_out; FAILED/REVERSED/REJECTED/CANCELLED/EXPIRED → failed.
+  REVERSED is a bounceback (the bank returned the funds), so it can never be
+  recorded as paid_out. In-flight statuses (PENDING, ACCEPTED, ROUTING,
+  REQUESTED, READY, LOCKED, PENDING_COMPLIANCE_ASSESSMENT) keep waiting.
+  The failure_code is translated to an organizer-facing sentence by
+  domain.FailureMessage — the raw enum never reaches the ledger.
   4xx  → failed (permanent: bad data); 401/403 → retried (credentials, e.g. a missing
           MONEY-OUT scope); 429/5xx/network → retried with backoff
         │ outbox worker → Kafka
@@ -581,6 +615,8 @@ pipeline, not the selector:
 | POST | `/api/events/{id}/approve` | Bearer | Admin |
 | POST | `/api/events/{id}/reject` | Bearer | Admin |
 | POST | `/api/admin/events/{id}/cancel-reprocess` | Bearer | Admin |
+| GET | `/api/admin/payouts` | Bearer | Admin — newest attempt per event, the payout queue |
+| POST | `/api/admin/events/{id}/payout/retry` | Bearer | Admin — new attempt for a **failed** payout, `409` otherwise |
 | GET | `/api/events/health` | No | — |
 
 ### Bookings (`/api/bookings`)
@@ -601,6 +637,12 @@ pipeline, not the selector:
 | GET | `/api/payments/{id}/status` | Bearer | Customer |
 | GET | `/api/payments/{txn_id}` | Bearer | Customer |
 | GET | `/api/payments` | Bearer | Customer (own transactions) |
+| POST | `/api/payments/webhook/payout` | `x-callback-token` | — (payout + refund payout callback; accepts `id` or `payout_id`) |
+| GET | `/api/refunds` | Bearer | Customer (own refunds — the only source of refund state) |
+| GET | `/api/refund-account` | Bearer | Customer |
+| PUT | `/api/refund-account` | Bearer | Customer |
+| GET | `/api/admin/refunds` | Bearer | Admin |
+| POST | `/api/admin/refunds/{id}/retry` | Bearer | Admin — re-queues a failed/stuck refund under a fresh idempotency key |
 | GET | `/api/payments/health` | No | — |
 | POST | `/api/payments/internal` | `X-Internal-Key` | ❌ gateway-blocked — service-to-service only; idempotent per `booking_id`, `201 created=true` on first insert / `200 created=false` on redelivery (both = delivered) |
 | POST | `/api/payments/booking/mock/{booking_id}/{status}` | No | ❌ gateway-blocked — dev simulator, `status` = `success` \| `expired` |

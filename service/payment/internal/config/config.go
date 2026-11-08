@@ -33,6 +33,10 @@ type Config struct {
 	// undelivered payment.disbursement rows.
 	PayoutDispatchPollMs int `env:"PAYOUT_DISPATCH_POLL_MS" envDefault:"200"`
 
+	// RefundSweepSec is how often the refund executor claims pending refunds
+	// whose customer registered a refund destination.
+	RefundSweepSec int `env:"REFUND_SWEEP_SEC" envDefault:"60"`
+
 	// PayoutReconcileSec is how often payouts already sent to the gateway are
 	// polled for their final status (GET /v2/payouts/{id}) — the safety net
 	// for payout webhooks that never arrived. 0 disables reconciliation.

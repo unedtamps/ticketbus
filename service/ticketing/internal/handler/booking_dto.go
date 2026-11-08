@@ -41,7 +41,6 @@ type BookingResponse struct {
 	PaymentDeadline string            `json:"payment_deadline,omitempty"`
 	TotalRupiah     int               `json:"total_rupiah"`
 	PaymentID       string            `json:"payment_id"`
-	RefundStatus    string            `json:"refund_status,omitempty"`
 	Items           []BookingItemResp `json:"items"`
 	CreatedAt       string            `json:"created_at"`
 	// Event context, present on customer-facing lists so the buyer's ticket
@@ -85,8 +84,7 @@ func bookingToResponse(b *domain.Booking) BookingResponse {
 		ID: b.ID, UserID: b.UserID, EventID: b.EventID,
 		Status: b.Status, ExpiresAt: expiresAt, PaymentDeadline: paymentDeadline,
 		TotalRupiah: b.TotalRupiah, PaymentID: b.PaymentID,
-		RefundStatus: b.RefundStatus,
-		Items:        items, CreatedAt: b.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		Items: items, CreatedAt: b.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		EventTitle:   b.EventTitle,
 		EventStartAt: startAt,
 		EventVenue:   b.EventVenue,

@@ -183,3 +183,88 @@ func (s *EventService) HandlePayoutCompleted(
 	)
 	return err
 }
+
+// ListAdminPayouts returns the admin payout queue: the newest attempt of every
+// event that has one.
+func (s *EventService) ListAdminPayouts(
+	ctx context.Context,
+	limit int,
+) ([]domain.AdminPayoutRow, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	return s.repo.ListPayoutAttemptsForAdmin(ctx, limit)
+}
+
+// RetryPayoutAsAdmin creates the next payout attempt for an event on an
+// admin's decision. It reuses the organizer's saved payout account and skips
+// the owner check, so an attempt stuck in failed can be re-queued without the
+// organizer having to act. The repo still enforces one attempt in flight.
+func (s *EventService) RetryPayoutAsAdmin(
+	ctx context.Context,
+	eventID string,
+) (*domain.EventPayoutAttempt, error) {
+	event, err := s.repo.FindEventByID(ctx, eventID)
+	if err != nil {
+		return nil, domain.ErrEventNotFound
+	}
+
+	// Only a failed attempt is retryable. A paid_out attempt already moved the
+	// money, and a pending one is still in flight — creating another attempt
+	// would pay the organizer twice or duplicate work.
+	summary, err := s.repo.PayoutSummary(ctx, event.ID)
+	if err != nil {
+		return nil, err
+	}
+	if summary.Status != sdomain.PayoutStatusFailed {
+		return nil, domain.ErrPayoutNotRetryable
+	}
+
+	// Nothing collectable means the last attempt failed with no_earnings (or
+	// every confirmed transaction was already paid out). A retry would create
+	// an attempt with amount 0 and fail identically, so it is rejected here —
+	// the UI disables the button, and this is the guard for direct API calls.
+	collectable := s.repo.CollectableRupiah(ctx, event.ID)
+	if collectable <= 0 {
+		return nil, domain.ErrPayoutNoEarnings
+	}
+
+	acct, err := s.repo.FindPayoutAccount(ctx, event.OrganizerID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrPayoutAccountAbsent
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	attempt := &domain.EventPayoutAttempt{
+		ID:                    uuid.NewString(),
+		EventID:               event.ID,
+		OrganizerID:           event.OrganizerID,
+		BankCode:              acct.BankCode,
+		BankAccountNumber:     acct.BankAccountNumber,
+		BankAccountHolderName: acct.BankAccountHolderName,
+		Status:                sdomain.PayoutStatusPending,
+		RequestedAt:           time.Now(),
+	}
+
+	applied, err := s.repo.RequestPayout(ctx, attempt, func(attemptNo int) any {
+		return sdomain.PayoutRequested{
+			EventID:               event.ID,
+			OrganizerID:           event.OrganizerID,
+			PayoutID:              attempt.ID,
+			Attempt:               attemptNo,
+			BankCode:              attempt.BankCode,
+			BankAccountNumber:     attempt.BankAccountNumber,
+			BankAccountHolderName: attempt.BankAccountHolderName,
+			At:                    attempt.RequestedAt,
+		}
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !applied {
+		return nil, domain.ErrPayoutInFlight
+	}
+	return attempt, nil
+}

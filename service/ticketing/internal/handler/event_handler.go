@@ -746,7 +746,9 @@ func (h *EventHandler) writePayoutError(w http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrEventNotPayoutable),
 		errors.Is(err, domain.ErrEventNotEnded),
 		errors.Is(err, domain.ErrPayoutExists),
-		errors.Is(err, domain.ErrPayoutInFlight):
+		errors.Is(err, domain.ErrPayoutInFlight),
+		errors.Is(err, domain.ErrPayoutNotRetryable),
+		errors.Is(err, domain.ErrPayoutNoEarnings):
 		sharedhttp.Conflict(w, err.Error())
 	case errors.Is(err, domain.ErrPayoutAccountAbsent),
 		errors.Is(err, domain.ErrInvalidPayoutBank):
@@ -765,4 +767,64 @@ func reservationsOpen(e *domain.Event) bool {
 	}
 	now := time.Now()
 	return !now.Before(e.StartAt) && now.Before(e.EndAt)
+}
+
+// ListAdminPayouts handles GET /api/admin/payouts (admin only). It returns the
+// newest payout attempt of every event that has one — the payout queue where a
+// failed attempt can be retried.
+func (h *EventHandler) ListAdminPayouts(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	rows, err := h.svc.ListAdminPayouts(r.Context(), limit)
+	if err != nil {
+		sharedhttp.InternalServerError(w, "failed to list payouts")
+		return
+	}
+	out := make([]AdminPayoutResponse, 0, len(rows))
+	for _, row := range rows {
+		completedAt := ""
+		if row.CompletedAt != nil {
+			completedAt = row.CompletedAt.Format(time.RFC3339)
+		}
+		out = append(out, AdminPayoutResponse{
+			EventID:               row.EventID,
+			EventTitle:            row.EventTitle,
+			Attempt:               row.Attempt,
+			OrganizerID:           row.OrganizerID,
+			BankCode:              row.BankCode,
+			BankAccountNumber:     row.BankAccountNumber,
+			BankAccountHolderName: row.BankAccountHolderName,
+			Status:                string(row.Status),
+			AmountRupiah:          row.AmountRupiah,
+			CollectableRupiah:     row.CollectableRupiah,
+			ProviderRef:           row.ProviderRef,
+			FailureReason:         row.FailureReason,
+			RequestedAt:           row.RequestedAt.Format(time.RFC3339),
+			CompletedAt:           completedAt,
+		})
+	}
+	sharedhttp.OK(w, out)
+}
+
+// AdminRetryPayout handles POST /api/admin/events/{id}/payout/retry (admin
+// only). It creates the next payout attempt for an event, reusing the
+// organizer's saved account — an admin resolving a failed payout, not choosing
+// a destination.
+func (h *EventHandler) AdminRetryPayout(w http.ResponseWriter, r *http.Request) {
+	eventID := chi.URLParam(r, "id")
+	attempt, err := h.svc.RetryPayoutAsAdmin(r.Context(), eventID)
+	if err != nil {
+		h.writePayoutError(w, err)
+		return
+	}
+	sharedhttp.Accepted(w, PayoutAttemptResponse{
+		EventID:               attempt.EventID,
+		Attempt:               attempt.Attempt,
+		Status:                string(attempt.Status),
+		AmountRupiah:          attempt.AmountRupiah,
+		BankCode:              attempt.BankCode,
+		BankAccountNumber:     attempt.BankAccountNumber,
+		BankAccountHolderName: attempt.BankAccountHolderName,
+		RequestedAt:           attempt.RequestedAt,
+		CompletedAt:           attempt.CompletedAt,
+	})
 }

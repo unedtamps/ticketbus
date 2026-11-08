@@ -18,6 +18,10 @@ type Config struct {
 	SMTPHost string `env:"SMTP_HOST,required,notEmpty"`
 	SMTPPort string `env:"SMTP_PORT,required,notEmpty"`
 	SMTPFrom string `env:"SMTP_FROM,required,notEmpty"`
+
+	// WebBaseURL is the frontend origin, used for links inside emails (e.g.
+	// the cancellation email's "set your refund account" call to action).
+	WebBaseURL string `env:"WEB_BASE_URL,required,notEmpty"`
 }
 
 // Load reads configuration from environment variables.

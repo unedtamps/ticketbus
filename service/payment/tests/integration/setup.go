@@ -33,12 +33,14 @@ import (
 	"github.com/unedtamps/ticketbus/pkg/log"
 	"github.com/unedtamps/ticketbus/pkg/outbox"
 	"github.com/unedtamps/ticketbus/pkg/testinfra"
+	sdto "github.com/unedtamps/ticketbus/pkg/dto"
 	payapp "github.com/unedtamps/ticketbus/service/payment/internal/application"
 	payhandler "github.com/unedtamps/ticketbus/service/payment/internal/handler"
 	paykafka "github.com/unedtamps/ticketbus/service/payment/internal/kafka"
 	payoutpkg "github.com/unedtamps/ticketbus/service/payment/internal/payout"
 	paypostgres "github.com/unedtamps/ticketbus/service/payment/internal/postgres"
 	"github.com/unedtamps/ticketbus/service/payment/internal/processor"
+	refundpkg "github.com/unedtamps/ticketbus/service/payment/internal/refund"
 )
 
 const (
@@ -86,12 +88,13 @@ func startContainers() *TestEnv {
 
 	txnRepo := paypostgres.NewTransactionRepo(infra.Pool)
 	refundRepo := paypostgres.NewRefundRepo(infra.Pool)
+	refundDestRepo := paypostgres.NewRefundDestinationRepo(infra.Pool)
 	payoutRepo := paypostgres.NewPayoutRepo(infra.Pool, "mock")
 	mockProcessor := processor.NewMockProcessor()
 	payConsumer := paykafka.NewPaymentConsumer(infra.Brokers, consumerGroup, 1)
 
 	svc := payapp.NewPaymentService(
-		txnRepo, refundRepo, payoutRepo, mockProcessor, payConsumer,
+		txnRepo, refundRepo, refundDestRepo, payoutRepo, mockProcessor, payConsumer,
 		logger, "mock", []string{"ID_QRIS", "ID_BCA_VA"},
 	)
 
@@ -101,9 +104,12 @@ func startContainers() *TestEnv {
 	ctxBg, cancelBg := context.WithCancel(context.Background())
 
 	go outbox.NewWorker(infra.Pool, infra.Producer, logger, 1, 200,
-		[]string{"payment.completed", "payment.expired", "payout.completed"}).Run(ctxBg)
+		[]string{"payment.completed", "payment.expired", "payout.completed",
+			sdto.TopicRefundCompleted}).Run(ctxBg)
 	// Reconciliation every second so the async-confirmation tests resolve fast.
 	go payoutpkg.NewDispatcher(infra.Pool, payoutRepo, mockProcessor, logger, 100, 1).Run(ctxBg)
+	// The refund executor sweeps and delivers on the same short cadence.
+	go refundpkg.NewDispatcher(infra.Pool, refundRepo, mockProcessor, logger, 1, 1).Run(ctxBg)
 	go func() { _ = svc.StartConsumer(ctxBg) }()
 	svc.StartExpiryPoller(ctxBg, 1)
 

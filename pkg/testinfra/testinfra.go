@@ -32,6 +32,7 @@ var Topics = []string{
 	"payment.expired",
 	"payout.requested",
 	"payout.completed",
+	sdto.TopicRefundCompleted,
 }
 
 // smokeTopic is only used to confirm the broker accepts a produce.

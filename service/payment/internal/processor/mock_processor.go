@@ -2,6 +2,7 @@ package processor
 
 import (
 	"context"
+	"strings"
 	"fmt"
 	"sync"
 	"time"
@@ -92,9 +93,24 @@ func (p *MockProcessor) CreatePayout(
 		return nil, p.payoutErr
 	}
 	ref := "dis-mock-" + req.ReferenceID
-	result := &domain.PayoutResult{ProviderRef: ref, Status: p.payoutStatus}
+	// Customer refunds settle immediately: the mock has no refund webhook
+	// simulator, so a pending refund payout would never finalize. The refund
+	// executor sends reference ids prefixed "rfd-", and its description is
+	// "TicketBus refund".
+	status := p.payoutStatus
+	if isRefundPayout(req) {
+		status = domain.GatewayPayoutSucceeded
+	}
+	result := &domain.PayoutResult{ProviderRef: ref, Status: status}
 	p.payouts[ref] = result
 	return result, nil
+}
+
+// isRefundPayout reports whether a payout request is a customer refund rather
+// than an organizer payout. The refund executor's description is
+// "TicketBus refund", so the check looks for the word anywhere.
+func isRefundPayout(req domain.PayoutRequest) bool {
+	return strings.Contains(strings.ToLower(req.Description), "refund")
 }
 
 // GetPayout reports the gateway state of a payout created earlier, carrying

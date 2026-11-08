@@ -15,11 +15,10 @@ type Booking struct {
 	CustomerEmail string `json:"customer_email,omitempty"`
 	// Deprecated compatibility fields. The target schema derives totals from items
 	// and keeps payment state in the payment service.
-	TotalRupiah  int           `json:"total_rupiah"`
-	PaymentID    string        `json:"payment_id"`
-	RefundStatus string        `json:"refund_status,omitempty"`
-	Items        []BookingItem `json:"items"`
-	CreatedAt    time.Time     `json:"created_at"`
+	TotalRupiah int           `json:"total_rupiah"`
+	PaymentID   string        `json:"payment_id"`
+	Items       []BookingItem `json:"items"`
+	CreatedAt   time.Time     `json:"created_at"`
 
 	// Denormalised event context, populated only by customer-facing list queries
 	// so a buyer's ticket list can name what was bought instead of showing a

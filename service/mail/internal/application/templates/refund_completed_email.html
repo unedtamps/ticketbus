@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Refund Terkirim — TicketBus</title>
+</head>
+<body style="margin:0;padding:24px;background:#f4f6fb;font-family:Arial,Helvetica,sans-serif;color:#16224a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e4eaf4;">
+    <tr>
+      <td style="background:#1f9d63;padding:20px 28px;">
+        <span style="color:#ffffff;font-size:20px;font-weight:bold;">TicketBus</span>
+        <span style="color:#cdf3e1;font-size:12px;font-weight:bold;margin-left:6px;">REFUND</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:28px;">
+        <p style="margin:0 0 6px;font-size:12px;color:#6e7b96;letter-spacing:1px;text-transform:uppercase;">Refund berhasil</p>
+        <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;">Dana refund sudah dikirim</h1>
+
+        <p style="margin:0 0 18px;font-size:14px;line-height:1.7;">
+          Refund untuk pembatalan event yang kamu beli sudah kami kirim ke rekening
+          yang kamu daftarkan di akun TicketBus-mu.
+        </p>
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;line-height:1.7;">
+          <tr>
+            <td style="color:#6e7b96;width:150px;padding:6px 0;">Jumlah refund</td>
+            <td style="font-weight:bold;padding:6px 0;">{{.Amount}}</td>
+          </tr>
+          <tr>
+            <td style="color:#6e7b96;padding:6px 0;">Booking</td>
+            <td style="font-weight:bold;padding:6px 0;">{{.BookingID}}</td>
+          </tr>
+          <tr>
+            <td style="color:#6e7b96;padding:6px 0;">Refund ID</td>
+            <td style="font-weight:bold;padding:6px 0;">{{.RefundID}}</td>
+          </tr>
+        </table>
+
+        <p style="margin:18px 0 14px;font-size:14px;line-height:1.7;">
+          Dana biasanya masuk dalam 1&ndash;3 hari kerja tergantung bank atau
+          e-wallet tujuan. Kamu bisa memantau statusnya kapan saja di dashboard.
+        </p>
+        <a href="{{.DashboardURL}}" style="display:inline-block;background:#2450d9;color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;padding:12px 22px;border-radius:10px;">
+          Lihat Status Refund
+        </a>
+        <p style="margin:12px 0 0;font-size:12px;color:#9aa6bc;">
+          Jika tombol tidak berfungsi, salin tautan ini: {{.DashboardURL}}
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="background:#f4f6fb;padding:14px 28px;font-size:11px;color:#9aa6bc;">
+        Email otomatis dari TicketBus. Mohon tidak membalas email ini.
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

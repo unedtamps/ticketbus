@@ -49,8 +49,15 @@ type EventRepository interface {
 	// ListPayoutAttempts returns every payout attempt of an event, oldest
 	// attempt first.
 	ListPayoutAttempts(ctx context.Context, eventID string) ([]EventPayoutAttempt, error)
+	// ListPayoutAttemptsForAdmin returns the newest attempt of every event that
+	// has one, newest first — the admin payout queue.
+	ListPayoutAttemptsForAdmin(ctx context.Context, limit int) ([]AdminPayoutRow, error)
 	// PayoutSummary aggregates the attempts of an event into its payout state.
 	PayoutSummary(ctx context.Context, eventID string) (*EventPayoutSummary, error)
+	// CollectableRupiah returns what a new payout attempt would actually send:
+	// confirmed booking revenue minus everything already paid out. Zero means
+	// a retry has nothing to pay.
+	CollectableRupiah(ctx context.Context, eventID string) int64
 	// SetPayoutResult applies the gateway result to one attempt while it is
 	// still pending. Returns false for duplicate deliveries.
 	SetPayoutResult(ctx context.Context, eventID string, attempt int, status dto.PayoutStatus, amountRupiah int64, providerRef, reason string) (bool, error)

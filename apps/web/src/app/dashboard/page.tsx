@@ -35,8 +35,9 @@ import {
   Users,
 } from "lucide-react";
 import { fmtIDR, initialsOf } from "@/lib/format";
+import { REFUND_STATUS_LABEL, refundBadgeStyle, channelLabel, maskedAccount } from "@/lib/refund";
 import { LocalTime } from "@/components/ui/local-time";
-import type { EventDetail, EventItem, EventPayout, OrganizerEventListResponse, OrganizerSummary, PayoutAccount, TransactionResponse } from "@/types";
+import type { CustomerRefund, EventDetail, EventItem, EventPayout, OrganizerEventListResponse, OrganizerSummary, PayoutAccount, TransactionResponse } from "@/types";
 
 type AdminFilter = "" | "pending" | "published" | "cancelled";
 
@@ -58,7 +59,6 @@ interface Booking {
   id: string;
   event_id: string;
   status: string;
-  refund_status?: string;
   total_rupiah: number;
   created_at: string;
   items: BookingItem[];
@@ -372,6 +372,13 @@ export default function DashboardPage() {
     enabled: !!user && isCustomer,
   });
 
+  // Refund ledger lives in the payment service — this is the only view of it.
+  const refundsQuery = useQuery({
+    queryKey: ["myRefunds"],
+    queryFn: () => api.get<CustomerRefund[]>("/api/refunds"),
+    enabled: !!user && isCustomer,
+  });
+
   // EO query. Keyset-paginated: pageParam is the opaque next_cursor, empty on
   // the first page. Each page carries the whole-account summary, so the header
   // figures don't shrink as rows are appended.
@@ -446,6 +453,9 @@ export default function DashboardPage() {
   const adminPendingCountQuery = useQuery(adminCount("pending"));
   const adminPublishedCountQuery = useQuery(adminCount("published"));
 
+  // Refund and payout queues live on their own admin pages now
+  // (/dashboard/refunds, /dashboard/payouts).
+
   // Hooks must run unconditionally, so the derived list is built before the
   // early returns below.
   const adminEventsRaw = adminEventsQuery.data?.events || [];
@@ -472,6 +482,7 @@ export default function DashboardPage() {
 
   const bookings = bookingsQuery.data || [];
   const transactions = transactionsQuery.data || [];
+  const refunds = refundsQuery.data || [];
   // Prev/Next shows one page at a time. pages[] holds everything fetched so
   // far, so the visible one is tracked separately rather than assuming it is
   // the last (that breaks once you go backwards).
@@ -1243,6 +1254,91 @@ export default function DashboardPage() {
                     </p>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* ── Refunds table ── */}
+            <div className="flex items-center justify-between gap-4 mb-4 mt-12">
+              <p id="dash-refunds" className="font-[family-name:var(--font-display)] text-xl text-[#16224A] scroll-mt-24">
+                Refunds
+              </p>
+              <p className="text-[11.5px] font-semibold text-[#9AA6BC]">Newest first</p>
+            </div>
+
+            {refundsQuery.isLoading && (
+              <div className="card text-center py-10">
+                <Loader2 className="w-5 h-5 text-[#C9D4E8] animate-spin mx-auto mb-2" />
+                <p className="text-[#6E7B96] text-sm">Loading refunds...</p>
+              </div>
+            )}
+
+            {refundsQuery.isError && (
+              <div className="card text-center py-10">
+                <p className="text-[#E05B4A] text-sm font-semibold">Could not load refunds</p>
+                <button
+                  onClick={() => refundsQuery.refetch()}
+                  className="mt-2 text-[#2450D9] text-sm font-bold hover:underline"
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+
+            {!refundsQuery.isLoading && !refundsQuery.isError && refunds.length === 0 && (
+              <div className="card text-center py-12">
+                <History className="w-8 h-8 text-[#C9D4E8] mx-auto mb-3" />
+                <p className="text-[#6E7B96] text-sm">No refunds. Nothing to return.</p>
+              </div>
+            )}
+
+            {!refundsQuery.isLoading && !refundsQuery.isError && refunds.length > 0 && (
+              <div className="rounded-xl border border-[#E4EAF4] overflow-hidden bg-white">
+                <div className="grid grid-cols-[1fr_150px_120px] gap-3 items-center px-4 py-2.5 bg-[#F6F9FC] border-b border-[#E4EAF4]">
+                  <span className="text-[9.5px] font-extrabold uppercase tracking-[0.11em] text-[#9AA6BC]">Refund</span>
+                  <span className="text-[9.5px] font-extrabold uppercase tracking-[0.11em] text-[#9AA6BC]">Tujuan</span>
+                  <span className="text-[9.5px] font-extrabold uppercase tracking-[0.11em] text-[#9AA6BC] text-right">Amount</span>
+                </div>
+                {refunds.map(r => {
+                  // The status is always the badge: a refund waiting on a
+                  // destination is still "pending", and that is what the
+                  // customer needs to see. The missing account is a separate
+                  // hint in the destination column.
+                  return (
+                    <div key={r.id} className="grid grid-cols-[1fr_150px_120px] gap-3 items-center px-4 py-3.5 border-b border-[#E4EAF4] last:border-b-0">
+                      <div className="min-w-0">
+                        <p className="truncate font-mono text-[11.5px] font-semibold text-[#16224A]">{r.id}</p>
+                        <span className="badge mt-1" style={refundBadgeStyle(r.status)}>
+                          {REFUND_STATUS_LABEL[r.status]}
+                        </span>
+                        {r.status === "failed" && r.failure_reason && (
+                          <p className="mt-1 text-[10.5px] font-semibold text-[#E05B4A]">
+                            {r.failure_reason}
+                          </p>
+                        )}
+                        {!r.has_account && r.status !== "succeeded" && r.status !== "failed" && (
+                          <p className="mt-1 text-[10.5px] font-semibold text-[#8A6400]">
+                            Rekening refund belum diatur
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-[11.5px] font-semibold text-[#6E7B96]">
+                        {r.has_account ? (
+                          <>
+                            <p className="text-[11px] font-extrabold text-[#3D4A66]">{channelLabel(r.channel_code)}</p>
+                            <p className="font-mono text-[10.5px]">{maskedAccount(r.account_number)}</p>
+                          </>
+                        ) : (
+                          <Link href="/dashboard/refund-account" className="text-[#2450D9] hover:underline">
+                            Atur rekening
+                          </Link>
+                        )}
+                      </div>
+                      <p className="text-right text-[13px] font-extrabold tabular-nums text-[#16224A]">
+                        {fmtIDR(r.amount_rupiah)}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </>

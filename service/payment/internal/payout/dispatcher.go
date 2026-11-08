@@ -193,11 +193,13 @@ func (d *Dispatcher) deliver(ctx context.Context, row disbursementRow) error {
 			d.logger.Warn("payout rejected by gateway",
 				"event_id", job.EventID, "payout_id", job.PayoutID,
 				"attempt", job.Attempt, "error", err)
-			// Record the failure and stop retrying this job. Complete is
-			// idempotent, so a partial failure can be retried safely.
+			// Record the failure with an organizer-facing reason; the raw
+			// gateway response is logged above and never reaches the ledger.
+			// Complete is idempotent, so a partial failure can be retried
+			// safely.
 			return d.repo.Complete(ctx, job.EventID, job.Attempt,
 				domain.PayoutStatusFailed, job.AmountRupiah, "",
-				domain.SanitizeProcessorError(err))
+				"Detail rekening payout tidak diterima oleh penyedia pembayaran. Periksa kembali nomor dan nama pemilik rekening.")
 		}
 		return err
 	}
@@ -207,7 +209,7 @@ func (d *Dispatcher) deliver(ctx context.Context, row disbursementRow) error {
 	// confirmation arrives — the gateway webhook or the reconciliation poll.
 	// The gateway status is final only when it maps to a terminal ledger
 	// status; anything else keeps waiting.
-	status, reason, terminal := domain.PayoutConfirmation(result.Status, result.FailureCode)
+	status, reason, terminal := domain.PayoutOutcome(result.Status, result.FailureCode)
 	if terminal {
 		if err := d.repo.Complete(ctx, job.EventID, job.Attempt,
 			status, job.AmountRupiah, result.ProviderRef, reason); err != nil {
@@ -260,7 +262,7 @@ func (d *Dispatcher) reconcilePending(ctx context.Context) {
 				"provider_ref", p.ProviderRef, "error", err)
 			continue
 		}
-		status, reason, terminal := domain.PayoutConfirmation(result.Status, result.FailureCode)
+		status, reason, terminal := domain.PayoutOutcome(result.Status, result.FailureCode)
 		if !terminal {
 			continue
 		}

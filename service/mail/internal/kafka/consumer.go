@@ -16,6 +16,7 @@ type MailConsumer struct {
 	concurrency       int
 	ticketIssuedFn    func(context.Context, sdomain.TicketIssued) error
 	eventCancelledFn  func(context.Context, sdomain.EventCancelled) error
+	refundCompletedFn func(context.Context, sdomain.RefundCompleted) error
 }
 
 // NewMailConsumer creates a new Kafka consumer for mail events.
@@ -37,6 +38,14 @@ func (c *MailConsumer) OnEventCancelled(
 	fn func(context.Context, sdomain.EventCancelled) error,
 ) {
 	c.eventCancelledFn = fn
+}
+
+// OnRefundCompleted registers the handler for settled refund notices.
+func (c *MailConsumer) OnRefundCompleted(
+	ctx context.Context,
+	fn func(context.Context, sdomain.RefundCompleted) error,
+) {
+	c.refundCompletedFn = fn
 }
 
 // Start begins consuming and blocks until ctx is cancelled.
@@ -72,6 +81,24 @@ func (c *MailConsumer) Start(ctx context.Context) error {
 			}
 			if c.eventCancelledFn != nil {
 				return c.eventCancelledFn(ctx, event)
+			}
+			return nil
+		},
+	)
+
+	startConsumer(
+		ctx,
+		c.brokers,
+		c.groupID,
+		c.concurrency,
+		sdomain.TopicRefundCompleted,
+		func(ctx context.Context, msg sharedkafka.Message) error {
+			var event sdomain.RefundCompleted
+			if err := json.Unmarshal(msg.Value, &event); err != nil {
+				return err
+			}
+			if c.refundCompletedFn != nil {
+				return c.refundCompletedFn(ctx, event)
 			}
 			return nil
 		},

@@ -45,15 +45,17 @@ func main() {
 	consumer := kafka.NewMailConsumer(kafkaBrokers, "mail-service", cfg.ConsumerConcurrency)
 	defer consumer.Close()
 
-	// ticket.issued is normally ensured by ticketing, but the mail service must
-	// not die if it starts before ticketing ever ran.
-	if err := sharedkafka.EnsureTopics(kafkaBrokers, []string{sdomain.TopicTicketIssued}, 4, 3); err != nil {
+	// ticket.issued and refund.completed are normally ensured by their
+	// producers, but the mail service must not die if it starts first.
+	if err := sharedkafka.EnsureTopics(kafkaBrokers, []string{
+		sdomain.TopicTicketIssued, sdomain.TopicRefundCompleted,
+	}, 4, 3); err != nil {
 		logger.Error("failed to ensure kafka topics", "error", err)
 		os.Exit(1)
 	}
 
 	sender := mailer.NewSMTP(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom)
-	svc, err := application.NewMailService(consumer, sender, logger)
+	svc, err := application.NewMailService(consumer, sender, logger, cfg.WebBaseURL)
 	if err != nil {
 		logger.Error("failed to build mail service", "error", err)
 		os.Exit(1)

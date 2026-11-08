@@ -19,6 +19,8 @@ var (
 	ErrEventNotEnded       = errors.New("event has not ended yet")
 	ErrPayoutExists        = errors.New("a payout has already been requested for this event")
 	ErrPayoutInFlight      = errors.New("a payout for this event is already in progress")
+	ErrPayoutNotRetryable  = errors.New("only a failed payout can be retried")
+	ErrPayoutNoEarnings    = errors.New("there is nothing left to pay out for this event")
 	ErrPayoutNotFound      = errors.New("payout not found")
 	ErrPayoutAccountAbsent = errors.New("payout account is not set")
 	ErrInvalidPayoutBank   = errors.New("invalid bank account details")

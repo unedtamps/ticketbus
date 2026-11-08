@@ -179,7 +179,11 @@ func TestDispatcher_PermanentErrorMarksFailed(t *testing.T) {
 
 	require.Len(t, repo.completed, 1)
 	assert.Equal(t, domain.PayoutStatusFailed, repo.completed[0].status)
-	assert.Contains(t, repo.completed[0].reason, "invalid account")
+	// The raw gateway response stays in the logs; the ledger gets a sentence
+	// the organizer can act on.
+	assert.NotContains(t, repo.completed[0].reason, "invalid account",
+		"gateway internals must not reach the ledger")
+	assert.Contains(t, repo.completed[0].reason, "rekening")
 }
 
 func TestDispatcher_AuthErrorIsRetried(t *testing.T) {
@@ -239,7 +243,41 @@ func TestDispatcher_ReconcileFinalizesFailedWithGatewayCode(t *testing.T) {
 
 	require.Len(t, repo.completed, 1)
 	assert.Equal(t, domain.PayoutStatusFailed, repo.completed[0].status)
-	assert.Equal(t, "INSUFFICIENT_BALANCE", repo.completed[0].reason)
+	// The gateway code is translated, never stored raw.
+	assert.NotEqual(t, "INSUFFICIENT_BALANCE", repo.completed[0].reason)
+	assert.Contains(t, repo.completed[0].reason, "saldo")
+}
+
+// TestDispatcher_ReconcileFinalizesRejectedAsFailed: a rejected payout is
+// terminal. Missing it leaves the attempt pending and the reconcile poll
+// re-reading the same answer forever.
+func TestDispatcher_ReconcileFinalizesRejectedAsFailed(t *testing.T) {
+	repo := &fakeRepo{pending: []*domain.Payout{pendingPayout()}}
+	proc := &fakeProcessor{getResult: &domain.PayoutResult{
+		ProviderRef: "po-1", Status: "REJECTED",
+	}}
+	d := NewDispatcher(nil, repo, proc, discardLogger(), 10, 1)
+
+	d.reconcilePending(context.Background())
+
+	require.Len(t, repo.completed, 1)
+	assert.Equal(t, domain.PayoutStatusFailed, repo.completed[0].status)
+}
+
+// TestDispatcher_ReconcileReversedIsFailed: REVERSED means the bank returned
+// the funds, so recording paid_out would hide an unpaid organizer.
+func TestDispatcher_ReconcileReversedIsFailed(t *testing.T) {
+	repo := &fakeRepo{pending: []*domain.Payout{pendingPayout()}}
+	proc := &fakeProcessor{getResult: &domain.PayoutResult{
+		ProviderRef: "po-1", Status: "REVERSED",
+	}}
+	d := NewDispatcher(nil, repo, proc, discardLogger(), 10, 1)
+
+	d.reconcilePending(context.Background())
+
+	require.Len(t, repo.completed, 1)
+	assert.Equal(t, domain.PayoutStatusFailed, repo.completed[0].status)
+	assert.Contains(t, repo.completed[0].reason, "ditarik kembali")
 }
 
 func TestDispatcher_ReconcileIgnoresNonTerminal(t *testing.T) {

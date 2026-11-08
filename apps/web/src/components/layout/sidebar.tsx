@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -11,6 +12,7 @@ import {
   ShoppingBag,
   CreditCard,
   CalendarPlus,
+  History,
   type LucideIcon,
 } from "lucide-react";
 
@@ -23,15 +25,20 @@ interface Item {
 
 export function DashboardSidebar() {
   const { user, isAdmin, isEO, isCustomer } = useAuth();
+  const pathname = usePathname();
   const [active, setActive] = useState("dash-eo-top");
 
   if (!user) return null;
 
   let items: Item[] = [];
   if (isAdmin) {
+    // One entry per admin area. /dashboard IS the events moderation page (its
+    // filter chips and headline counts live there), so there is no separate
+    // events route; refunds and payouts are their own pages.
     items = [
-      { id: "dash-admin", label: "Moderasi", icon: Shield },
-      { id: "dash-admin-events", label: "All Events", icon: Calendar },
+      { id: "dash-admin", label: "Events", icon: Shield, href: "/dashboard" },
+      { id: "dash-admin-refunds", label: "Refunds", icon: History, href: "/dashboard/refunds" },
+      { id: "dash-admin-payouts", label: "Payouts", icon: Wallet, href: "/dashboard/payouts" },
     ];
   } else if (isEO) {
     items = [
@@ -44,6 +51,13 @@ export function DashboardSidebar() {
     items = [
       { id: "dash-tickets", label: "My Tickets", icon: ShoppingBag },
       { id: "dash-payments", label: "Payments", icon: CreditCard },
+      { id: "dash-refunds", label: "Refunds", icon: History },
+      {
+        id: "dash-refund-account",
+        label: "Rekening Refund",
+        icon: Wallet,
+        href: "/dashboard/refund-account",
+      },
     ];
   }
 
@@ -72,7 +86,12 @@ export function DashboardSidebar() {
 
       <nav className="flex flex-col gap-1">
         {items.map((item) => {
-          const cls = `sidebar-link ${active === item.id && !item.href ? "active" : ""}`;
+          // A link item is active when its href matches the current page; an
+          // anchor item keeps the click-driven state.
+          const isActive = item.href
+            ? pathname === item.href
+            : active === item.id;
+          const cls = `sidebar-link ${isActive ? "active" : ""}`;
           return item.href ? (
             <Link key={item.id} href={item.href} className={cls}>
               <item.icon className="w-[17px] h-[17px]" />

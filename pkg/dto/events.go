@@ -107,6 +107,45 @@ type TicketIssued struct {
 // buyer their e-ticket.
 const TopicTicketIssued = "ticket.issued"
 
+// TopicRefundDisbursement is the outbox topic the payment service writes to
+// hand a refund to its payout dispatcher (Payouts API). Never published to
+// Kafka.
+const TopicRefundDisbursement = "refund.disbursement"
+
+// TopicRefundCompleted is the Kafka topic payment publishes when a refund
+// settles. Consumers: ticketing (booking status) and mail (customer notice).
+const TopicRefundCompleted = "refund.completed"
+
+// RefundDisbursementRequested is the payment outbox payload that drives one
+// refund payout. Destinations come from the customer's registered refund
+// account, since VA/retail-outlet payments cannot refund to source.
+type RefundDisbursementRequested struct {
+	RefundID string `json:"refund_id"`
+	// Attempt is the retry counter. The Payouts idempotency key includes it so
+	// an admin retry submits a fresh payout instead of replaying the failure.
+	Attempt           int    `json:"attempt"`
+	AmountRupiah      int64  `json:"amount_rupiah"`
+	Currency          string `json:"currency"`
+	ChannelCode       string `json:"channel_code"`
+	AccountNumber     string `json:"account_number"`
+	AccountHolderName string `json:"account_holder_name"`
+	Description       string `json:"description"`
+}
+
+// RefundCompleted reports a settled refund. It carries the customer's address
+// and amount, so consumers (mail especially) need no lookup back into payment.
+type RefundCompleted struct {
+	BookingID     string    `json:"booking_id"`
+	RefundID      string    `json:"refund_id"`
+	EventID       string    `json:"event_id,omitempty"`
+	Email         string    `json:"email,omitempty"`
+	AmountRupiah  int64     `json:"amount_rupiah,omitempty"`
+	Currency      string    `json:"currency,omitempty"`
+	Status        string    `json:"status"`
+	FailureReason string    `json:"failure_reason,omitempty"`
+	At            time.Time `json:"at"`
+}
+
 // TopicEventCancelled is the Kafka topic published when an event is cancelled
 // (by its organizer or an admin). Consumers: ticketing (cancel cascade),
 // payment (refund requests), mail (booker notification).

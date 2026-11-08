@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -358,4 +359,131 @@ func formatTime(t *time.Time) string {
 		return ""
 	}
 	return t.Format("2006-01-02T15:04:05Z07:00")
+}
+
+// GetRefundAccount handles GET /api/refund-account. Returns the caller's
+// registered refund destination, or null when none was set yet.
+func (h *PaymentHandler) GetRefundAccount(w http.ResponseWriter, r *http.Request) {
+	userID := sharedhttp.UserIDFromContext(r.Context())
+	if userID == "" {
+		sharedhttp.Unauthorized(w, "authentication required")
+		return
+	}
+	dest, err := h.svc.RefundAccount(r.Context(), userID)
+	if err != nil {
+		sharedhttp.InternalServerError(w, "failed to load refund account")
+		return
+	}
+	if dest == nil {
+		sharedhttp.OK(w, map[string]any{"refund_account": nil})
+		return
+	}
+	sharedhttp.OK(w, map[string]any{"refund_account": RefundAccountResponse{
+		ChannelCode:       dest.ChannelCode,
+		AccountNumber:     dest.AccountNumber,
+		AccountHolderName: dest.AccountHolderName,
+	}})
+}
+
+// SaveRefundAccount handles PUT /api/refund-account. Registers or replaces
+// the caller's refund destination — the payout target for refunds, since VA
+// and retail-outlet payments cannot refund to their source.
+func (h *PaymentHandler) SaveRefundAccount(w http.ResponseWriter, r *http.Request) {
+	userID := sharedhttp.UserIDFromContext(r.Context())
+	if userID == "" {
+		sharedhttp.Unauthorized(w, "authentication required")
+		return
+	}
+	var req RefundAccountRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sharedhttp.BadRequest(w, "invalid request body")
+		return
+	}
+	if err := h.svc.SaveRefundAccount(r.Context(), userID,
+		req.ChannelCode, req.AccountNumber, req.AccountHolderName); err != nil {
+		sharedhttp.BadRequest(w, err.Error())
+		return
+	}
+	sharedhttp.OK(w, map[string]string{"status": "saved"})
+}
+
+// ListMyRefunds handles GET /api/refunds (customer only). This is the buyer's
+// only view of refund state: payment owns the ledger, so there is no mirrored
+// copy in ticketing to drift.
+func (h *PaymentHandler) ListMyRefunds(w http.ResponseWriter, r *http.Request) {
+	userID := sharedhttp.UserIDFromContext(r.Context())
+	if userID == "" {
+		sharedhttp.Unauthorized(w, "authentication required")
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	refunds, err := h.svc.ListMyRefunds(r.Context(), userID, limit, offset)
+	if err != nil {
+		sharedhttp.InternalServerError(w, "failed to list refunds")
+		return
+	}
+	out := make([]CustomerRefundResponse, 0, len(refunds))
+	for _, refund := range refunds {
+		out = append(out, CustomerRefundResponse{
+			ID:            refund.ID,
+			BookingID:     refund.BookingID,
+			EventID:       refund.EventID,
+			AmountRupiah:  refund.AmountRupiah,
+			Currency:      refund.Currency,
+			Status:        refund.Status,
+			FailureReason: refund.FailureReason,
+			ChannelCode:   refund.ChannelCode,
+			AccountNumber: refund.AccountNumber,
+			HasAccount:    refund.HasAccount,
+			CreatedAt:     refund.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ProcessedAt:   formatTime(refund.ProcessedAt),
+		})
+	}
+	sharedhttp.OK(w, out)
+}
+
+// ListRefunds handles GET /api/admin/refunds (admin only).
+func (h *PaymentHandler) ListRefunds(w http.ResponseWriter, r *http.Request) {
+	status := r.URL.Query().Get("status")
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	if limit <= 0 {
+		limit = 50
+	}
+	refunds, err := h.svc.ListRefunds(r.Context(), status, limit, offset)
+	if err != nil {
+		sharedhttp.InternalServerError(w, "failed to list refunds")
+		return
+	}
+	out := make([]RefundAdminResponse, 0, len(refunds))
+	for _, refund := range refunds {
+		out = append(out, RefundAdminResponse{
+			ID:            refund.ID,
+			BookingID:     refund.BookingID,
+			EventID:       refund.EventID,
+			CustomerEmail: refund.CustomerEmail,
+			AmountRupiah:  refund.AmountRupiah,
+			Currency:      refund.Currency,
+			Status:        refund.Status,
+			Reason:        refund.Reason,
+			ProviderRef:    refund.ProviderRef,
+			FailureReason:  refund.FailureReason,
+			HasDestination: refund.HasDestination,
+			CreatedAt:      refund.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ProcessedAt:   formatTime(refund.ProcessedAt),
+		})
+	}
+	sharedhttp.OK(w, out)
+}
+
+// RetryRefund handles POST /api/admin/refunds/{id}/retry (admin only). It
+// re-queues a failed or stuck refund so the executor pays it out again.
+func (h *PaymentHandler) RetryRefund(w http.ResponseWriter, r *http.Request) {
+	refundID := chi.URLParam(r, "id")
+	if err := h.svc.RetryRefund(r.Context(), refundID); err != nil {
+		sharedhttp.BadRequest(w, "refund is not retryable")
+		return
+	}
+	sharedhttp.OK(w, map[string]string{"status": "queued"})
 }

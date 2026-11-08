@@ -97,6 +97,24 @@ http:
         - forward-auth
       priority: 20
 
+    refund-account:
+      rule: PathPrefix(`/api/refund-account`)
+      service: payment
+      middlewares:
+        - cors
+        - ratelimit
+        - forward-auth
+      priority: 20
+
+    refunds:
+      rule: PathPrefix(`/api/refunds`)
+      service: payment
+      middlewares:
+        - cors
+        - ratelimit
+        - forward-auth
+      priority: 20
+
     bookings:
       rule: PathPrefix(`/api/bookings`)
       service: ticketing
@@ -116,6 +134,24 @@ http:
 
     admin-events:
       rule: PathPrefix(`/api/admin/events`)
+      service: ticketing
+      middlewares:
+        - cors
+        - ratelimit
+        - forward-auth
+      priority: 20
+
+    admin-refunds:
+      rule: PathPrefix(`/api/admin/refunds`)
+      service: payment
+      middlewares:
+        - cors
+        - ratelimit
+        - forward-auth
+      priority: 20
+
+    admin-payouts:
+      rule: PathPrefix(`/api/admin/payouts`)
       service: ticketing
       middlewares:
         - cors

@@ -135,7 +135,6 @@ export interface BookingResponse {
   payment_deadline?: string;
   total_rupiah: number;
   payment_id: string;
-  refund_status?: string;
   items: BookingItemResp[];
   created_at: string;
   // Event context, present on customer-facing lists only.
@@ -150,9 +149,32 @@ export interface TransactionResponse {
   amount_rupiah: number;
   currency: string;
   status: string;
+  refund_status?: string;
   payment_link_url?: string;
   expires_at?: string;
   created_at: string;
+}
+
+// The only four refund states a customer ever sees. Gateway-internal statuses
+// are collapsed into these by the payment service.
+export type RefundStatus = "pending" | "processing" | "succeeded" | "failed";
+
+// One row of GET /api/refunds — the customer's own refund ledger. Payment owns
+// this state; there is no mirrored copy in ticketing. Deliberately carries no
+// provider_ref or raw failure code: those are gateway internals.
+export interface CustomerRefund {
+  id: string;
+  booking_id: string;
+  event_id: string;
+  amount_rupiah: number;
+  currency: string;
+  status: RefundStatus;
+  failure_reason?: string;
+  channel_code?: string;
+  account_number?: string;
+  has_account: boolean;
+  created_at: string;
+  processed_at?: string;
 }
 
 export interface PaymentStatusResponse {

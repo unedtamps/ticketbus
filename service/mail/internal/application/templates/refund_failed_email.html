@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Refund Perlu Tindakan — TicketBus</title>
+</head>
+<body style="margin:0;padding:24px;background:#f4f6fb;font-family:Arial,Helvetica,sans-serif;color:#16224a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e4eaf4;">
+    <tr>
+      <td style="background:#d98b1f;padding:20px 28px;">
+        <span style="color:#ffffff;font-size:20px;font-weight:bold;">TicketBus</span>
+        <span style="color:#ffe9c7;font-size:12px;font-weight:bold;margin-left:6px;">REFUND</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:28px;">
+        <p style="margin:0 0 6px;font-size:12px;color:#6e7b96;letter-spacing:1px;text-transform:uppercase;">Perlu tindakan</p>
+        <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;">Refund belum bisa kami kirim</h1>
+
+        <p style="margin:0 0 18px;font-size:14px;line-height:1.7;">
+          Refund untuk pembatalan event yang kamu beli gagal dikirim ke rekening
+          tujuan. Dana kamu tetap aman dan akan kami kirim ulang setelah datanya
+          diperbaiki.
+        </p>
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;line-height:1.7;">
+          <tr>
+            <td style="color:#6e7b96;width:150px;padding:6px 0;">Jumlah refund</td>
+            <td style="font-weight:bold;padding:6px 0;">{{.Amount}}</td>
+          </tr>
+          <tr>
+            <td style="color:#6e7b96;padding:6px 0;">Booking</td>
+            <td style="font-weight:bold;padding:6px 0;">{{.BookingID}}</td>
+          </tr>
+          <tr>
+            <td style="color:#6e7b96;padding:6px 0;">Refund ID</td>
+            <td style="font-weight:bold;padding:6px 0;">{{.RefundID}}</td>
+          </tr>
+        </table>
+
+        {{if .FailureReason}}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 0;background:#fff7e6;border-left:3px solid #d98b1f;border-radius:8px;">
+          <tr>
+            <td style="padding:12px 14px;font-size:13px;line-height:1.6;">
+              <strong style="display:block;margin-bottom:4px;">Penyebab</strong>
+              {{.FailureReason}}
+            </td>
+          </tr>
+        </table>
+        {{end}}
+
+        <p style="margin:18px 0 14px;font-size:14px;line-height:1.7;">
+          Periksa dan perbarui data rekening refund kamu, lalu tim kami akan
+          memproses ulang pengirimannya.
+        </p>
+        <a href="{{.DashboardURL}}" style="display:inline-block;background:#2450d9;color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;padding:12px 22px;border-radius:10px;">
+          Perbaiki Rekening Refund
+        </a>
+        <p style="margin:12px 0 0;font-size:12px;color:#9aa6bc;">
+          Jika tombol tidak berfungsi, salin tautan ini: {{.DashboardURL}}
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="background:#f4f6fb;padding:14px 28px;font-size:11px;color:#9aa6bc;">
+        Email otomatis dari TicketBus. Mohon tidak membalas email ini.
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

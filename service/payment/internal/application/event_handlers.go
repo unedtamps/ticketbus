@@ -34,7 +34,9 @@ func (s *PaymentService) HandleEventCancelled(ctx context.Context, eventID strin
 				Status:         domain.RefundPending,
 				Reason:         "event_cancelled",
 				IdempotencyKey: "event-cancelled:" + txn.ID,
-				ProviderRef:    txn.ProviderRef,
+				// ProviderRef stays empty until the executor submits the
+				// payout: seeding it with the payment-session id made the
+				// reconciliation poll treat a never-sent refund as dispatched.
 			}
 			if err := s.refundRepo.Create(ctx, refund); err != nil {
 				return err

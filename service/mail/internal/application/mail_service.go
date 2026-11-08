@@ -22,10 +22,11 @@ var templateFS embed.FS
 // affected booking. Delivery is at-most-once like every consumer in this
 // system: a failed send is logged and the offset moves on.
 type MailService struct {
-	consumer *kafka.MailConsumer
-	mailer   mailer.Mailer
-	logger   *slog.Logger
-	tmpl     *template.Template
+	consumer   *kafka.MailConsumer
+	mailer     mailer.Mailer
+	logger     *slog.Logger
+	tmpl       *template.Template
+	webBaseURL string
 }
 
 // NewMailService wires the consumer to the mailer.
@@ -33,16 +34,18 @@ func NewMailService(
 	consumer *kafka.MailConsumer,
 	mailer mailer.Mailer,
 	logger *slog.Logger,
+	webBaseURL string,
 ) (*MailService, error) {
 	tmpl, err := template.ParseFS(templateFS, "templates/*.html")
 	if err != nil {
 		return nil, err
 	}
 	return &MailService{
-		consumer: consumer,
-		mailer:   mailer,
-		logger:   logger,
-		tmpl:     tmpl,
+		consumer:   consumer,
+		mailer:     mailer,
+		logger:     logger,
+		tmpl:       tmpl,
+		webBaseURL: webBaseURL,
 	}, nil
 }
 
@@ -51,6 +54,7 @@ func NewMailService(
 func (s *MailService) StartConsumer(ctx context.Context) {
 	s.consumer.OnTicketIssued(ctx, s.onTicketIssued)
 	s.consumer.OnEventCancelled(ctx, s.onEventCancelled)
+	s.consumer.OnRefundCompleted(ctx, s.onRefundCompleted)
 	_ = s.consumer.Start(ctx)
 }
 
@@ -102,6 +106,7 @@ func (s *MailService) onEventCancelled(ctx context.Context, event sdomain.EventC
 			EventVenue:   event.EventVenue,
 			EventStartAt: formatWhen(event.EventStartAt),
 			BookingID:    booker.BookingID,
+			DashboardURL: s.webBaseURL + "/dashboard/refund-account",
 		}
 		if err := s.deliver(booker.Email, subject, "event_cancelled_email.html", d,
 			plainCancelledText(d), "cancellation emailed",
@@ -115,6 +120,87 @@ func (s *MailService) onEventCancelled(ctx context.Context, event sdomain.EventC
 	s.logger.Info("cancellation notices sent",
 		"event_id", event.EventID, "bookers", len(event.Bookers), "sent", sent)
 	return nil
+}
+
+// onRefundCompleted tells the customer how their refund ended: paid out, or
+// failed and needing a corrected destination. Both outcomes reach this handler
+// on the same topic, so the template differs by status.
+func (s *MailService) onRefundCompleted(ctx context.Context, event sdomain.RefundCompleted) error {
+	if event.Email == "" {
+		s.logger.Warn("refund completed without email, skipping",
+			"refund_id", event.RefundID, "booking_id", event.BookingID)
+		return nil
+	}
+
+	d := refundEmailData{
+		Amount:       formatRupiah(event.AmountRupiah),
+		BookingID:    event.BookingID,
+		RefundID:     event.RefundID,
+		DashboardURL: s.webBaseURL + "/dashboard/refund-account",
+		// Already a customer-facing sentence from the payment service; it is
+		// never a raw gateway code.
+		FailureReason: event.FailureReason,
+	}
+
+	if event.Status == "succeeded" {
+		subject := "Refund Terkirim — " + d.Amount
+		return s.deliver(event.Email, subject, "refund_completed_email.html", d,
+			plainRefundText(d, true), "refund payout emailed",
+			slog.String("refund_id", event.RefundID),
+			slog.String("booking_id", event.BookingID),
+		)
+	}
+
+	subject := "Refund Belum Terkirim — " + d.Amount
+	return s.deliver(event.Email, subject, "refund_failed_email.html", d,
+		plainRefundText(d, false), "refund failure emailed",
+		slog.String("refund_id", event.RefundID),
+		slog.String("booking_id", event.BookingID),
+		slog.String("reason", event.FailureReason),
+	)
+}
+
+// refundEmailData is the refund outcome template view.
+type refundEmailData struct {
+	Amount        string
+	BookingID     string
+	RefundID      string
+	DashboardURL  string
+	FailureReason string
+}
+
+// formatRupiah renders an amount as "Rp1.500.000" without pulling a currency
+// library in for one string.
+func formatRupiah(amount int64) string {
+	digits := strconv.FormatInt(amount, 10)
+	var b bytes.Buffer
+	for i, r := range digits {
+		if i > 0 && (len(digits)-i)%3 == 0 {
+			b.WriteByte('.')
+		}
+		b.WriteRune(r)
+	}
+	return "Rp" + b.String()
+}
+
+// plainRefundText builds the plain-text refund fallback.
+func plainRefundText(d refundEmailData, succeeded bool) string {
+	var b bytes.Buffer
+	if succeeded {
+		b.WriteString("Refund sudah dikirim\n\n")
+		b.WriteString("Dana refund " + d.Amount + " sudah kami kirim ke rekening yang kamu daftarkan.\n\n")
+	} else {
+		b.WriteString("Refund belum bisa kami kirim\n\n")
+		b.WriteString("Refund " + d.Amount + " gagal dikirim ke rekening tujuan. Dana kamu tetap aman.\n")
+		if d.FailureReason != "" {
+			b.WriteString("\nPenyebab: " + d.FailureReason + "\n")
+		}
+		b.WriteString("\nPeriksa dan perbarui data rekening/e-wallet kamu.\n\n")
+	}
+	b.WriteString("Booking ID: " + d.BookingID + "\n")
+	b.WriteString("Refund ID: " + d.RefundID + "\n\n")
+	b.WriteString("Perbarui atau pantau rekening refund di " + d.DashboardURL)
+	return b.String()
 }
 
 // deliver renders the named template, sends the mail, and logs the outcome
@@ -155,12 +241,15 @@ type ticketEmailData struct {
 	TicketID       string
 }
 
-// cancelledEmailData is the cancellation template view.
+// cancelledEmailData is the cancellation template view. DashboardURL points
+// at the refund-account page: VA and retail-outlet payments cannot refund to
+// their source, so the customer registers a payout account there.
 type cancelledEmailData struct {
 	EventTitle   string
 	EventVenue   string
 	EventStartAt string
 	BookingID    string
+	DashboardURL string
 }
 
 // plainTicketText builds the plain-text e-ticket fallback.
@@ -185,6 +274,6 @@ func plainCancelledText(d cancelledEmailData) string {
 	b.WriteString("Waktu semula: " + d.EventStartAt + "\n")
 	b.WriteString("Lokasi: " + d.EventVenue + "\n")
 	b.WriteString("Booking ID: " + d.BookingID + "\n\n")
-	b.WriteString("Jika kamu sudah melakukan pembayaran, danamu akan dikembalikan ke metode pembayaran yang dipakai.")
+	b.WriteString("Jika kamu sudah melakukan pembayaran, refund dikirim ke rekening yang kamu daftarkan. Atur di " + d.DashboardURL)
 	return b.String()
 }

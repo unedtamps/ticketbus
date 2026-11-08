@@ -1,6 +1,8 @@
 package booking
 
-import "context"
+import (
+	"context"
+)
 
 // StartConsumers starts all Kafka consumers.
 func (s *BookingService) StartConsumers(ctx context.Context) error {

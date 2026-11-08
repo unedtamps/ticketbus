@@ -36,6 +36,21 @@ func (h *PaymentHandler) Routes() chi.Router {
 			Get("/api/payments/{txn_id}", h.GetTransaction)
 		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
 			Get("/api/payments", h.ListTransactions)
+		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
+			Get("/api/refund-account", h.GetRefundAccount)
+		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
+			Put("/api/refund-account", h.SaveRefundAccount)
+		r.With(sharedhttp.RequireRole(sdomain.RoleCustomer)).
+			Get("/api/refunds", h.ListMyRefunds)
+	})
+
+	// Admin routes
+	r.Group(func(r chi.Router) {
+		r.Use(sharedhttp.WithUserContext)
+		r.With(sharedhttp.RequireRole(sdomain.RoleAdmin)).
+			Get("/api/admin/refunds", h.ListRefunds)
+		r.With(sharedhttp.RequireRole(sdomain.RoleAdmin)).
+			Post("/api/admin/refunds/{id}/retry", h.RetryRefund)
 	})
 
 	return r

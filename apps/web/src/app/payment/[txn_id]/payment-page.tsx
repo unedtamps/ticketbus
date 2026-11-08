@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api-client";
+import { toast } from "@/components/ui/toast";
 import { fmtIDR } from "@/lib/format";
 import {
   AlertTriangle,
@@ -43,6 +44,7 @@ function fmtCountdown(ms: number) {
 export default function PaymentPage() {
   const { txn_id } = useParams<{ txn_id: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const nowMs = useNowMs();
 
   const txnQuery = useQuery({
@@ -69,6 +71,21 @@ export default function PaymentPage() {
     staleTime: 60 * 1000,
   });
   const booking = bookingQuery.data;
+
+  // An `initiated` transaction has no gateway session yet — ProcessPayment is
+  // what creates it. Reached here when the checkout's "resume" raced ahead of
+  // this call, so the page offers the click instead of just watching.
+  const startMutation = useMutation({
+    mutationFn: () => api.post(`/api/payments/booking/${txn!.booking_id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["payment", txn_id] }),
+    onError: () => {
+      // 409 here means the hold ran out (or it settled meanwhile) — the poll
+      // picks up the true state either way.
+      toast.error("Gagal memulai pembayaran — coba lagi.");
+      queryClient.invalidateQueries({ queryKey: ["payment", txn_id] });
+    },
+  });
+  const starting = startMutation.isPending;
 
   // The hosted checkout is never opened automatically. Popup blockers drop
   // window.open calls that do not come from a click, and a tab opening on its
@@ -180,6 +197,26 @@ export default function PaymentPage() {
                 Buka Halaman Pembayaran
                 <ExternalLink className="w-4 h-4" />
               </a>
+            )}
+
+            {/* Session not created yet: offer the click that creates it rather
+                than a watch-only page. The poll flips this to the link once
+                ProcessPayment lands. */}
+            {isOpen && !txn.payment_link_url && !payExpired && (
+              <button
+                onClick={() => startMutation.mutate()}
+                disabled={starting}
+                className="btn-accent w-full py-3 text-sm flex items-center justify-center gap-2"
+              >
+                {starting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    Bayar Sekarang
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
             )}
 
             {isOpen && (

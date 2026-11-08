@@ -70,8 +70,13 @@ export default function CheckoutPage() {
     staleTime: 15 * 1000,
   });
   const paymentSession = paymentQuery.data ?? null;
-  const paymentInProgress =
-    paymentSession?.status === "pending" || paymentSession?.status === "initiated";
+  // Only `pending` has a live gateway session to resume. `initiated` means the
+  // transaction row exists but the session does not — that is exactly what the
+  // POST below creates, so it must never be treated as "in progress".
+  const paymentInProgress = paymentSession?.status === "pending";
+  // Webhook landed but ticketing has not confirmed the booking yet — the
+  // button must not offer a second payment for the same booking.
+  const paid = paymentSession?.status === "completed";
 
   // The summary names ticket types and shows the event line; the booking
   // items only carry ticket_type_id, so the event detail fills in names.
@@ -314,16 +319,18 @@ export default function CheckoutPage() {
           {booking.status === "pending" && !txnNotReady && (
             <button
               onClick={() => {
-                // Reuse the existing session; initiating again returns 409.
+                // Resume only a live session; an `initiated` transaction has no
+                // session yet, and ProcessPayment is what creates it.
                 if (paymentInProgress && paymentSession?.transaction_id) {
                   router.push("/payment/" + paymentSession.transaction_id);
                   return;
                 }
                 initiateMutation.mutate(booking.id);
               }}
-              // Only block a payment that has not started yet.
               disabled={
-                initiateMutation.isPending || (!paymentInProgress && payExpired)
+                initiateMutation.isPending ||
+                paid ||
+                (!paymentInProgress && payExpired)
               }
               className="btn-accent w-full py-3"
             >
@@ -331,15 +338,8 @@ export default function CheckoutPage() {
                 <Loader2 className="w-4 h-4 animate-spin mx-auto" />
               ) : (
                 <span className="flex items-center justify-center gap-2">
-                  {paymentInProgress ? (
-                    <>
-                      Lanjutkan Pembayaran <ArrowRight className="w-4 h-4" />
-                    </>
-                  ) : (
-                    <>
-                      Bayar Sekarang <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
+                  {paid ? "Sudah dibayar" : "Bayar Sekarang"}{" "}
+                  <ArrowRight className="w-4 h-4" />
                 </span>
               )}
             </button>

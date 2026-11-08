@@ -447,7 +447,7 @@ export default function EventPage() {
                     <Loader2 className="w-4 h-4 animate-spin mx-auto" />
                   ) : (
                     <span className="flex items-center justify-center gap-2">
-                      Checkout <ArrowRight className="w-4 h-4" />
+                      Reserve <ArrowRight className="w-4 h-4" />
                     </span>
                   )}
                 </button>

@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# pre-push — run the matching act tier before pushing.
+#
+# Feature branches: unit job only (fast).
+# master or v* tags: the full Test workflow (unit + integration + e2e), because
+# those pushes can trigger the deploy workflow.
+#
+# Bypass for one push:   ACT_PREPUSH=off git push
+# Force the full suite:  ACT_PREPUSH=full git push
+# Emergency bypass:      git push --no-verify
+#
+# Install with `make hooks-install`; Git reads it through core.hooksPath.
+
+set -euo pipefail
+
+if [[ "${ACT_PREPUSH:-}" == "off" ]]; then
+  echo "pre-push: ACT_PREPUSH=off — skipping act"
+  exit 0
+fi
+
+live_refs=0
+full=0
+full_reason="master/tag push"
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Deleted ref: there is no new code to test.
+  [[ "$local_sha" =~ ^0+$ ]] && continue
+
+  live_refs=1
+  case "$remote_ref" in
+    refs/heads/master|refs/tags/v*) full=1 ;;
+  esac
+done
+
+if [[ "$live_refs" == "0" ]]; then
+  echo "pre-push: no new refs to test (delete-only push)"
+  exit 0
+fi
+
+if [[ "${ACT_PREPUSH:-}" == "full" ]]; then
+  full=1
+  full_reason="ACT_PREPUSH=full"
+fi
+
+if ! command -v act >/dev/null 2>&1; then
+  echo "pre-push: act is not installed; see README → Run CI locally with act" >&2
+  echo "pre-push: bypass with 'ACT_PREPUSH=off git push' or 'git push --no-verify'." >&2
+  exit 1
+fi
+
+if ! docker info >/dev/null 2>&1; then
+  echo "pre-push: Docker is not reachable; start the daemon and retry." >&2
+  echo "pre-push: bypass with 'ACT_PREPUSH=off git push' or 'git push --no-verify'." >&2
+  exit 1
+fi
+
+if [[ "$full" == "1" ]]; then
+  echo "pre-push: ${full_reason} — running the full Test workflow with act (~8 min)"
+  make act-test
+else
+  echo "pre-push: feature push — running the unit job with act"
+  echo "pre-push: ACT_PREPUSH=full runs integration + e2e as well"
+  make act-unit
+fi

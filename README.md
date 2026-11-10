@@ -329,13 +329,16 @@ Notes:
 # 1. Allow direnv (loads per-service .env files)
 make direnv-allow
 
-# 2. Start infrastructure (PostgreSQL ×3, Kafka ×3 (KRaft), Traefik, Kafka UI)
+# 2. Install the pre-push hook (runs act before every push)
+make hooks-install
+
+# 3. Start infrastructure (PostgreSQL ×3, Kafka ×3 (KRaft), Traefik, Kafka UI)
 make infra-up
 
-# 3. Run database migrations
+# 4. Run database migrations
 make migrate
 
-# 4. Start all services (3 backends + frontend)
+# 5. Start all services (3 backends + frontend)
 make dev
 ```
 
@@ -732,6 +735,18 @@ also set `ACT=true` for `deploy.yml`, so it never logs in or pushes. Local image
 
 act uses host networking and the Docker socket. E2E needs ports `8100`, `18083`, `15432`, `15433`,
 `15435` and `19092` free. The first run downloads the runner image and the Go toolchain.
+
+`make hooks-install` installs `.githooks/pre-push`, which runs act before every push:
+
+| Push target | Hook action |
+|-------------|-------------|
+| Feature branches | `make act-unit` |
+| `master` or `v*` tags | `make act-test` (unit + integration + e2e) |
+
+Feature pushes stay fast; the full suite runs only where a push can trigger deploy. Bypass a single
+push with `ACT_PREPUSH=off git push`; force the full suite on any branch with
+`ACT_PREPUSH=full git push`. The hook tests the working tree, not only the committed snapshot, and
+`git push --no-verify` skips it entirely. `make hooks-uninstall` restores Git's default hooks path.
 
 The frontend has no automated deploy. It used to be synced to S3 as a static export, but
 `output: 'export'` is no longer enabled in `apps/web/next.config.ts`, so there is no `out/`

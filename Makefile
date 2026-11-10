@@ -4,6 +4,7 @@
         build build-auth build-ticketing build-payment clean \
         migrate migrate-auth-up migrate-ticketing-up migrate-payment-up \
         test lint format direnv-allow integration-test integration-test-race \
+        hooks-install hooks-uninstall \
         e2e-keys e2e-up e2e-down e2e-status e2e-logs e2e \
         act-list act-unit act-integration act-e2e act-test act-deploy act-all \
         obs-up obs-down obs-clean obs-status obs-logs \
@@ -59,6 +60,8 @@ help:
 	@echo "  make clean                 Remove bin/ directory"
 	@echo ""
 	@echo "  make direnv-allow          Allow all .envrc files"
+	@echo "  make hooks-install         Install the pre-push act hook"
+	@echo "  make hooks-uninstall       Restore Git's default hooks path"
 	@echo ""
 	@echo "  make migrate               Run all migrations"
 	@echo "  make test                  Run all tests"
@@ -158,6 +161,18 @@ direnv-allow:
 	direnv allow service/auth/cmd/api
 	direnv allow service/ticketing/cmd/api
 	direnv allow service/payment/cmd/api
+
+# Git hooks. The pre-push hook runs act-unit for feature branches and act-test
+# for master/v* tags. core.hooksPath keeps the script versioned with the repo, so
+# each clone only needs `make hooks-install` once.
+hooks-install:
+	git config core.hooksPath .githooks
+	chmod +x .githooks/pre-push
+	@echo "pre-push hook installed (bypass: ACT_PREPUSH=off git push)"
+
+hooks-uninstall:
+	@git config --unset core.hooksPath 2>/dev/null || true
+	@echo "pre-push hook uninstalled"
 
 # Builds
 build: build-auth build-ticketing build-payment build-mail

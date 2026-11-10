@@ -5,6 +5,7 @@
 # VCS / CI
 .git
 .github
+.githooks
 
 # Frontend (not part of the backend images)
 apps

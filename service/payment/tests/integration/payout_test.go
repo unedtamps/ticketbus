@@ -192,7 +192,9 @@ func TestPayout_Consumer_FailureThenRetry(t *testing.T) {
 	env.emitPayoutRequested(t, eventID, 1)
 
 	failed := env.waitPayoutStatus(t, eventID, "failed", 30*time.Second)
-	assert.Contains(t, failed.failureReason, "invalid account")
+	assert.Contains(t, failed.failureReason, "Detail rekening payout")
+	assert.NotContains(t, failed.failureReason, "invalid account",
+		"the raw gateway error must not leak to the organizer")
 	assert.Equal(t, "failed", env.txnPayoutStatus(t, bookingID))
 
 	// Fix the account (the mock) and retry with a new attempt: the failed
@@ -309,7 +311,8 @@ func TestPayout_AsyncConfirmation_ReconciliationPoll(t *testing.T) {
 	assert.True(t, strings.HasPrefix(paid.providerRef, "dis-mock-"))
 }
 
-// A failed async confirmation records the gateway failure code.
+// A failed async confirmation records an organizer-facing reason; the raw
+// gateway failure code never reaches the ledger.
 func TestPayout_AsyncConfirmation_WebhookFailed(t *testing.T) {
 	env := getTestEnv()
 	c := newCustomer()
@@ -330,7 +333,11 @@ func TestPayout_AsyncConfirmation_WebhookFailed(t *testing.T) {
 	require.Equal(t, http.StatusOK, code, "webhook: %s", body)
 
 	failed := env.waitPayoutStatus(t, eventID, "failed", 30*time.Second)
-	assert.Contains(t, failed.failureReason, "INSUFFICIENT_BALANCE")
+	assert.Contains(t, failed.failureReason, "Payout tertunda karena kendala saldo")
+	assert.NotContains(t, failed.failureReason, "Refund",
+		"a failed payout is not a refund")
+	assert.NotContains(t, failed.failureReason, "INSUFFICIENT_BALANCE",
+		"the raw gateway enum must not leak to the organizer")
 	assert.Equal(t, "failed", env.txnPayoutStatus(t, bookingID))
 }
 

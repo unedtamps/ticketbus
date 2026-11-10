@@ -291,7 +291,7 @@ payment consumes payout.requested
   recorded as paid_out. In-flight statuses (PENDING, ACCEPTED, ROUTING,
   REQUESTED, READY, LOCKED, PENDING_COMPLIANCE_ASSESSMENT) keep waiting.
   The failure_code is translated to an organizer-facing sentence by
-  domain.FailureMessage — the raw enum never reaches the ledger.
+  domain.PayoutFailureMessage — the raw enum never reaches the ledger.
   4xx  → failed (permanent: bad data); 401/403 → retried (credentials, e.g. a missing
           MONEY-OUT scope); 429/5xx/network → retried with backoff
         │ outbox worker → Kafka
@@ -697,17 +697,41 @@ GitHub Actions on push and pull request to `master` (`.github/workflows/test.yml
 | Job | Command | Timeout |
 |-----|---------|---------|
 | Unit Tests | `go test -race -count=1 ./...` | 10 min |
-| Integration Tests | `go test -tags=integration -race -count=1 -v ./service/auth/tests/integration/... ./service/ticketing/tests/integration/... ./service/payment/tests/integration/...` | 15 min |
+| Integration Tests | `go test -tags=integration -race -count=1 -v ./service/auth/tests/integration/... ./service/ticketing/tests/integration/... ./service/payment/tests/integration/...` | 20 min |
+| E2E Tests | `make e2e` (compose stack + `tests/e2e`) | 25 min |
 
-Both jobs run in parallel on `ubuntu-latest`.
+All three jobs run in parallel on `ubuntu-latest`.
 
-`.github/workflows/deploy.yml` runs after the test workflow completes successfully on a push and
-then:
+`.github/workflows/deploy.yml` runs after the test workflow completes successfully on a push, or
+manually through `workflow_dispatch`, and then:
 
 | Job | Timeout | What it does |
 |-----|---------|-------------|
 | Build & Push | 15 min | Builds one Docker image per backend service from `docker/Dockerfile`, tagged with the `v*` git tag when present, otherwise `latest` plus the short SHA |
 | Build & Push migrate image | 10 min | Publishes the migration runner image |
+
+### Run CI locally with act
+
+[`act`](https://github.com/nektos/act) runs the same workflow files against the host Docker daemon:
+
+```bash
+make act-unit          # unit job only
+make act-integration   # integration job (testcontainers)
+make act-e2e           # e2e job (full compose stack)
+make act-test          # all three Test jobs
+make act-deploy        # build every image locally, no registry push
+make act-all           # act-test, then act-deploy
+```
+
+The runner image (`catthehacker/ubuntu:act-latest`) provides Docker CLI, Compose and buildx; Go is
+installed by `actions/setup-go`. act binds the repository at its real host path, which is what E2E
+needs because Compose resolves bind mounts on the host daemon. The workflows skip
+`actions/checkout` when `ACT=true`, so a local run never rewrites the working tree. The Make targets
+also set `ACT=true` for `deploy.yml`, so it never logs in or pushes. Local images are tagged
+`ticketbus/<service>-service:local` and `ticketbus/ticketbus-migrations:local`.
+
+act uses host networking and the Docker socket. E2E needs ports `8100`, `18083`, `15432`, `15433`,
+`15435` and `19092` free. The first run downloads the runner image and the Go toolchain.
 
 The frontend has no automated deploy. It used to be synced to S3 as a static export, but
 `output: 'export'` is no longer enabled in `apps/web/next.config.ts`, so there is no `out/`

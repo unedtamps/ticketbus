@@ -57,11 +57,11 @@ func TestRefundOutcome_InFlightStaysOpen(t *testing.T) {
 	}
 }
 
-// TestFailureMessage_CoversEveryGatewayCode asserts every documented
+// TestRefundFailureMessage_CoversEveryGatewayCode asserts every documented
 // Xendit failure_code produces a sentence, and that the result is Indonesian
 // prose rather than the raw enum (a customer must never read
 // ACCOUNT_NAME_MISMATCH).
-func TestFailureMessage_CoversEveryGatewayCode(t *testing.T) {
+func TestRefundFailureMessage_CoversEveryGatewayCode(t *testing.T) {
 	codes := []string{
 		"INSUFFICIENT_BALANCE",
 		"INVALID_DESTINATION",
@@ -74,36 +74,36 @@ func TestFailureMessage_CoversEveryGatewayCode(t *testing.T) {
 		"SLS_RECIPIENT",
 	}
 	for _, code := range codes {
-		msg := FailureMessage(code)
+		msg := RefundFailureMessage(code)
 		assert.NotEmpty(t, msg, "%s needs a message", code)
 		assert.NotEqual(t, code, msg, "%s must not leak the raw gateway code", code)
 		assert.Contains(t, msg, " ", "%s should be a sentence", code)
 	}
 }
 
-// TestFailureMessage_PlatformFaultDoesNotBlameCustomer: when the platform
+// TestRefundFailureMessage_PlatformFaultDoesNotBlameCustomer: when the platform
 // is out of balance or the sender account is broken, the customer must not be
 // told to fix their own account.
-func TestFailureMessage_PlatformFaultDoesNotBlameCustomer(t *testing.T) {
+func TestRefundFailureMessage_PlatformFaultDoesNotBlameCustomer(t *testing.T) {
 	for _, code := range []string{"INSUFFICIENT_BALANCE", "SLS_SENDER", "TEMPORARY_TRANSFER_ERROR", "TRANSFER_ERROR"} {
-		msg := FailureMessage(code)
+		msg := RefundFailureMessage(code)
 		assert.NotContains(t, msg, "Perbarui", "%s must not ask the customer to change their details", code)
 		assert.NotContains(t, msg, "tidak valid", "%s must not imply the destination is invalid", code)
 	}
 }
 
-// TestFailureMessage_NeverPromisesAnAutomaticRetry: nothing re-queues a
+// TestRefundFailureMessage_NeverPromisesAnAutomaticRetry: nothing re-queues a
 // failed refund — the sweep only claims pending rows and reconciliation only
 // settles processing rows. A message saying the money will be resent would
 // leave the customer waiting for something that never happens.
-func TestFailureMessage_NeverPromisesAnAutomaticRetry(t *testing.T) {
+func TestRefundFailureMessage_NeverPromisesAnAutomaticRetry(t *testing.T) {
 	codes := []string{
 		"INSUFFICIENT_BALANCE", "SLS_SENDER", "TEMPORARY_TRANSFER_ERROR",
 		"TRANSFER_ERROR", "ACCOUNT_NAME_MISMATCH", "INVALID_DESTINATION",
 		"SLS_RECIPIENT", "DESTINATION_MAXIMUM_LIMIT", "REJECTED_BY_CHANNEL", "",
 	}
 	for _, code := range codes {
-		msg := FailureMessage(code)
+		msg := RefundFailureMessage(code)
 		assert.NotContains(t, msg, "akan mengirimnya ulang",
 			"%q: no automatic retry exists, so it must not be promised", code)
 		assert.NotContains(t, msg, "akan kami kirim ulang",
@@ -120,10 +120,10 @@ func TestRefundOutcome_ReversedReasonIsForwardLooking(t *testing.T) {
 	assert.Contains(t, reason, "menindaklanjuti")
 }
 
-// TestFailureMessage_MismatchIsActionable: the one code the customer can
+// TestRefundFailureMessage_MismatchIsActionable: the one code the customer can
 // actually fix must say so.
-func TestFailureMessage_MismatchIsActionable(t *testing.T) {
-	msg := FailureMessage("ACCOUNT_NAME_MISMATCH")
+func TestRefundFailureMessage_MismatchIsActionable(t *testing.T) {
+	msg := RefundFailureMessage("ACCOUNT_NAME_MISMATCH")
 	assert.Contains(t, msg, "Nama pemilik rekening")
 	assert.Contains(t, msg, "Perbarui")
 }

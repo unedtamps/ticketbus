@@ -5,6 +5,7 @@
         migrate migrate-auth-up migrate-ticketing-up migrate-payment-up \
         test lint format direnv-allow integration-test integration-test-race \
         e2e-keys e2e-up e2e-down e2e-status e2e-logs e2e \
+        act-list act-unit act-integration act-e2e act-test act-deploy act-all \
         obs-up obs-down obs-clean obs-status obs-logs \
         k6-smoke k6-load k6-stress
 
@@ -18,6 +19,20 @@ export GOTOOLCHAIN
 # so the e2e stack can run alongside `make dev`.
 E2E_COMPOSE := docker/docker-compose.e2e.yml
 E2E_KEYS    := docker/e2e/keys
+
+# Local CI via act. The runner image ships Docker CLI, Compose and buildx; Go is
+# installed by actions/setup-go. Jobs reach the host Docker daemon through act's
+# socket mount.
+#
+# act binds the working directory at its real host path, which is what e2e
+# needs: Compose resolves bind mounts on the host daemon. The workflows skip
+# actions/checkout when ACT=true, so the job never rewrites the local tree; the
+# Go build cache lives inside the runner.
+ACT_IMAGE ?= catthehacker/ubuntu:act-latest
+ACT_FLAGS := -b --network host \
+	-P ubuntu-latest=$(ACT_IMAGE) \
+	--env HOST_REPO_ROOT=$(CURDIR) \
+	--env ACT=true
 
 # Observability stack (logs only). Standalone compose file; `make dev` does not
 # depend on it. Logs written here are tailed by the collector's file_log receiver
@@ -61,6 +76,13 @@ help:
 	@echo "  make e2e-status            Show e2e container status"
 	@echo "  make e2e-logs              Tail e2e logs"
 	@echo "  make e2e                   Start the e2e stack, run tests/e2e, tear it down"
+	@echo ""
+	@echo "  make act-unit              Run the CI unit job locally with act"
+	@echo "  make act-integration       Run the CI integration job locally with act"
+	@echo "  make act-e2e               Run the CI e2e job locally with act"
+	@echo "  make act-test              Run the whole Test workflow locally with act"
+	@echo "  make act-deploy            Build every image locally with act (no registry push)"
+	@echo "  make act-all               act-test, then act-deploy"
 	@echo ""
 	@echo "  make obs-up                Start collector + Tempo + Loki + Prometheus + Grafana"
 	@echo "  make obs-down              Stop the observability stack"
@@ -228,6 +250,35 @@ e2e: e2e-up
 	echo; echo "==> tearing down e2e stack"; \
 	$(MAKE) --no-print-directory e2e-down >/dev/null; \
 	exit $$status
+
+# Local CI/CD via act. These run the real files in .github/workflows, so a
+# failure here is the same failure GitHub would report.
+act-list:
+	act -l
+
+act-unit:
+	act push -W .github/workflows/test.yml -j unit $(ACT_FLAGS)
+
+act-integration:
+	act push -W .github/workflows/test.yml -j integration $(ACT_FLAGS)
+
+# e2e-keys runs on the host first: the keys are generated as the current user
+# and mounted into the stack, so the root-run job never owns repo files.
+act-e2e: e2e-keys
+	act push -W .github/workflows/test.yml -j e2e $(ACT_FLAGS)
+
+# The full Test workflow: unit, integration and e2e.
+act-test: e2e-keys
+	act push -W .github/workflows/test.yml $(ACT_FLAGS)
+
+# Local CD: builds every service and the migration runner into the local Docker
+# daemon as ticketbus/<service>-service:local. ACT=true makes the workflow skip
+# the registry login and docker/build-push-action, so nothing is published.
+act-deploy:
+	act workflow_dispatch -W .github/workflows/deploy.yml \
+		--input push=false $(ACT_FLAGS)
+
+act-all: act-test act-deploy
 
 # Observability (logs only). The collector tails $(LOGS_DIR)/*.log written by the
 # dev-* targets and ships them to Loki, so log aggregation needs no application

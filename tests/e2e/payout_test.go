@@ -58,7 +58,8 @@ func TestE2E_Payout_FullFlow(t *testing.T) {
 }
 
 // A payout the gateway accepted but then rejected: the failed confirmation
-// records the gateway's failure code on the attempt instead of losing it.
+// records an organizer-facing reason on the attempt. The raw gateway code is
+// translated, never stored or shown to the organizer.
 func TestE2E_Payout_WebhookFailed(t *testing.T) {
 	env := getTestEnv()
 	admin := env.loginAdmin(t)
@@ -72,7 +73,12 @@ func TestE2E_Payout_WebhookFailed(t *testing.T) {
 
 	payout := env.confirmPayout(t, eo, eventID, "failed", "failed", settleTimeout)
 	assert.Equal(t, "failed", payout.Status)
-	assert.Contains(t, payout.FailureReason, "INSUFFICIENT_BALANCE")
+	assert.Contains(t, payout.FailureReason, "Payout tertunda karena kendala saldo",
+		"failure reason should explain the payout failure: %q", payout.FailureReason)
+	assert.NotContains(t, payout.FailureReason, "Refund",
+		"a failed payout is not a refund")
+	assert.NotContains(t, payout.FailureReason, "INSUFFICIENT_BALANCE",
+		"the raw gateway enum must not leak to the organizer")
 	assert.Contains(t, payout.ProviderRef, "dis-mock-",
 		"even a failed attempt records which gateway payout it belongs to")
 }

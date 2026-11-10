@@ -80,7 +80,7 @@ func PayoutOutcome(gatewayStatus, failureCode string) (status, reason string, te
 	case GatewayPayoutSucceeded, GatewayPayoutCompleted:
 		return PayoutStatusPaidOut, "", true
 	case GatewayPayoutFailed:
-		return PayoutStatusFailed, FailureMessage(failureCode), true
+		return PayoutStatusFailed, PayoutFailureMessage(failureCode), true
 	case GatewayPayoutReversed:
 		// Funds bounced back after landing: the organizer never kept them, so
 		// the attempt cannot be recorded as paid out.
@@ -95,6 +95,41 @@ func PayoutOutcome(gatewayStatus, failureCode string) (status, reason string, te
 		// PENDING, ACCEPTED, ROUTING, REQUESTED, READY, LOCKED,
 		// PENDING_COMPLIANCE_ASSESSMENT, or an unroutable status: still moving.
 		return "", "", false
+	}
+}
+
+// PayoutFailureMessage turns a gateway failure_code into a sentence the
+// organizer can act on. The gateway enum is an internal detail, so it never
+// reaches the ledger or the dashboard.
+//
+// The wording is payout-specific: a failed payout is not a refund, and the
+// organizer should not be told to look for one. Codes that are the platform's
+// fault are worded so the organizer does not go looking for a problem in their
+// own account. Like refunds, nothing re-queues a failed payout automatically —
+// an admin retry creates a new attempt — so the message never promises one.
+func PayoutFailureMessage(failureCode string) string {
+	switch strings.ToUpper(strings.TrimSpace(failureCode)) {
+	case "ACCOUNT_NAME_MISMATCH":
+		return "Nama pemilik rekening payout tidak cocok dengan data bank. Perbarui nama sesuai rekening."
+	case "INVALID_DESTINATION":
+		return "Nomor rekening atau e-wallet tujuan payout tidak valid."
+	case "SLS_RECIPIENT":
+		return "Rekening tujuan payout tidak dapat menerima transfer."
+	case "DESTINATION_MAXIMUM_LIMIT":
+		return "Nominal payout melebihi batas maksimum rekening tujuan."
+	case "REJECTED_BY_CHANNEL":
+		return "Bank atau e-wallet tujuan menolak transfer payout ini."
+	case "INSUFFICIENT_BALANCE":
+		return "Payout tertunda karena kendala saldo di sisi kami. Tim kami sedang menindaklanjuti."
+	case "SLS_SENDER":
+		return "Payout tertunda karena kendala pada rekening pengirim. Tim kami sedang menindaklanjuti."
+	case "TEMPORARY_TRANSFER_ERROR", "TRANSFER_ERROR":
+		return "Payout tertunda karena gangguan sementara pada transfer. Tim kami sedang menindaklanjuti."
+	case "":
+		return "Payout gagal diproses oleh penyedia pembayaran."
+	default:
+		// Unknown code: keep it out of the organizer's view.
+		return "Payout gagal diproses oleh penyedia pembayaran."
 	}
 }
 

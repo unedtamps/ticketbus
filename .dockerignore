@@ -1,0 +1,45 @@
+# Keep the image build context to what the Go binaries and migrations need.
+# Without this the compose builds ship node_modules and .git (~700 MB) even
+# though the Dockerfiles never read them.
+
+# VCS / CI
+.git
+.github
+
+# Frontend (not part of the backend images)
+apps
+node_modules
+**/node_modules
+.next
+**/.next
+*.tsbuildinfo
+
+# Local artifacts and runtime state
+bin
+logs
+volumes
+coverage
+coverage.*
+*.log
+
+# Tests and local tooling
+tests
+docs
+observability
+scripts
+traefik
+
+# Generated keys and local environment files (never bake secrets into images)
+docker/e2e/keys
+.env
+.env.*
+**/.env
+**/.env.*
+**/.envrc
+**/*.pem
+
+# Editor / OS noise
+.zcode
+.idea
+.vscode
+.DS_Store

@@ -710,8 +710,23 @@ manually through `workflow_dispatch`, and then:
 
 | Job | Timeout | What it does |
 |-----|---------|-------------|
-| Build & Push | 15 min | Builds one Docker image per backend service from `docker/Dockerfile`, tagged with the `v*` git tag when present, otherwise `latest` plus the short SHA |
-| Build & Push migrate image | 10 min | Publishes the migration runner image |
+| Build & Push | 15 min | Builds one Docker image per backend service from `docker/Dockerfile` and pushes it to GHCR, tagged with the `v*` git tag when present, otherwise `latest` plus the short SHA |
+| Build & Push migrate image | 10 min | Publishes the migration runner image to GHCR |
+
+Images are published to GitHub Container Registry:
+
+| Image | Name |
+|-------|------|
+| auth | `ghcr.io/unedtamps/ticketbus/auth-service` |
+| ticketing | `ghcr.io/unedtamps/ticketbus/ticketing-service` |
+| payment | `ghcr.io/unedtamps/ticketbus/payment-service` |
+| mail | `ghcr.io/unedtamps/ticketbus/mail-service` |
+| migrations | `ghcr.io/unedtamps/ticketbus/ticketbus-migrations` |
+
+Publishing authenticates with the workflow's automatic `GITHUB_TOKEN` (`packages: write`); there is
+no registry username or password secret. GHCR packages start private — after the first publish,
+open each package's settings and change its visibility to **Public** (this cannot be undone).
+Public packages are free and can be pulled without authenticating. Docker Hub is no longer updated.
 
 ### Run CI locally with act
 
@@ -731,7 +746,8 @@ installed by `actions/setup-go`. act binds the repository at its real host path,
 needs because Compose resolves bind mounts on the host daemon. The workflows skip
 `actions/checkout` when `ACT=true`, so a local run never rewrites the working tree. The Make targets
 also set `ACT=true` for `deploy.yml`, so it never logs in or pushes. Local images are tagged
-`ticketbus/<service>-service:local` and `ticketbus/ticketbus-migrations:local`.
+`ticketbus/<service>-service:local` and `ticketbus/ticketbus-migrations:local`; they are local-only
+and separate from the published GHCR images.
 
 act uses host networking and the Docker socket. E2E needs ports `8100`, `18083`, `15432`, `15433`,
 `15435` and `19092` free. The first run downloads the runner image and the Go toolchain.

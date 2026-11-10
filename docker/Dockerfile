@@ -18,6 +18,8 @@ FROM alpine:latest
 
 WORKDIR /app
 
+LABEL org.opencontainers.image.source="https://github.com/unedtamps/ticketbus"
+
 RUN apk add --no-cache ca-certificates
 
 COPY --from=builder /app/server /app/server

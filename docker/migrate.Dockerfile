@@ -5,6 +5,7 @@ RUN go install -ldflags="-s -w" \
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates
+LABEL org.opencontainers.image.source="https://github.com/unedtamps/ticketbus"
 COPY --from=builder /go/bin/migrate /usr/local/bin/migrate
 COPY migrations/auth /migrations/auth
 COPY migrations/ticketing /migrations/ticketing

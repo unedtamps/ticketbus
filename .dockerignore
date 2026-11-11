@@ -1,14 +1,14 @@
-# Keep the image build context to what the Go binaries and migrations need.
-# Without this the compose builds ship node_modules and .git (~700 MB) even
-# though the Dockerfiles never read them.
+# Keep the image build context small for both the backend images and the
+# standalone Next.js frontend image. Without this, builds ship node_modules and
+# .git (~700 MB) even though the Dockerfiles never read them.
 
 # VCS / CI
 .git
 .github
 .githooks
 
-# Frontend (not part of the backend images)
-apps
+# Frontend build output and dependencies. The source under apps/web is needed
+# for the web image; only generated output is excluded.
 node_modules
 **/node_modules
 .next

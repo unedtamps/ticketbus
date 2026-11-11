@@ -711,6 +711,7 @@ manually through `workflow_dispatch`, and then:
 | Job | Timeout | What it does |
 |-----|---------|-------------|
 | Build & Push | 15 min | Builds one Docker image per backend service from `docker/Dockerfile` and pushes it to GHCR, tagged with the `v*` git tag when present, otherwise `latest` plus the short SHA |
+| Build & Push web | 20 min | Builds the Next.js frontend as a standalone server from `docker/web.Dockerfile` and pushes it to GHCR |
 | Build & Push migrate image | 10 min | Publishes the migration runner image to GHCR |
 
 Images are published to GitHub Container Registry:
@@ -721,7 +722,12 @@ Images are published to GitHub Container Registry:
 | ticketing | `ghcr.io/unedtamps/ticketbus/ticketing-service` |
 | payment | `ghcr.io/unedtamps/ticketbus/payment-service` |
 | mail | `ghcr.io/unedtamps/ticketbus/mail-service` |
+| web | `ghcr.io/unedtamps/ticketbus/web` |
 | migrations | `ghcr.io/unedtamps/ticketbus/ticketbus-migrations` |
+
+The web image bakes `NEXT_PUBLIC_API_URL` at build time (client bundle and server components). Set
+the repository variable `NEXT_PUBLIC_API_URL` to the deployed API origin; otherwise the workflow
+defaults to `https://api.unedotampubolon.com`. Changing that URL requires rebuilding the image.
 
 Publishing authenticates with the workflow's automatic `GITHUB_TOKEN` (`packages: write`); there is
 no registry username or password secret. GHCR packages start private — after the first publish,
@@ -747,8 +753,9 @@ needs because Compose resolves bind mounts on the host daemon. The workflows ski
 `actions/checkout` when `ACT=true`, so a local run never rewrites the working tree or runs a Git
 clean over ignored files such as the per-service `.env` files. The Make targets
 also set `ACT=true` for `deploy.yml`, so it never logs in or pushes. Local images are tagged
-`ticketbus/<service>-service:local` and `ticketbus/ticketbus-migrations:local`; they are local-only
-and separate from the published GHCR images.
+`ticketbus/<service>-service:local`, `ticketbus/web:local` and
+`ticketbus/ticketbus-migrations:local`; they are local-only and separate from the published GHCR
+images.
 
 act uses host networking and the Docker socket. E2E needs ports `8100`, `18083`, `15432`, `15433`,
 `15435` and `19092` free. The first run downloads the runner image and the Go toolchain.
@@ -765,10 +772,11 @@ push with `ACT_PREPUSH=off git push`; force the full suite on any branch with
 `ACT_PREPUSH=full git push`. The hook tests the working tree, not only the committed snapshot, and
 `git push --no-verify` skips it entirely. `make hooks-uninstall` restores Git's default hooks path.
 
-The frontend has no automated deploy. It used to be synced to S3 as a static export, but
-`output: 'export'` is no longer enabled in `apps/web/next.config.ts`, so there is no `out/`
-directory to upload. Deploy it manually until a hosting target is picked (static S3 export vs a
-Node-capable host that can run `next start`).
+The frontend is published as a container image too: `docker/web.Dockerfile` builds the Next.js
+App Router app in standalone mode, and the Deploy workflow pushes `ghcr.io/unedtamps/ticketbus/web`.
+Hosting it is still external — run the image with `node apps/web/server.js` (port 3000) behind your
+reverse proxy. `output: 'export'` remains disabled because the app uses RSC and `proxy.ts` route
+guards, which need a Node server.
 
 ## Project Structure
 

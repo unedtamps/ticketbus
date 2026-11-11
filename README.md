@@ -744,7 +744,8 @@ make act-all           # act-test, then act-deploy
 The runner image (`catthehacker/ubuntu:act-latest`) provides Docker CLI, Compose and buildx; Go is
 installed by `actions/setup-go`. act binds the repository at its real host path, which is what E2E
 needs because Compose resolves bind mounts on the host daemon. The workflows skip
-`actions/checkout` when `ACT=true`, so a local run never rewrites the working tree. The Make targets
+`actions/checkout` when `ACT=true`, so a local run never rewrites the working tree or runs a Git
+clean over ignored files such as the per-service `.env` files. The Make targets
 also set `ACT=true` for `deploy.yml`, so it never logs in or pushes. Local images are tagged
 `ticketbus/<service>-service:local` and `ticketbus/ticketbus-migrations:local`; they are local-only
 and separate from the published GHCR images.

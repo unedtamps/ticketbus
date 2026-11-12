@@ -232,3 +232,104 @@ jobs:
           file: docker/migrate.Dockerfile
           push: true
           tags: ${{ steps.tags.outputs.TAGS }}
+
+  # Opens a PR against unedtamps/aws after all GHCR images are published.
+  # CD_TOKEN needs Contents: read/write and Pull requests: read/write on that
+  # repository (or a classic PAT with repo scope).
+  deploy-kustomize:
+    name: Open AWS dev overlay PR
+    needs: [deploy, deploy-web, deploy-migrate]
+    if: ${{ (github.event_name == 'workflow_run' || github.event.inputs.push == 'true') && github.actor != 'nektos/act' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout TicketBus
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Resolve image tag
+        id: image
+        run: |
+          HEAD="${{ github.event.workflow_run.head_sha || github.sha }}"
+          TAG=$(git tag --points-at "$HEAD" --list "v*" | head -1)
+          if [[ -n "$TAG" ]]; then
+            TAG="${TAG#v}"
+          else
+            TAG=$(echo "$HEAD" | cut -c1-7)
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout AWS manifests
+        uses: actions/checkout@v7
+        with:
+          repository: unedtamps/aws
+          ref: master
+          token: ${{ secrets.CD_TOKEN }}
+          path: aws
+          fetch-depth: 0
+
+      - name: Update ticketbus dev image tags
+        env:
+          NEW_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path("aws/aws_kube/k8s/apps/ticketbus/overlays/dev/kustomization.yaml")
+          tag = os.environ["NEW_TAG"]
+          lines = path.read_text().splitlines()
+          out = []
+          image = None
+          for line in lines:
+              match = re.match(r"^(\s*-\s*name:\s*)(\S+)\s*$", line)
+              if match:
+                  image = match.group(2)
+                  out.append(line)
+                  continue
+              if image and re.match(r"^\s*newTag:", line):
+                  indent = line[:len(line) - len(line.lstrip())]
+                  out.append(f'{indent}newTag: "{tag}"')
+                  image = None
+                  continue
+              out.append(line)
+          path.write_text("\n".join(out) + "\n")
+          PY
+          git -C aws diff --stat
+
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ secrets.CD_TOKEN }}
+          NEW_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd aws
+          if git diff --quiet; then
+            echo "AWS overlay already at $NEW_TAG; no PR needed"
+            exit 0
+          fi
+
+          branch="ci/ticketbus-${NEW_TAG}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add aws_kube/k8s/apps/ticketbus/overlays/dev/kustomization.yaml
+          git commit -m "chore(ticketbus): deploy ${NEW_TAG}"
+          git push --force origin "$branch"
+
+          if gh pr list --repo unedtamps/aws --head "$branch" --state open --json number --jq '.[0].number' | grep -q .; then
+            echo "PR already open for $branch"
+            exit 0
+          fi
+
+          body=$(printf 'Updates the ticketbus-dev image tags to `%s`.\n\nSource: %s/%s/actions/runs/%s' \
+            "$NEW_TAG" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")
+          gh pr create \
+            --repo unedtamps/aws \
+            --base master \
+            --head "$branch" \
+            --title "chore(ticketbus): deploy ${NEW_TAG}" \
+            --body "$body"

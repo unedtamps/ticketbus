@@ -713,6 +713,7 @@ manually through `workflow_dispatch`, and then:
 | Build & Push | 15 min | Builds one Docker image per backend service from `docker/Dockerfile` and pushes it to GHCR, tagged with the `v*` git tag when present, otherwise `latest` plus the short SHA |
 | Build & Push web | 20 min | Builds the Next.js frontend as a standalone server from `docker/web.Dockerfile` and pushes it to GHCR |
 | Build & Push migrate image | 10 min | Publishes the migration runner image to GHCR |
+| Open AWS dev overlay PR | 10 min | Updates `ticketbus-dev` image tags in `unedtamps/aws` and opens a PR using the `CD_TOKEN` secret |
 
 Images are published to GitHub Container Registry:
 
@@ -728,6 +729,12 @@ Images are published to GitHub Container Registry:
 The web image bakes `NEXT_PUBLIC_API_URL` at build time (client bundle and server components). Set
 the repository variable `NEXT_PUBLIC_API_URL` to the deployed API origin; otherwise the workflow
 defaults to `https://api.unedotampubolon.com`. Changing that URL requires rebuilding the image.
+
+After all images publish, `deploy-kustomize` updates the six `newTag` values in
+`unedtamps/aws:aws_kube/k8s/apps/ticketbus/overlays/dev/kustomization.yaml` and opens a PR against
+that repository's `master`. It authenticates with the `CD_TOKEN` secret, which needs contents and
+pull-request write access to `unedtamps/aws`. The branch is `ci/ticketbus-<tag>`; if a PR is already
+open for the same tag it is updated rather than duplicated.
 
 Publishing authenticates with the workflow's automatic `GITHUB_TOKEN` (`packages: write`); there is
 no registry username or password secret. GHCR packages start private — after the first publish,

@@ -116,7 +116,7 @@ dev:
 	$(MAKE) dev-ticketing & \
 	$(MAKE) dev-payment & \
 	$(MAKE) dev-mail & \
-	$(MAKE) dev-web & \
+	$(MAKE) web-build & \
 	wait
 
 # Services

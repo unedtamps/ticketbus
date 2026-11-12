@@ -242,7 +242,7 @@ function EventRowMenu({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-9 z-20 w-48 rounded-lg border border-[#E4EAF4] bg-white shadow-[0_8px_24px_rgba(22,34,74,0.10)] overflow-hidden"
+          className="absolute right-0 top-9 z-30 w-48 rounded-lg border border-[#E4EAF4] bg-white shadow-[0_8px_24px_rgba(22,34,74,0.10)] overflow-hidden"
         >
           {canUpload && (
             <button
@@ -905,9 +905,9 @@ export default function DashboardPage() {
             )}
 
             {!eoLoading && myEvents.length > 0 && (
-              <div className="rounded-xl border border-[#E4EAF4] overflow-hidden bg-white">
+              <div className="relative z-10 rounded-xl border border-[#E4EAF4] bg-white">
                 {/* Header labels the columns once, so rows carry no mini-labels. */}
-                <div className="grid grid-cols-[1fr_96px_132px_178px_28px] gap-3 items-center px-4 py-2.5 bg-[#F6F9FC] border-b border-[#E4EAF4]">
+                <div className="grid grid-cols-[1fr_96px_132px_178px_28px] gap-3 items-center px-4 py-2.5 bg-[#F6F9FC] border-b border-[#E4EAF4] rounded-t-xl">
                   <span className="text-[9.5px] font-extrabold uppercase tracking-[0.11em] text-[#9AA6BC]">Event</span>
                   <span className="text-[9.5px] font-extrabold uppercase tracking-[0.11em] text-[#9AA6BC]">Status</span>
                   <span className="text-[9.5px] font-extrabold uppercase tracking-[0.11em] text-[#9AA6BC] text-right">Total earning</span>
@@ -921,7 +921,7 @@ export default function DashboardPage() {
                   return (
                     <div
                       key={e.id}
-                      className={`grid grid-cols-[1fr_96px_132px_178px_28px] gap-3 items-center px-4 py-3.5 border-l-[3px] transition-colors hover:bg-[#FCFDFF] ${
+                      className={`grid grid-cols-[1fr_96px_132px_178px_28px] gap-3 items-center px-4 py-3.5 border-l-[3px] transition-colors hover:bg-[#FCFDFF] last:rounded-b-xl ${
                         e.status === "published" && !ended ? "border-l-[#2E9E5B]" :
                         e.status === "published" ? "border-l-[#2450D9]" :
                         e.status === "pending" ? "border-l-[#FFD43B]" : "border-l-[#EDF1F7]"
@@ -978,7 +978,7 @@ export default function DashboardPage() {
                 {/* Paging footer. Cursor pagination cannot say "page 2 of 7",
                     so the controls sit at the right and the count is gone. */}
                 {(canGoPrev || canGoNext) && (
-                  <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[#E4EAF4] bg-[#FCFDFF]">
+                  <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[#E4EAF4] bg-[#FCFDFF] rounded-b-xl">
                     <button
                       onClick={goPrev}
                       disabled={!canGoPrev || isPaging}
